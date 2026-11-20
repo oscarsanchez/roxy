@@ -20,7 +20,7 @@ Words: a **Target Device** is the Roku running the app, a Physical Device (on th
 
    Done when `roxy status` prints `lab: up` and `App Profile: <this app's profile>`.
 2. **App routed.** Only requests sent to a Prefixed URL reach the lab. Find how this app does it: a Charles hook (a debug proxy setting in a sideloaded build, on port 8888; the user types the `Proxy IP` from `roxy status` into the app), the kit (`RoxyUrl` or `prefixedUrl` in the source, built with `bs_const=roxy_kit=true` or `ROXY_KIT=1`), or neither, and then the Prefix Routing guide wires one in. roxy never builds or sideloads an app: build and sideload it with the app's own tooling, as its repo does, then launch it with roxy.
-3. **Launch.** `roxy launch [--scenario NAME] "<device>" [key=value...]`, with a device name from `devices.json` in the settings root. It relaunches the sideloaded dev channel with the `proxyBase` launch param (the kit reads it; a Charles hook ignores it) and prints `run=<id>`: keep the id, for either kind of app.
+3. **Launch.** `roxy launch [--scenario NAME]... "<device>" [key=value...]`, with a device name from `devices.json` in the settings root. It relaunches the sideloaded dev channel with the `proxyBase` launch param (the kit reads it; a Charles hook ignores it) and prints `run=<id>`: keep the id, for either kind of app.
 4. **Read the flows.** `roxy flows --json --since <run id>`. Done when every request you expected is in the output, or its absence is explained (Reading flows).
 
 ## Scenarios: make an Origin fail, slow down or answer from a mock
@@ -36,8 +36,8 @@ status = 503
 
 - Filters see the Origin URL. `status` replaces the status of the Origin's response (the Origin is still contacted); `drop` closes the connection without contacting it.
 - Each rule takes exactly one action: `status`, `latency`, `throttle`, `drop`, `header`, `body`, `map_local` (a mock: `map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`), `map_remote`, or a manifest edit. Syntax and behaviour of each: README, 5. Scenarios. Every matching rule applies, in file order.
-- Activate: `roxy scenario set <scenario>`, or `roxy launch --scenario <scenario> ...`. It applies from the next request on, with no lab restart. Editing the active file reloads it on the next request; a broken edit is logged and the last good rules stay, so confirm in the flows.
-- Done when the flows of a fresh launch list your rule in `scenario_rules`. Then `roxy scenario clear`: one Scenario is active at a time, for every Target Device on the lab.
+- Activate: `roxy scenario set <scenario> [<scenario>...]` (replaces the active ones), `roxy scenario add <scenario>`, or `roxy launch --scenario <scenario> ...` (repeatable). Several can be active: their rules apply in that order, then file order. It applies from the next request on, with no lab restart. Editing an active file reloads it on the next request; a broken edit is logged and that Scenario's last good rules stay, so confirm in the flows.
+- Done when the flows of a fresh launch list your rule in `scenario_rules`. Then `roxy scenario remove <scenario>` (or `clear` for all): active Scenarios apply to every Target Device on the lab.
 
 ## Reading flows
 
@@ -52,7 +52,7 @@ status = 503
 
 ## Known limits
 
-- One lab per user: one App Profile per session and one active Scenario, lab-wide. Deploys and launches take a per-user `devices` lock and refuse while someone else holds it, naming the holder; set `LAB_LOCK_OWNER` to your name, and `LAB_LOCK_WAIT=1` waits instead.
+- One lab per user: one App Profile per session and one set of active Scenarios, lab-wide. Deploys and launches take a per-user `devices` lock and refuse while someone else holds it, naming the holder; set `LAB_LOCK_OWNER` to your name, and `LAB_LOCK_WAIT=1` waits instead.
 - A Charles hook builds `http://<ip>:8888/;` only, so such an app goes through the lab on Physical Devices only. Cloud Devices need the kit (or a hook that takes a whole Proxy Base) and `roxy start --tunnel`, whose hostname changes on every start: launch again after a restart.
 - The lab never sees Roku OS traffic, SDKs with their own fixed endpoints, or DRM and ad requests the app does not route.
 - CA Routing (no Prefixed URLs; DNS on the user's router) is for Physical Devices only, and needs router setup by the user: [CA Routing guide](ca-routing.md).

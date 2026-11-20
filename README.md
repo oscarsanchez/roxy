@@ -32,7 +32,7 @@ mitmweb runs in mitmproxy's `reverse` mode. Its UI listens on `127.0.0.1` only, 
 3. **Guards**: refuse anything but an allowed client and a public Origin address, and on the Public Endpoint an allowlisted Origin host (see [Guards](#guards)).
 4. **Request header cleanup**: `Host` is the Origin's, `Referer` and `Origin` are decoded back, tunnel headers are stripped.
 5. **Response header and body rewriting**: URLs in headers and in HLS, DASH, VAST/XML and JSON bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests come back through the lab.
-6. **Scenarios**: the active Scenario's Manipulation rules, last, so they see the response as the client gets it. The one exception, `map_remote`, swaps the Origin right after Origin decoding, before the guards.
+6. **Scenarios**: the active Scenarios' Manipulation rules, last, so they see the response as the client gets it. The one exception, `map_remote`, swaps the Origin right after Origin decoding, before the guards.
 
 While the lab runs, any device on your LAN subnets can relay through it to any public host, the same as with Charles.
 
@@ -76,7 +76,7 @@ roxy start --tunnel                  # plus the Public Endpoint for Cloud Device
 roxy start --replay <session>.mitm   # answer from a saved session (see Recording and replay)
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
-roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenario
+roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios
 roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
 ```
 
@@ -117,16 +117,19 @@ Cases (same ids, labels and Origins in both flavours, also in an on-screen menu)
 
 ### 5. Scenarios
 
-A Scenario is a file of named Manipulation rules, `proxy/scenarios/<name>.toml`. One is active at a time, lab-wide, for every Target Device:
+A Scenario is a file of named Manipulation rules, `proxy/scenarios/<name>.toml`. Any number can be active at once, in an order you choose, lab-wide, for every Target Device. Their rules apply in that order, then file order: two `body` rules on one response apply in set order, and of two `throttle` caps the lower wins.
 
 ```sh
 roxy scenario list                                      # the App Profile's Scenarios and the lab's, each with its source
-roxy scenario set json-503                              # make it active in the running lab
+roxy scenario set json-503                              # make it the one active in the running lab
+roxy scenario set json-503 image-404                    # make these the active ones, in this order
+roxy scenario add hls-404                               # make it active too, after the others
+roxy scenario remove json-503                           # stop its rules, keep the others
 roxy scenario clear                                     # none active
-roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then launch ('' clears it)
+roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then launch (repeat --scenario for several; '' clears them)
 ```
 
-Or edit `lab_scenario` in mitmweb's Options. Editing the active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
+Each prints the active Scenarios after the change (`scenario=json-503,image-404`); an unknown name is refused and leaves them as they were. Or edit `lab_scenario` in mitmweb's Options: the active names in order, comma-separated. Editing an active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
 
 Each rule has a `name`, a mitmproxy `filter` expression and exactly one action. Every matching rule applies, in file order. Flows the lab refused itself are never touched.
 
@@ -346,7 +349,7 @@ Known limits: the RSG 2.0 SDK cannot set certificates on Poster or on its Ads ta
 
 ### Locks
 
-One person or agent at a time drives the Target Devices. `scripts/deploy`, `scripts/launch` and `scripts/grid` hold the `devices` lock while they run; `scripts/start-lab` holds the `lab` lock for its session. Both are per user (`~/.cache/roxy/locks/`), shared by every checkout and worktree. One lock covers every Target Device because the active Scenario is lab-wide.
+One person or agent at a time drives the Target Devices. `scripts/deploy`, `scripts/launch` and `scripts/grid` hold the `devices` lock while they run; `scripts/start-lab` holds the `lab` lock for its session. Both are per user (`~/.cache/roxy/locks/`), shared by every checkout and worktree. One lock covers every Target Device because the active Scenarios are lab-wide.
 
 - Held: the script stops at once, naming the holder (pid, command, and `LAB_LOCK_OWNER` if the holder set it). `LAB_LOCK_WAIT=1` waits for it instead.
 - Agents: set `LAB_LOCK_OWNER` to your name, so a refusal tells the other side who to wait for.
