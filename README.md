@@ -284,7 +284,7 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 | `url` | the Origin URL; for a request the lab could not decode (`not-prefixed`), the dummy reverse target |
 | `status` | the status the client got, `null` without a response (dropped, failed) |
 | `request_bytes`, `response_bytes` | body sizes as sent, `null` without that message |
-| `duration_ms` | from the request's start to the response's end, `null` without a complete response |
+| `duration_ms` | from the request's start to the response's end at the client (a `throttle` rule's pacing included), `null` without a complete response |
 | `refusal` | the reason the lab refused it (its `X-Lab-Blocked` value, such as `origin-address`), `null` if it did not; an `X-Lab-Blocked` header from an Origin or a Scenario is not a refusal |
 | `scenario_rules` | the names of the active Scenario's rules that acted on it, in the order they first did; `[]` for none |
 

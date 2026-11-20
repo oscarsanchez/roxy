@@ -12,10 +12,18 @@ from mitmproxy import http, io
 
 from lab.refusal import refusal_reason
 from lab.scenarios import applied_rules
+from lab.throttle import paced_seconds
 
 
 def size(message):
     return None if message is None or message.raw_content is None else len(message.raw_content)
+
+
+def duration_ms(flow):
+    """From the request to the response's last byte at the client, which a throttled
+    response reaches after mitmproxy has it whole."""
+    end = flow.response.timestamp_end + paced_seconds(flow)
+    return round((end - flow.request.timestamp_start) * 1000)
 
 
 def summary(flow):
@@ -29,7 +37,7 @@ def summary(flow):
         "status": response and response.status_code,
         "request_bytes": size(flow.request),
         "response_bytes": size(response),
-        "duration_ms": response and response.timestamp_end and round((response.timestamp_end - flow.request.timestamp_start) * 1000),
+        "duration_ms": response and response.timestamp_end and duration_ms(flow),
         "refusal": refusal_reason(flow),
         "scenario_rules": applied_rules(flow),
     }

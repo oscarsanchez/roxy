@@ -34,6 +34,12 @@ class Clock:
 clock = Clock()  # every pause goes through it; tests/chain.py swaps in a test clock
 
 
+def paced_seconds(flow):
+    """How long the throttle took to send the flow's response on to the client once
+    mitmproxy had it whole (roxy flows adds it to the duration); 0 if it was not paced."""
+    return flow.metadata.get("lab_paced_seconds", 0)
+
+
 class Throttle:
     def __init__(self, value, scenario_dir):
         kbps = value.get("kbps") if isinstance(value, dict) and set(value) == {"kbps"} else None
@@ -50,7 +56,7 @@ class Throttle:
             return
         writer = client_writer(flow)
         if writer is not None:
-            PacedWriter.take_over(writer, self.bytes_per_second)
+            PacedWriter.take_over(writer, self.bytes_per_second, flow)
 
 
 def client_writer(flow):
@@ -68,15 +74,16 @@ class PacedWriter:
     sending = set()  # running pacers, kept referenced until they finish
 
     @classmethod
-    def take_over(cls, writer, bytes_per_second):
+    def take_over(cls, writer, bytes_per_second, flow):
         pacer = getattr(writer, "pacer", None)
         if pacer is None:
-            writer.pacer = cls(writer, bytes_per_second)
+            writer.pacer = cls(writer, bytes_per_second, flow)
         else:  # two throttle rules matched: the lower cap wins
             pacer.bytes_per_second = min(pacer.bytes_per_second, bytes_per_second)
 
-    def __init__(self, writer, bytes_per_second):
+    def __init__(self, writer, bytes_per_second, flow):
         self.writer = writer
+        self.flow = flow  # the flow whose response is paced
         self.bytes_per_second = bytes_per_second
         self.queue = bytearray()
         self.endings = []  # mitmproxy's write_eof and close, held in order until the queue is sent
@@ -117,6 +124,7 @@ class PacedWriter:
                     break
                 self.send_on(chunk)
         finally:
+            self.flow.metadata["lab_paced_seconds"] = clock.now() - started
             self.hand_back()
 
     def hand_back(self):

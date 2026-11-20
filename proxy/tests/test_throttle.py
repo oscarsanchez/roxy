@@ -10,6 +10,7 @@ from mitmproxy.exceptions import OptionsError
 from mitmproxy.test import tutils
 
 from chain import Lab, lab_flow
+from flows import summary
 
 SEGMENT_BYTES = 500_000  # 500 KB
 
@@ -167,3 +168,15 @@ def test_an_http2_flow_is_not_throttled_and_the_log_says_why(scenarios, caplog):
     skipped = [r for r in caplog.records if "not throttled" in r.getMessage()]
     assert len(skipped) == 1
     assert "HTTP/2.0" in skipped[0].getMessage() and "HTTP/1" in skipped[0].getMessage()
+
+
+def test_roxy_flows_times_a_throttled_flow_to_its_last_byte_at_the_client(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    flow = segment_get()
+    response = origin_segment()
+    response.timestamp_end = flow.request.timestamp_start + 3  # the Origin took 3 s
+
+    with Lab(**options) as lab:
+        lab.run(flow, response)
+
+    assert summary(flow)["duration_ms"] == pytest.approx(13_000, abs=100)  # then 10 s paced
