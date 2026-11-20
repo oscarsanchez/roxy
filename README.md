@@ -4,6 +4,8 @@ A mitmproxy/mitmweb lab on your Mac for inspecting and manipulating the traffic 
 
 Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](CODING_STANDARDS.md).
 
+Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To report a security problem, see [SECURITY.md](SECURITY.md). Licence: [MIT](LICENSE).
+
 ## How it works
 
 ### Scope
@@ -274,12 +276,14 @@ Each flow's comment names its Target Device (mitmweb comment column; filter `~co
 
 ### Agents
 
-The `roxy` skill teaches an agent in any app's repo when and how to use the lab: start it for the app, launch, write and set Scenarios, read the flows, and the known limits. It links to the guides rather than repeating them. Claude Code gets it from this checkout's plugin (after `./install.sh`, from the checkout):
+The `roxy` skill teaches an agent in any app's repo when and how to use the lab: start it for the app, launch, write and set Scenarios, read the flows, and the known limits. It links to the guides rather than repeating them. Claude Code gets it from the plugin, from GitHub:
 
 ```sh
-claude plugin marketplace add "$PWD"
+claude plugin marketplace add oscarsanchez/roxy
 claude plugin install roxy@roxy
 ```
+
+or from a local checkout (after `./install.sh`, from the checkout): `claude plugin marketplace add "$PWD"`, then the same install.
 
 The plugin is a copy of the checkout: after a `git pull`, run `claude plugin update roxy@roxy`. It also puts its copy's `roxy` on the PATH of Claude's Bash tool; the terminal and Cursor use the one `install.sh` links.
 
