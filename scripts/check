@@ -35,6 +35,9 @@ scripts/tests/rce-scripts.sh >/dev/null
 step "settings and saved sessions (fake mitmweb)"
 scripts/tests/settings.sh >/dev/null
 
+step "kit builds (example apps, with and without the kit)"
+scripts/tests/kit-build.sh >/dev/null
+
 step "compose config"
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
   docker compose config -q
