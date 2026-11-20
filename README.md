@@ -14,7 +14,7 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](
 
 ### Routing
 
-**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`, or `<Proxy Base>/;<Origin URL>` as a Charles-enabled build does (port 8888). How to wire an app: [Prefix Routing guide](docs/prefix-routing.md). The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
+**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`, or `<Proxy Base>/;<Origin URL>` as a Charles-enabled build does (port 8888). How to wire an app, with its Charles hook or with the kit for apps you own (`kit/`): [Prefix Routing guide](docs/prefix-routing.md). The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
 
 | Target Device | Proxy Base |
 |---|---|
@@ -220,7 +220,7 @@ Every session is saved in the saved-session folder, `~/.local/share/roxy/capture
 
 ### CA Routing (Physical Devices only)
 
-DNS on the router (a GL.iNet running AdGuard Home, with "Override DNS for all clients") points lab Origins at the Mac, and a CA Routing build of the Lab App (classic or RSG 2.0) calls Origin URLs directly while trusting the lab's CA. mitmweb adds `reverse` listeners on 443 and 80, terminates TLS for the SNI it is given, and takes the Origin from Host/SNI.
+DNS on the router (a per-client DNS server such as AdGuard Home, answering every client's DNS) points lab Origins at the Mac, and a CA Routing build of the Lab App (classic or RSG 2.0) calls Origin URLs directly while trusting the lab's CA. mitmweb adds `reverse` listeners on 443 and 80, terminates TLS for the SNI it is given, and takes the Origin from Host/SNI.
 
 ```sh
 scripts/start-lab --ca-routing                          # also listens on 443/80; Origin from Host/SNI
@@ -228,7 +228,7 @@ scripts/deploy --ca-routing "<device>" apps/classic     # Roku's CA bundle + the
 scripts/deploy --ca-routing "<device>" apps/rsg         # certifi's roots + the lab's CA, pkg:/ bundle, HttpsAgent per fetch
 ```
 
-Known limits: the RSG 2.0 SDK cannot set certificates on Poster or on its Ads task, so those do not trust the lab's CA (`grid/cells.toml`, `known_limits`). A step-by-step CA Routing guide is still to come.
+Known limits: the RSG 2.0 SDK cannot set certificates on Poster or on its Ads task, so those do not trust the lab's CA (`grid/cells.toml`, `known_limits`). Step by step, for any router and for apps with the kit: [CA Routing guide](docs/ca-routing.md).
 
 ### Cloud Device notes
 
@@ -247,7 +247,7 @@ One person or agent at a time drives the Target Devices. `scripts/deploy`, `scri
 ### Tests
 
 ```sh
-scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and saved sessions against a fake mitmweb, compose config, the glossary lint and the test-import rule
+scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and saved sessions against a fake mitmweb, the kit's example builds with and without its constant, compose config, the glossary lint and the test-import rule
 cd proxy && uv run pytest     # Seam A: the full addon chain, no network
 cd grid && uv run pytest      # grid verdict logic, its settings, and its Cloud Device side against a fake rce; no devices
 ```
