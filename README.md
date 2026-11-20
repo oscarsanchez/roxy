@@ -19,7 +19,7 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](
 | Target Device | Proxy Base |
 |---|---|
 | Physical Device | `http://<mac-lan-ip>:8080`, or `:8888` (Charles's port). Give the Mac a DHCP reservation so it stays stable. |
-| Cloud Device | `https://<tunnel-host>/<secret>/<device-slug>`: the Public Endpoint (a Cloudflare quick tunnel), the secret segment, and the slug that names the Cloud Device (`scripts/launch` adds it). |
+| Cloud Device | `https://<tunnel-host>/<secret>/<device-slug>`: the Public Endpoint (a Cloudflare quick tunnel), the secret segment, and the slug that names the Cloud Device (`roxy launch` adds it). |
 
 **CA Routing** (Physical Devices only): DNS on the router points Origins at the Mac, and a CA Routing build of the app calls Origin URLs directly while trusting the lab's CA on every agent. See [CA Routing](#ca-routing-physical-devices-only).
 
@@ -46,15 +46,16 @@ While the lab runs, any device on your LAN subnets can relay through it to any p
 - RSG 2.0 Lab App only: Node 24+ (`brew install node@24`; `scripts/deploy` puts it first on PATH), pnpm 11, `brew install squashfs`.
 - Compose only: Docker. It replaces uv and cloudflared.
 
-### 2. Settings
-
-Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/roxy/` (`$XDG_CONFIG_HOME/roxy` if you set that), never in the repo. The environment variable `ROXY_CONFIG_DIR` points the lab at another settings root, for tests or experiments. The repo ships examples only, in `settings.example/`:
+### 2. Install and settings
 
 ```sh
-mkdir -p ~/.config/roxy
-cp -n settings.example/* ~/.config/roxy/   # then fill them in; -n never overwrites yours
+./install.sh                               # links roxy into ~/.local/bin (put that on your PATH); seeds missing settings
 git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check (see Tests)
 ```
+
+`install.sh` links `bin/roxy` from this checkout, so `git pull` updates it, and `roxy` works from any terminal, Cursor's included. Run it again whenever you like: it refreshes the link and never overwrites a setting. It refuses, changing nothing, when `~/.local/bin/roxy` exists and is not a link.
+
+Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/roxy/` (`$XDG_CONFIG_HOME/roxy` if you set that), never in the repo. The environment variable `ROXY_CONFIG_DIR` points the lab at another settings root, for tests or experiments. The repo ships examples only, in `settings.example/`; the install copies each one the settings root lacks, for you to fill in:
 
 | File | Holds |
 |---|---|
@@ -62,20 +63,21 @@ git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check
 | `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`) |
 | `settings.json` | `lan_subnets`: your LAN's subnets (CIDR), the clients allowed on the LAN listener. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
 
-- `scripts/start-lab` stops before mitmweb starts if a file, a secret it needs or `lan_subnets` is missing, and names it.
+- `roxy start` stops before mitmweb starts if a file, a secret it needs or `lan_subnets` is missing, and names it.
 - The RCE token is `rce`'s (`rce token set`), not the lab's. Keep `RCE_TOKEN` out of `secrets.env`: the scripts export it, and `rce` takes `RCE_TOKEN` over its stored token.
 - The lab's own defaults, the same for everyone, stay in the repo: `proxy/config/guards.json` (RCE egress IPs and the Origin allowlist, see [Guards](#guards)). Restart the lab after editing a setting.
 
 ### 3. Start the lab
 
 ```sh
-scripts/start-lab                    # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
-scripts/start-lab --tunnel           # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
-scripts/start-lab --replay <session>.mitm   # answer from a saved session (see Recording and replay)
-scripts/start-lab --ca-routing       # also listens on 443/80 (see CA Routing)
+roxy start                           # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
+roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
+roxy start --replay <session>.mitm   # answer from a saved session (see Recording and replay)
+roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
+roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, active Scenario
 ```
 
-Ctrl-C stops mitmweb and the tunnel together. Every session is saved in your user data directory, `~/.local/share/roxy/captures/no-profile/<start time>.mitm` (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
+`roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every session is saved in your user data directory, `~/.local/share/roxy/captures/no-profile/<start time>.mitm` (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
 
 ### 4. Deploy and launch
 
@@ -84,17 +86,19 @@ Device names come from your `devices.json`; these examples use the example names
 ```sh
 scripts/deploy "Living Room" apps/classic                # classic (BrightScript) Lab App
 scripts/deploy "Living Room" apps/rsg                    # RSG 2.0 Lab App: pnpm install if needed, rk build --debug, sideload
-scripts/launch "Living Room" json_get                    # prints run=<id>; the result line is on the debug console
-scripts/console "Living Room" --launch json_get          # the console from connect to the run's result line, saved to out/console/
+roxy launch "Living Room" case=json_get                  # prints run=<id>; the result line is on the debug console
+roxy console "Living Room" --launch json_get             # the console from connect to the run's result line, saved to out/console/
 ```
 
-Cloud Device (start the lab with `--tunnel`; launch needs the public Proxy Base). Deploy and launch go through `rce`, and need a running Cloud Device:
+`roxy launch <device> [key=value...]` launches the dev channel with `proxyBase`, your launch params, and a fresh `run` id; it never builds or sideloads. `proxyBase` goes by kind of Target Device: the LAN Proxy Base for a Physical Device, the running tunnel's public Proxy Base plus the device slug for a Cloud Device. `--proxy-base URL` sends another. The Lab Apps read `case`; a Product App reads whatever params it takes.
+
+Cloud Device (start the lab with `--tunnel`). Deploy and launch go through `rce`, and need a running Cloud Device:
 
 ```sh
 rce device start player                                  # billed from here, $0.20 per hour
 scripts/deploy "Cloud Device" apps/classic               # rce sideload, with the Cloud Device's own dev password
-scripts/launch "Cloud Device" json_get "https://<random>.trycloudflare.com/<LAB_SECRET>"
-rce console player --until 'LABRESULT json_get' --timeout 60
+roxy launch "Cloud Device" case=json_get                 # proxyBase https://<random>.trycloudflare.com/<LAB_SECRET>/<slug>
+rce console player --until 'LABRESULT json_get' --timeout 60   # roxy console "Cloud Device" streams it without --until
 rce device stop player                                   # billing ends here
 ```
 
@@ -112,8 +116,10 @@ Cases (same ids, labels and Origins in both flavours, also in an on-screen menu)
 A Scenario is a file of named Manipulation rules, `proxy/scenarios/<name>.toml`. One is active at a time, lab-wide, for every Target Device:
 
 ```sh
-scripts/launch --scenario json-503 "Living Room" json_get     # set it, then launch
-scripts/launch --scenario '' "Living Room" json_get           # clear it
+roxy scenario list                                      # the lab's Scenarios
+roxy scenario set json-503                              # make it active in the running lab
+roxy scenario clear                                     # none active
+roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then launch ('' clears it)
 ```
 
 Or edit `lab_scenario` in mitmweb's Options. Editing the active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads`; a status override alone is not enough, RAF reads a 503's VAST body).
@@ -176,7 +182,7 @@ docker compose --profile tunnel down    # stops both, closing the Public Endpoin
 LAB_REPLAY=<session>.mitm docker compose up    # replay (path relative to the saved-session folder)
 ```
 
-- `scripts/deploy` and `scripts/launch` work as above with the LAN Proxy Base `http://<this machine's LAN IP>:8080`. The grid runner does not run under Compose.
+- `scripts/deploy` and `roxy launch` work as above with the LAN Proxy Base `http://<this machine's LAN IP>:8080`. The grid runner does not run under Compose.
 - Docker Desktop (macOS) hides the client IP: every LAN client shows as `192.168.65.1`. `compose.yaml` therefore sets `LAB_LAN_SUBNETS` (read by `scripts/run-mitmweb`, replacing `lan_subnets`) to `192.168.65.1/32`; the native lab's `lan_subnets` does not include it. The tradeoff: under Compose on macOS the LAN subnet guard lets in whatever can reach port 8080, and Physical Devices get no device label. On Linux the real client IP shows: run `LAB_LAN_SUBNETS="<your LAN subnets>" docker compose up` instead.
 - Linux: the container runs as uid 1000, so the saved-session folder must be writable by it.
 - cloudflared dials the unpublished tunnel listener (`mitmweb:8082`) over the Compose network, so a LAN client cannot pass for the tunnel. CA Routing is not wired into Compose.
@@ -207,7 +213,7 @@ URLs in response headers (Location, Content-Location, Link, Refresh) and bodies 
 
 ### Device labels
 
-Each flow's comment names its Target Device (mitmweb comment column; filter `~comment "Living Room"`). A Physical Device is named by its `ip` in your `devices.json`. A Cloud Device is named by the device slug in its Proxy Base, `https://<tunnel-host>/<secret>/<slug>`: `scripts/launch` appends the device's `slug` from `devices.json` to the public Proxy Base you give it. A tunnel request without a known slug whose `CF-Connecting-IP` is an RCE egress IP is labelled `Cloud Device`. Other clients get no label.
+Each flow's comment names its Target Device (mitmweb comment column; filter `~comment "Living Room"`). A Physical Device is named by its `ip` in your `devices.json`. A Cloud Device is named by the device slug in its Proxy Base, `https://<tunnel-host>/<secret>/<slug>`: `roxy launch` appends the device's `slug` from `devices.json` to the public Proxy Base. A tunnel request without a known slug whose `CF-Connecting-IP` is an RCE egress IP is labelled `Cloud Device`. Other clients get no label.
 
 ### Recording and replay
 
@@ -241,13 +247,13 @@ One person or agent at a time drives the Target Devices. `scripts/deploy`, `scri
 
 - Held: the script stops at once, naming the holder (pid, command, and `LAB_LOCK_OWNER` if the holder set it). `LAB_LOCK_WAIT=1` waits for it instead.
 - Agents: set `LAB_LOCK_OWNER` to your name, so a refusal tells the other side who to wait for.
-- A grid cell's deploy and launches run inside the grid's lock. To hold it across your own commands, run them in one shell that takes it: `bash -c '. scripts/lib.sh && lab_lock devices && scripts/deploy "Living Room" apps/classic && scripts/launch "Living Room" json_get'`.
+- A grid cell's deploy and launches run inside the grid's lock. To hold it across your own commands, run them in one shell that takes it: `bash -c '. scripts/lib.sh && lab_lock devices && scripts/deploy "Living Room" apps/classic && scripts/launch "Living Room" case=json_get'`.
 - A holder that died without releasing (crash, `kill -9`) is detected by its pid; the next script reclaims the lock.
 
 ### Tests
 
 ```sh
-scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and saved sessions against a fake mitmweb, compose config, the glossary lint and the test-import rule
+scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and saved sessions against a fake mitmweb, the roxy CLI and install.sh against fake curl and rce in a temp HOME, compose config, the glossary lint and the test-import rule
 cd proxy && uv run pytest     # Seam A: the full addon chain, no network
 cd grid && uv run pytest      # grid verdict logic, its settings, and its Cloud Device side against a fake rce; no devices
 ```
