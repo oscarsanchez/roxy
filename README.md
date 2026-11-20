@@ -197,10 +197,12 @@ alter_segments = { from = 2, uri = "missing.ts", duration = 1.5 }   # HLS: new U
 ```sh
 scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf|raf_vmap> [--proxy-base URL] [--ca-routing] [--separator /|/;]
 scripts/grid classic physical json
-scripts/grid rsg cloud hls --proxy-base "https://<random>.trycloudflare.com/<LAB_SECRET>"
+scripts/grid rsg cloud hls   # through the running tunnel (roxy start --tunnel)
 scripts/grid classic physical json --ca-routing   # CA Routing (see CA Routing)
 scripts/grid classic physical hls --separator '/;'   # the Charles-style form
 ```
+
+A Cloud Device cell launches with the running tunnel's public Proxy Base, as `roxy launch` does; a Physical Device cell, with the LAN Proxy Base. `--proxy-base URL` sends another.
 
 `--separator '/;'` runs the cell in the Charles-style form: the Lab App gets the `separator=/;` launch param and builds every Prefixed URL as `<Proxy Base>/;<Origin URL>`, and the row says `(/; form)`. The default `/` is the lab's own form. Quote `/;`: in a shell, `;` ends the command. CA Routing has no Prefixed URLs, so it takes no `--separator`. Outside the grid, `roxy launch "Living Room" case=hls 'separator=/;'` does the same.
 

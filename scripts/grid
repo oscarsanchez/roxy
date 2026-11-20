@@ -7,8 +7,9 @@
 #   needs scripts/start-lab --ca-routing.
 #   --separator '/;': the Lab App builds Charles-style Prefixed URLs (its separator launch
 #   param); the default / is the lab's own form. Quote it: ; ends a shell command.
-#   Needs scripts/start-lab running (with --tunnel for a Cloud Device, whose public Proxy
-#   Base goes in --proxy-base). Cells, scenarios and expected hosts: grid/cells.toml.
+#   Needs scripts/start-lab running (with --tunnel for a Cloud Device: its cell launches with
+#   the tunnel's public Proxy Base, as scripts/launch does; --proxy-base URL sends another).
+#   Cells, scenarios and expected hosts: grid/cells.toml.
 #   A Cloud Device cell prints its projected RCE time and cost and asks before touching RCE;
 #   it starts the Cloud Device (rce) if it has no Run, and stops it after the cell if it did.
 #   Exit status: 0 pass or known-limit, 1 fail.
