@@ -139,3 +139,9 @@ grep -q '^launch ' "$RCE_LOG" && fail "launch without a tunnel still launched: $
 # A launch param that is not key=value is refused.
 "$ROXY" launch "Living Room" json_get >/dev/null 2>&1 && fail "launch took a param without ="
 echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
+
+# console on a Cloud Device streams through rce console, by its rce Device Name.
+: > "$RCE_LOG"
+"$ROXY" console "Cloud Device" >/dev/null || fail "console on a Cloud Device exited non-zero"
+[ "$(tail -1 "$RCE_LOG")" = "$(printf '%q ' console player)" ] || fail "console on a Cloud Device ran: $(cat "$RCE_LOG")"
+echo "ok: console on a Cloud Device goes through rce console"

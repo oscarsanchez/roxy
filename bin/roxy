@@ -86,6 +86,19 @@ scenario() {
   esac
 }
 
+# console DEVICE [options] : a Cloud Device's console through rce, a Physical Device's
+# through scripts/console.
+console() {
+  [ $# -ge 1 ] || die "$(usage console | head -1)"
+  local rce_name
+  rce_name="$(rce_device_name "$1")"
+  if [ -n "$rce_name" ]; then
+    [ $# -eq 1 ] || die "a Cloud Device's console takes no options: $(usage console | head -1)"
+    exec rce console "$rce_name"
+  fi
+  exec "$SCRIPTS/console" "$@"
+}
+
 cmd="${1:-}"
 [ -n "$cmd" ] || { usage roxy >&2; exit 2; }
 shift
@@ -101,5 +114,5 @@ case "$cmd" in
   status) status "$@" ;;
   scenario) scenario "$@" ;;
   launch) exec "$SCRIPTS/launch" "$@" ;;
-  *) die "roxy $cmd: not built yet" ;;
+  console) console "$@" ;;
 esac
