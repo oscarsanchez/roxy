@@ -14,7 +14,7 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](
 
 ### Routing
 
-**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`, or `<Proxy Base>/;<Origin URL>` as a Charles-enabled build does (port 8888). How to wire an app, with its Charles hook or with the kit for apps you own (`kit/`): [Prefix Routing guide](docs/prefix-routing.md). The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
+**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`, or `<Proxy Base>/;<Origin URL>` as a Charles-enabled build does (port 8888). How to wire an app, with its Charles hook or with the kit for apps you own (`kit/`): [Prefix Routing guide](docs/prefix-routing.md). The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback, and build the `/` form unless launched with `separator=/;`. The Proxy Base differs by Target Device kind:
 
 | Target Device | Proxy Base |
 |---|---|
@@ -164,11 +164,14 @@ alter_segments = { from = 2, uri = "missing.ts", duration = 1.5 }   # HLS: new U
 ### 6. Grid runner
 
 ```sh
-scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf> [--proxy-base URL] [--ca-routing]
+scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf> [--proxy-base URL] [--ca-routing] [--separator /|/;]
 scripts/grid classic physical json
 scripts/grid rsg cloud hls --proxy-base "https://<random>.trycloudflare.com/<LAB_SECRET>"
 scripts/grid classic physical json --ca-routing   # CA Routing (see CA Routing)
+scripts/grid classic physical hls --separator '/;'   # the Charles-style form
 ```
+
+`--separator '/;'` runs the cell in the Charles-style form: the Lab App gets the `separator=/;` launch param and builds every Prefixed URL as `<Proxy Base>/;<Origin URL>`, and the row says `(/; form)`. The default `/` is the lab's own form. Quote `/;`: in a shell, `;` ends the command. CA Routing has no Prefixed URLs, so it takes no `--separator`. Outside the grid, `roxy launch "Living Room" case=hls 'separator=/;'` does the same.
 
 It fills one grid cell through the running native lab (`scripts/start-lab`, not Compose), on the Target Device that `grid_devices` in your `settings.json` names for that kind: it deploys the flavour, launches the case with the cell's Manipulation Scenario and then with none (so the lab ends with no Scenario), and prints one row: pass, fail or known-limit, with a reason. Each launch's console and flows are kept in `out/grid/` as evidence for the verdict. Cells live in `grid/cells.toml`: per traffic class, the case, the Scenario, the expected Origin hosts and the result fields that mean success. A Cloud Device cell prints the projected RCE time and cost (about 5.3 min, $0.018, start-up included) and asks before it touches RCE. It then starts the Cloud Device if it has no Run, reads its console with `rce console`, and stops it after the cell, also when the cell fails or on Ctrl-C or a kill (during the start too), then confirms with `rce device status` that the Run ended; a Run that was already going is left running.
 

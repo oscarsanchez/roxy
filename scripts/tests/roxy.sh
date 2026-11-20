@@ -171,12 +171,13 @@ if err="$("$ROXY" scenario set json-503 2>&1)"; then fail "scenario set with the
 case "$err" in *"lab: down"*"roxy start"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
 echo "ok: scenario set and clear switch the running lab's Scenario"
 
-# launch on a Physical Device: ECP on the LAN with the LAN Proxy Base and the user's params.
+# launch on a Physical Device: ECP on the LAN with the LAN Proxy Base and the user's params
+# (separator=/; asks the Lab Apps for Charles-style Prefixed URLs).
 : > "$CURL_LOG.urls"
-out="$("$ROXY" launch "Living Room" case=json_get "note=a b")" || fail "launch on a Physical Device: $out"
+out="$("$ROXY" launch "Living Room" case=json_get "note=a b" 'separator=/;')" || fail "launch on a Physical Device: $out"
 run="$(sed -n 's/^run=//p' <<< "$out")"
 [ -n "$run" ] || fail "launch printed no run id: $out"
-want="http://192.0.2.54:8060/launch/dev?proxyBase=http%3A%2F%2F192.0.2.10%3A8080&case=json_get&note=a%20b&run=$run"
+want="http://192.0.2.54:8060/launch/dev?proxyBase=http%3A%2F%2F192.0.2.10%3A8080&case=json_get&note=a%20b&separator=%2F%3B&run=$run"
 grep -qxF "$want" "$CURL_LOG.urls" || fail "launch on a Physical Device did not ask for
 $want
 curl asked for:
@@ -194,11 +195,11 @@ echo "ok: launch on a device with limited ECP launches quietly"
 
 # launch on a Cloud Device: through rce, with the running tunnel's public Proxy Base plus the slug.
 : > "$RCE_LOG"
-out="$(FAKE_TUNNEL_HOST=tunnel.example "$ROXY" launch "Cloud Device" case=json_get)" \
+out="$(FAKE_TUNNEL_HOST=tunnel.example "$ROXY" launch "Cloud Device" case=json_get 'separator=/;')" \
   || fail "launch on a Cloud Device: $out"
 run="$(sed -n 's/^run=//p' <<< "$out")"
 want="$(printf '%q ' launch player --param "proxyBase=https://tunnel.example/test-secret/cloud-device" \
-  --param case=json_get --param "run=$run")"
+  --param case=json_get --param 'separator=/;' --param "run=$run")"
 grep -qxF "$want" "$RCE_LOG" || fail "launch on a Cloud Device did not run
 $want
 rce ran:

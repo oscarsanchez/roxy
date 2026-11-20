@@ -27,8 +27,8 @@ A Prefixed URL is the Proxy Base, a separator, then the Origin URL, byte for byt
 
 | Form | Prefixed URL | Who uses it |
 |---|---|---|
-| The lab's own | `http://<proxy-ip>:8080/https://cdn.example/a.m3u8` | the Lab Apps |
-| Charles-style | `http://<proxy-ip>:8888/;https://cdn.example/a.m3u8` | Product Apps with a Charles hook (unchanged) or with the kit |
+| The lab's own | `http://<proxy-ip>:8080/https://cdn.example/a.m3u8` | the Lab Apps, by default |
+| Charles-style | `http://<proxy-ip>:8888/;https://cdn.example/a.m3u8` | Product Apps with a Charles hook (unchanged) or with the kit; the Lab Apps launched with `separator=/;` |
 
 - Both listeners (8080 and 8888) run the same lab and take either form. 8888 is Charles's port, which Charles hooks usually hardcode.
 - `roxy start` prints the Proxy IP (the Mac's LAN address, to type into an app's debug proxy setting) and both LAN Proxy Bases.

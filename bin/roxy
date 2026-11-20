@@ -51,6 +51,8 @@ Launch the dev channel on <device> (a name in devices.json), with proxyBase and 
 launch params. It never builds or sideloads. proxyBase is the LAN Proxy Base for a
 Physical Device, and the running tunnel's public Proxy Base plus the device slug for a
 Cloud Device (roxy start --tunnel). Prints run=<id>, also sent as the run param.
+The Lab Apps read case=<case> and 'separator=/;' (Charles-style Prefixed URLs; quoted,
+as ; ends a shell command); without separator they use the lab's own /.
   --scenario NAME   set the running lab's active Scenario first ('' clears it)
   --proxy-base URL  send URL instead (a Cloud Device's slug is still added)
 EOF
