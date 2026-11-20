@@ -90,9 +90,13 @@ class Scenarios:
         except (ValueError, OSError) as e:
             logging.error(f"lab scenario {self.path.stem!r} not reloaded, keeping its last good rules: {e}")
 
-    async def requestheaders(self, flow):
+    async def before_guards(self, flow):
+        """Called by ScenariosBeforeGuards, the first of this addon's hooks per flow."""
         if self.path:
             self.reload_if_changed()  # once per flow, so a flow sees one version
+        await self._dispatch("before_guards", flow)
+
+    async def requestheaders(self, flow):
         await self._dispatch("requestheaders", flow)
 
     async def request(self, flow):
@@ -113,3 +117,14 @@ class Scenarios:
                 result = handler(flow)
                 if result is not None:
                     await result
+
+
+class ScenariosBeforeGuards:
+    """Runs the Scenarios' `before_guards` actions (Origin swaps) right after the
+    Origin decoder, so the guards judge a swapped Origin like any other."""
+
+    def __init__(self, scenarios):
+        self.scenarios = scenarios
+
+    async def requestheaders(self, flow):
+        await self.scenarios.before_guards(flow)

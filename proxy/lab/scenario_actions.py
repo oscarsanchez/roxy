@@ -2,12 +2,15 @@
 
 ACTIONS maps a rule's action key to a factory `(value, scenario_dir) -> action`.
 An action has any of the mitmproxy hook methods `requestheaders`, `request`,
-`responseheaders`, `response` (sync or async); the Scenarios addon calls them
-only for flows that match the rule's filter. Factories raise ValueError for a
-bad value. To add an action, add a factory here.
+`responseheaders`, `response` (sync or async), or the lab's own
+`before_guards`; the Scenarios addon calls them only for flows that match the
+rule's filter. Factories raise ValueError for a bad value. To add an action,
+add a factory here.
 
 The Scenarios addon is last in the lab's addon chain, so response actions see
 the body after the lab's body rewriting (Prefixed URLs), as the client gets it.
+`before_guards` runs right after the Origin decoder instead, so the guards
+judge the request the Origin will actually get.
 """
 
 import asyncio
@@ -102,6 +105,17 @@ class StatusOverride:
         flow.response.reason = http.status_codes.RESPONSES.get(self.status, "")
 
 
+class MapRemote:
+    """Send the request to another Origin, `<scheme>://<host>[:port]`. Path and
+    query are kept, and Host follows."""
+
+    def __init__(self, target, scenario_dir):
+        self.target = target
+
+    def before_guards(self, flow):
+        flow.request.url = f"{self.target}{flow.request.path}"
+
+
 ACTIONS = {
     "status": StatusOverride,
     "latency": Latency,
@@ -109,5 +123,6 @@ ACTIONS = {
     "header": header_replace,
     "body": body_replace,
     "map_local": map_local,
+    "map_remote": MapRemote,
     **MANIFEST_EDITS,
 }
