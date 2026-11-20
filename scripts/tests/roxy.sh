@@ -21,7 +21,8 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 
 # Fakes on PATH. curl logs one line of shell-quoted arguments per call (and the URL alone
 # to $CURL_LOG.urls, the request body to $CURL_LOG.body) and answers for
-# mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active), cloudflared's metrics
+# mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active, its flow dump in
+# FAKE_FLOWS_DUMP, or FAKE_FLOWS_STATUS: an HTTP error for it), cloudflared's metrics
 # (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
 # route and ipconfig give the Mac the LAN IP 192.0.2.10.
 export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log"
@@ -44,6 +45,9 @@ case "$url" in
   */options) [ "${FAKE_LAB_UP:-}" = 1 ] || down
     case " $* " in *" -w "*) printf '\n200' ;; esac ;;
   */flows/dump*) [ "${FAKE_LAB_UP:-}" = 1 ] || down
+    if [ -n "${FAKE_FLOWS_STATUS:-}" ]; then
+      echo "curl: (22) The requested URL returned error: $FAKE_FLOWS_STATUS" >&2; exit 22
+    fi
     cat "$FAKE_FLOWS_DUMP" ;;
   */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || down
     printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
@@ -192,6 +196,21 @@ out="$(flows_json --since 2025-11-20T10:00:00Z --limit 1)" || fail "flows --json
 [ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:00 --limit 1 gave $(times "$out")"
 flows_json --limit 0 >/dev/null 2>&1 && fail "flows --json took --limit 0"
 echo "ok: flows --json --limit keeps the last N flows"
+
+# --filter: mitmweb's dump applies the mitmproxy filter expression; one it rejects is named.
+: > "$CURL_LOG.urls"
+flows_json --filter '~d httpbin.org & ~u /json' >/dev/null || fail "flows --json --filter exited non-zero"
+grep -qxF 'http://127.0.0.1:8081/flows/dump?filter=~d%20httpbin.org%20%26%20~u%20%2Fjson' "$CURL_LOG.urls" \
+  || fail "flows --json --filter asked mitmweb for: $(cat "$CURL_LOG.urls")"
+if err="$(FAKE_FLOWS_STATUS=400 flows_json --filter '~bad' 2>&1)"; then fail "flows --json took a filter mitmweb rejects"; fi
+case "$err" in *"filter"*"~bad"*) ;; *) fail "flows --json with a filter mitmweb rejects said: $err" ;; esac
+echo "ok: flows --json --filter passes the expression to mitmweb"
+
+# Read-only: every call roxy flows made was a plain GET, which never holds or edits a flow.
+: > "$CURL_LOG"
+flows_json --filter '~u /json' --since 1763632800 --limit 1 >/dev/null || fail "flows --json with every option"
+grep -E -- '(^| )(-X|--request|-d|--data[a-z-]*) ' "$CURL_LOG" && fail "flows --json sent more than a GET"
+echo "ok: flows --json only reads"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

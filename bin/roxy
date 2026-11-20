@@ -99,7 +99,7 @@ scenario() {
 # flows --json [options] : the running lab's flows in the documented JSON shape, from
 # mitmweb's flow dump (the one flows endpoint that takes a filter expression).
 flows() {
-  local json=false filter="" dump shape_args=()
+  local json=false filter="" dump shape_args=() status=0
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) json=true; shift ;;
@@ -113,8 +113,12 @@ flows() {
   require_env MITMWEB_PASSWORD
   dump="$(mktemp)"
   on_exit "rm -f $(printf %q "$dump")"
-  mitmweb_get "flows/dump${filter:+?filter=$(uri_encode "$filter")}" > "$dump" 2>/dev/null \
-    || die "the lab is down: no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT (roxy start)"
+  mitmweb_get "flows/dump${filter:+?filter=$(uri_encode "$filter")}" > "$dump" 2>/dev/null || status=$?
+  case "$status" in
+    0) ;;
+    22) die "mitmweb refused to list the flows${filter:+ for the filter '$filter'}: an invalid filter expression, or a wrong MITMWEB_PASSWORD" ;;
+    *) die "the lab is down: no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT (roxy start)" ;;
+  esac
   (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py ${shape_args[@]+"${shape_args[@]}"}) < "$dump"
 }
 
