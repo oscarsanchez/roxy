@@ -63,7 +63,7 @@ Changing Outbound Traffic in flight: mocked or rewritten responses, injected fau
 _Avoid_: tampering, mocking (unqualified)
 
 **Scenario**:
-A named set of Manipulation rules; one Scenario at a time is active, for every Target Device the lab serves.
+A named set of Manipulation rules. Any number of Scenarios can be active at once, in an order you choose; their rules apply in that order, for every Target Device the lab serves.
 _Avoid_: mock set, rule file
 
 **App Profile**:
@@ -71,5 +71,5 @@ What the lab keeps for one Product App, in your own lab settings and outside eve
 _Avoid_: app config, app settings
 
 **Lab Session**:
-One run of the lab, from the moment it starts until it stops. It loads at most one App Profile and has at most one active Scenario at a time; switching App Profile means a new Lab Session.
+One run of the lab, from the moment it starts until it stops. It loads at most one App Profile and has an ordered set of active Scenarios (possibly none); switching App Profile means a new Lab Session.
 _Avoid_: lab instance, proxy session
