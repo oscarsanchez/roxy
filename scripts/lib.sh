@@ -77,35 +77,64 @@ lock_holder() {
   echo "${owner:+$owner, }pid $(lock_field "$1" pid) since $(lock_field "$1" since): $(lock_field "$1" command)"
 }
 
-# missing_setting_file FILE : fail, naming FILE and its example.
-missing_setting_file() {
-  die "missing setting file $1 (copy settings.example/$(basename "$1") there, then fill it in)"
+require_jq() { command -v jq >/dev/null || die "jq is required (brew install jq)"; }
+
+# setting_file_problem FILE : names FILE and its example when FILE is missing; nothing otherwise.
+setting_file_problem() {
+  [ -f "$1" ] || echo "missing setting file $1 (copy settings.example/$(basename "$1") there, then fill it in)"
+}
+
+# require_setting_file FILE : fail when FILE is missing, naming it and its example.
+require_setting_file() {
+  local problem
+  problem="$(setting_file_problem "$1")"
+  [ -z "$problem" ] || die "$problem"
 }
 
 load_env() {
-  [ -f "$SECRETS_FILE" ] || missing_setting_file "$SECRETS_FILE"
+  require_setting_file "$SECRETS_FILE"
   set -a
   # shellcheck disable=SC1090
   . "$SECRETS_FILE"
   set +a
 }
 
-# require_env NAME... : fail fast, naming every missing secret.
-require_env() {
+# secrets_problem NAME... : names every secret NAME that is not set (after load_env); nothing
+# when all are.
+secrets_problem() {
   local missing="" name
   for name in "$@"; do
     [ -n "${!name:-}" ] || missing="$missing $name"
   done
-  [ -z "$missing" ] || die "missing secrets in $SECRETS_FILE:$missing"
+  [ -z "$missing" ] || echo "missing secrets in $SECRETS_FILE:$missing"
 }
 
-# require_settings : fail fast, naming a missing settings file or setting.
-require_settings() {
-  command -v jq >/dev/null || die "jq is required (brew install jq)"
-  [ -f "$DEVICES_FILE" ] || missing_setting_file "$DEVICES_FILE"
-  [ -f "$SETTINGS_FILE" ] || missing_setting_file "$SETTINGS_FILE"
-  jq -e '.lan_subnets | length > 0' "$SETTINGS_FILE" >/dev/null 2>&1 \
-    || die "missing setting lan_subnets (your LAN's subnets, CIDR) in $SETTINGS_FILE"
+# require_env NAME... : fail fast, naming every missing secret.
+require_env() {
+  local problem
+  problem="$(secrets_problem "$@")"
+  [ -z "$problem" ] || die "$problem"
+}
+
+# require_lab_settings SECRET... : what the lab needs to start, loading secrets.env. Fails
+# naming everything missing at once (settings files, lan_subnets, the secrets SECRET...),
+# so one run shows all there is to fill in.
+require_lab_settings() {
+  local problems=() problem file
+  require_jq
+  for file in "$SECRETS_FILE" "$DEVICES_FILE" "$SETTINGS_FILE"; do
+    problem="$(setting_file_problem "$file")"
+    [ -z "$problem" ] || problems+=("$problem")
+  done
+  if [ -f "$SECRETS_FILE" ]; then
+    load_env
+    problem="$(secrets_problem "$@")"
+    [ -z "$problem" ] || problems+=("$problem")
+  fi
+  if [ -f "$SETTINGS_FILE" ] && ! jq -e '.lan_subnets | length > 0' "$SETTINGS_FILE" >/dev/null 2>&1; then
+    problems+=("missing setting lan_subnets (your LAN's subnets, CIDR) in $SETTINGS_FILE")
+  fi
+  [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }
 
 # resolve_app [NAME] : the App Profile to load: NAME (an unknown one fails), else the one

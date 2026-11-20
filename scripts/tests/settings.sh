@@ -30,14 +30,17 @@ seeded() {
   sed -i.bak 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' "$1/secrets.env"
 }
 
-# refused WHAT : start-lab fails, naming WHAT, before mitmweb starts.
+# refused WHAT... : start-lab fails, naming every WHAT in one run, before mitmweb starts.
 refused() {
-  local err
+  local err what
   rm -f "$UV_LOG"
-  if err="$("$SCRIPTS/start-lab" 2>&1)"; then fail "start-lab started without $1: $err"; fi
-  case "$err" in *"$1"*) ;; *) fail "start-lab's refusal does not name $1: $err" ;; esac
-  [ ! -e "$UV_LOG" ] || fail "mitmweb started without $1"
+  if err="$("$SCRIPTS/start-lab" ${START_ARGS[@]+"${START_ARGS[@]}"} 2>&1)"; then fail "start-lab started without $*: $err"; fi
+  for what in "$@"; do
+    case "$err" in *"$what"*) ;; *) fail "start-lab's refusal does not name $what: $err" ;; esac
+  done
+  [ ! -e "$UV_LOG" ] || fail "mitmweb started without $*"
 }
+START_ARGS=()
 
 # Without ROXY_CONFIG_DIR, the settings root is roxy in the user config directory.
 refused "$XDG_CONFIG_HOME/roxy/secrets.env"
@@ -61,6 +64,19 @@ seeded "$ROXY_CONFIG_DIR"
 echo '{}' > "$ROXY_CONFIG_DIR/settings.json"
 refused lan_subnets
 echo "ok: a missing settings file or setting is named"
+
+# Everything missing is named in one run, not one problem per try.
+rm -r "$ROXY_CONFIG_DIR"
+refused "$ROXY_CONFIG_DIR/secrets.env" "$ROXY_CONFIG_DIR/devices.json" "$ROXY_CONFIG_DIR/settings.json"
+seeded "$ROXY_CONFIG_DIR"
+sed -i.bak 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=/' "$ROXY_CONFIG_DIR/secrets.env"
+sed -i.bak 's/^LAB_SECRET=.*/LAB_SECRET=/' "$ROXY_CONFIG_DIR/secrets.env"
+rm "$ROXY_CONFIG_DIR/devices.json"
+echo '{}' > "$ROXY_CONFIG_DIR/settings.json"
+START_ARGS=(--tunnel)
+refused MITMWEB_PASSWORD LAB_SECRET "$ROXY_CONFIG_DIR/devices.json" lan_subnets
+START_ARGS=()
+echo "ok: every missing settings file, setting and secret is named in one run"
 
 # With every setting in place, mitmweb starts, and the session is saved under the user
 # data directory, in the folder for sessions without an App Profile.
