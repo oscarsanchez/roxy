@@ -62,6 +62,7 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 | `secrets.env` | `MITMWEB_PASSWORD` (mitmweb UI), `LAB_SECRET` (secret path segment of the public Proxy Base, Cloud Devices), `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD` (sideloading to Physical Devices; a Cloud Device's dev password is kept by `rce`) |
 | `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`) |
 | `settings.json` | `lan_subnets`: your LAN's subnets (CIDR), the clients allowed on the LAN listener. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
+| `apps/<name>/` | App Profiles, made by `roxy app new` (see [App Profiles](#app-profiles)) |
 
 - `roxy start` stops before mitmweb starts if a file, a secret it needs or `lan_subnets` is missing, and names it.
 - The RCE token is `rce`'s (`rce token set`), not the lab's. Keep `RCE_TOKEN` out of `secrets.env`: the scripts export it, and `rce` takes `RCE_TOKEN` over its stored token.
@@ -74,10 +75,11 @@ roxy start                           # mitmweb UI http://127.0.0.1:8081; prints 
 roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
 roxy start --replay <session>.mitm   # answer from a saved session (see Recording and replay)
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
-roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, active Scenario
+roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
+roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenario
 ```
 
-`roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every session is saved in your user data directory, `~/.local/share/roxy/captures/no-profile/<start time>.mitm` (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
+`roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every session is saved in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
 
 ### 4. Deploy and launch
 
@@ -116,7 +118,7 @@ Cases (same ids, labels and Origins in both flavours, also in an on-screen menu)
 A Scenario is a file of named Manipulation rules, `proxy/scenarios/<name>.toml`. One is active at a time, lab-wide, for every Target Device:
 
 ```sh
-roxy scenario list                                      # the lab's Scenarios
+roxy scenario list                                      # the App Profile's Scenarios and the lab's, each with its source
 roxy scenario set json-503                              # make it active in the running lab
 roxy scenario clear                                     # none active
 roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then launch ('' clears it)
@@ -189,6 +191,22 @@ LAB_REPLAY=<session>.mitm docker compose up    # replay (path relative to the sa
 
 ## Reference
 
+### App Profiles
+
+An App Profile keeps what the lab knows about one Product App in your settings root, never in a repo: the repo it belongs to, its Scenarios with their mocks, and the Origins it may reach through the Public Endpoint. It is optional: without one, the LAN relays to any public Origin and the lab's own Scenarios are there.
+
+```sh
+cd ~/code/example-app/src && roxy app new example-app    # records the repo's git root, not the folder you are in
+roxy app list                                            # each profile and its repo
+```
+
+`roxy app new` refuses a name that exists. A profile is the folder `~/.config/roxy/apps/<name>/`:
+
+- `scenarios/<scenario>.toml`: its Scenarios, written like the lab's own, with their mocks next to them (`map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`).
+- `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain).
+
+`roxy start` loads at most one: `--app <name>` (an unknown name fails), else the profile whose repo holds the current folder, else none. To switch apps, stop the lab and start it in the other app's folder. A profile Scenario named like one of the lab's own stops the start, naming both. Restart the lab after editing `profile.json`; a Scenario file reloads as usual.
+
 ### Guards
 
 The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed`; through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
@@ -199,7 +217,7 @@ The lab forwards a request only if the client is allowed, the Origin resolves to
 - The address guard resolves the Origin, and mitmproxy then dials one of the addresses it checked (IPv4 first), never a later DNS answer: a name that turns private between the check and the connect (DNS rebinding) is not dialled. The cost: no server connection reuse across requests.
 - Tunnel and forwarding headers (`CF-*`, `X-Forwarded-*`, `CDN-Loop`, `Forwarded`, `Via`...) never reach the Origin.
 - Secrets on the command line: `scripts/run-mitmweb` passes `MITMWEB_PASSWORD` and `LAB_SECRET` to mitmweb as `--set` flags, so any local user can read them with `ps`. Accepted for a single-user lab Mac; do not run the lab on a shared machine.
-- Defaults: `lan_subnets` in your `settings.json`; `rce_egress_ips` and `origin_allowlist` in `proxy/config/guards.json` (a leading dot such as `.mux.com` allows any subdomain). Live changes: mitmweb Options `lab_lan_subnets`, `lab_rce_egress_ips`, `lab_origin_allowlist`.
+- Defaults: `lan_subnets` in your `settings.json`; `rce_egress_ips` and `origin_allowlist` in `proxy/config/guards.json` (a leading dot such as `.mux.com` allows any subdomain), plus the loaded App Profile's `origin_allowlist`. Live changes: mitmweb Options `lab_lan_subnets`, `lab_rce_egress_ips`, `lab_origin_allowlist`.
 
 ### Header and body rewriting
 
@@ -217,7 +235,7 @@ Each flow's comment names its Target Device (mitmweb comment column; filter `~co
 
 ### Recording and replay
 
-Every session is saved in the saved-session folder, `~/.local/share/roxy/captures/no-profile/<start time>.mitm`; open one with `mitmweb -r <file>`. With `--replay` (or `LAB_REPLAY` under Compose):
+Every session is saved in the saved-session folder, `~/.local/share/roxy/captures/<App Profile or no-profile>/<start time>.mitm`; open one with `mitmweb -r <file>`. With `--replay` (or `LAB_REPLAY` under Compose):
 
 - A recorded request gets its recorded response every time; the Origin is not contacted. Replay is offline: an unrecorded request gets an empty 404 from the lab (`server_replay_extra=404`) and never reaches its Origin.
 - Matching uses the Origin URL, so a session recorded from one Target Device replays to another; replayed URLs get the replaying client's Proxy Base.
