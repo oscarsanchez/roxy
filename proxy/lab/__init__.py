@@ -25,6 +25,6 @@ def addon_chain():
         KeepRefusals(),  # before the response rewriters
         RequestHeaderCleanup(),
         ResponseHeaderRewriter(),
-        BodyRewriter(),
+        BodyRewriter(app_profile),
         scenarios,  # keep last: its actions see the response as the client gets it
     ]

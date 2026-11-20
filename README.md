@@ -145,6 +145,23 @@ status = 503                                    # status override (the Origin's 
 
 `header` and `body` act on the request and the response, like their mitmproxy built-ins: add `~q` or `~s` to the filter to pick one.
 
+A `header` value or `body` replacement can hold placeholders, filled per flow from the client that made it, so one rule points a URL at the lab for every Target Device without an address in it:
+
+| Placeholder | Filled with | LAN client | Public Endpoint client |
+| --- | --- | --- | --- |
+| `{proxy_base}` | the client's Proxy Base | `http://192.0.2.10:8080` | `https://<public-endpoint>/<secret>/<slug>` |
+| `{proxy_base_no_scheme}` | the same without its scheme | `192.0.2.10:8080` | `<public-endpoint>/<secret>/<slug>` |
+| `{separator}` | the separator the client used | `/` or `/;` | `/` or `/;` |
+
+```toml
+[[rule]]
+name = "cdn through the lab"                    # the app reads mediaHost="cdn.example.com/media" and adds its own scheme
+filter = "~s & ~d api.example.com"
+body = { pattern = 'mediaHost="', replacement = 'mediaHost="{proxy_base_no_scheme}{separator}https://' }
+```
+
+A placeholder is `{name}`, lowercase letters and underscores: braces stay clear of regex replacement syntax (`\1`, `\g<1>`). Any other `{name}` in a replacement is refused when the Scenario loads (a broken edit keeps the last good rules), so a literal `{word}` cannot be written there. A flow that was not Prefixed (CA Routing) has no Proxy Base: a rule with placeholders leaves it alone.
+
 `throttle` caps each matching flow on its own (no shared link), like Charles's Throttle without the presets: the response starts at once and arrives slowly, so a player sees a slow download, not a late one, and ABR can step down. It paces the response after every other rule and the lab's own rewriting, and takes a positive `kbps`. HTTP/1 only: a flow whose client speaks HTTP/2 shares its connection with other flows, so it is sent unthrottled and the mitmweb event log says so. Add a `latency` rule with the same filter for a slow, high-latency link. On a Cloud Device the paced bytes go through the quick tunnel: keep such runs short.
 
 `map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other: a private address is refused, and through the tunnel so is a host off the allowlist. Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
@@ -210,7 +227,7 @@ roxy app list                                            # each profile and its 
 `roxy app new` refuses a name that exists. A profile is the folder `~/.config/roxy/apps/<name>/`:
 
 - `scenarios/<scenario>.toml`: its Scenarios, written like the lab's own, with their mocks next to them (`map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`).
-- `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain).
+- `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain). Optional: `"rewrite_text": true` turns the text body format on for this app (Header and body rewriting).
 
 `roxy start` loads at most one: `--app <name>` (an unknown name fails), else the profile whose repo holds the current folder, else none. To switch apps, stop the lab and start it in the other app's folder. A profile Scenario named like one of the lab's own stops the start, naming both; `roxy scenario list` shows that name once, as `refused: in both (rename the profile's)`. Restart the lab after editing `profile.json`; a Scenario file reloads as usual.
 
@@ -230,11 +247,12 @@ The lab forwards a request only if the client is allowed, the Origin resolves to
 
 URLs in response headers (Location, Content-Location, Link, Refresh) and bodies become Prefixed URLs with the client's Proxy Base and the separator (`/` or `/;`) the request used, so follow-up requests (segments, images, ads) come back through the lab. A URL already carrying the client's Proxy Base, in either form, is never prefixed twice: it comes back with the separator the request used. Set-Cookie is scoped to the Prefixed path (to the Proxy Base for `/;`: a cookie path cannot hold `;`), and its `Domain` is dropped. The body rewriter is chosen by content type, falling back to the URL extension; anything else passes byte for byte.
 
-- Each format has an option `lab_rewrite_<format>` (`hls`, `dash`, `json`, `xml`) listing its content types and `.ext` extensions. Change it in mitmweb's Options or with `--set`; an empty list turns the format off.
+- Each format has an option `lab_rewrite_<format>` (`hls`, `dash`, `json`, `xml`, `text`) listing its content types and `.ext` extensions; a type ending in `/*` (`text/*`) covers its whole family, after every exact type and extension. Change it in mitmweb's Options or with `--set`; an empty list turns the format off.
 - HLS: URI lines and `URI=` attributes (`EXT-X-KEY`, `EXT-X-MAP`, `EXT-X-MEDIA`, `EXT-X-I-FRAME-STREAM-INF`).
 - JSON: string values that are absolute http(s) URLs; everything else is left exactly as the Origin sent it.
 - DASH: `<BaseURL>`, `<Location>`, and `media`/`initialization`/`index`/`sourceURL` attributes.
 - VAST / generic XML (`application/xml`, `text/xml`, `.xml`): every absolute http(s) URL in text, CDATA or attributes. Namespace names and schema locations are kept. A generic XML type yields to a format the URL extension names (a `.mpd` served as `text/xml` gets the DASH rewriter).
+- Text (`text/*`, `application/javascript`): every absolute http(s) URL in HTML, JS, plain text or any other text type no format above claims; root-relative and relative URLs are left alone. Off unless the loaded App Profile's `profile.json` has `"rewrite_text": true` (restart the lab after changing it), for an app whose pages or scripts name the URLs it fetches next. Binary bodies are never touched.
 
 ### Device labels
 
