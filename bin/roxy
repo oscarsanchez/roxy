@@ -90,7 +90,7 @@ status() {
 scenario() {
   local f
   case "${1:-} $#" in
-    "list 1") for f in "$REPO_ROOT"/proxy/scenarios/*.toml; do basename "$f" .toml; done ;;
+    "list 1") for f in "$LAB_SCENARIOS_DIR"/*.toml; do basename "$f" .toml; done ;;
     "set 2") set_scenario "$2" ;;
     "clear 1") set_scenario "" ;;
     *) die "$(usage scenario | head -1)" ;;

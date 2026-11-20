@@ -204,6 +204,15 @@ saved="$(ls "$XDG_DATA_HOME/roxy/captures/app-a/"*.mitm 2>/dev/null)" || true
 [ -n "$saved" ] || fail "start with app-a saved no session under captures/app-a: $(find "$XDG_DATA_HOME" -name '*.mitm')"
 echo "ok: a session is saved under the App Profile's name"
 
+# A profile Scenario named like one of the lab's own fails the start, naming both sources.
+clash="$ROXY_CONFIG_DIR/apps/app-a/scenarios/json-503.toml"
+printf '[[rule]]\nname = "mine"\nfilter = "~u /json"\nstatus = 500\n' > "$clash"
+if out="$(start_in "$repos/app-a")"; then fail "start with a clashing Scenario name exited 0"; fi
+case "$out" in *"json-503"*"lab"*"app-a"*) ;; *) fail "the clash refusal does not name the Scenario and both sources: $out" ;; esac
+[ ! -e "$UV_LOG" ] || fail "start with a clashing Scenario name started mitmweb"
+rm "$clash"
+echo "ok: a profile Scenario named like the lab's own fails the start, naming both"
+
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
 home="$TMP/home"

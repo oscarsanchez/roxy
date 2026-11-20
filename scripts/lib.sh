@@ -11,6 +11,7 @@ SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
 # App Profiles: APPS_DIR/<name>/profile.json ({"repo", "origin_allowlist"}) and
 # APPS_DIR/<name>/scenarios/ (its Scenarios and their mocks). proxy/lab/app_profile.py loads one.
 APPS_DIR="$ROXY_CONFIG_DIR/apps"
+LAB_SCENARIOS_DIR="$REPO_ROOT/proxy/scenarios"  # the lab's own Scenarios
 # Saved sessions: the user data directory, in the loaded App Profile's folder (LAB_APP, which
 # scripts/start-lab exports), or the one for sessions without a profile.
 CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-profile}"
@@ -126,6 +127,9 @@ resolve_app() {
   done
   echo "$best"
 }
+
+# app_scenarios_dir NAME : the folder of App Profile NAME's Scenarios and their mocks.
+app_scenarios_dir() { echo "$APPS_DIR/$1/scenarios"; }
 
 # The Mac's address on the default-route interface.
 lan_ip() {
