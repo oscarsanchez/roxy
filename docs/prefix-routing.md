@@ -6,7 +6,7 @@ How a Roku app sends its Outbound Traffic through the lab by putting the Proxy B
 
 **An app with a Charles hook** (nothing in the app changes):
 
-1. `scripts/start-lab`. It prints the Proxy IP.
+1. `roxy start`. It prints the Proxy IP.
 2. In a sideloaded build, type the Proxy IP into the app's debug proxy setting (port 8888).
 3. Use the app. Its requests show in mitmweb (`http://127.0.0.1:8081`).
 
@@ -14,12 +14,12 @@ How a Roku app sends its Outbound Traffic through the lab by putting the Proxy B
 
 1. Copy the kit into the app and route its URLs through it: [Wiring a classic app](#wiring-a-classic-app) or [Wiring an RSG 2.0 app](#wiring-an-rsg-20-app).
 2. Build it with the kit's constant: `bs_const=roxy_kit=true` (classic) or `ROXY_KIT=1` (RSG 2.0).
-3. `scripts/start-lab`, then launch the app with the `proxyBase` launch param set to a Proxy Base it prints:
+3. `roxy start`, then `roxy launch "<device>"`: it launches the dev channel with the `proxyBase` launch param set to the LAN Proxy Base. Without a device in your `devices.json`, set it over ECP yourself, with a Proxy Base the start prints:
    ```
    curl -d '' "http://192.0.2.20:8060/launch/dev?proxyBase=http%3A%2F%2F192.0.2.10%3A8888"
    ```
    (`192.0.2.20` stands for the Roku, `192.0.2.10` for the Mac.)
-4. Its requests show in mitmweb as `http://192.0.2.10:8888/;https://...`.
+4. Its requests show in mitmweb as `http://192.0.2.10:8080/;https://...` (or `:8888`, the Proxy Base you gave).
 
 ## The two forms
 
@@ -31,7 +31,7 @@ A Prefixed URL is the Proxy Base, a separator, then the Origin URL, byte for byt
 | Charles-style | `http://<proxy-ip>:8888/;https://cdn.example/a.m3u8` | Product Apps with a Charles hook (unchanged) or with the kit |
 
 - Both listeners (8080 and 8888) run the same lab and take either form. 8888 is Charles's port, which Charles hooks usually hardcode.
-- `scripts/start-lab` prints the Proxy IP (the Mac's LAN address, to type into an app's debug proxy setting) and both LAN Proxy Bases.
+- `roxy start` prints the Proxy IP (the Mac's LAN address, to type into an app's debug proxy setting) and both LAN Proxy Bases.
 - A Cloud Device uses the Public Endpoint instead (`https://<tunnel-host>/<secret>/<device-slug>`). A Charles hook builds `http://<ip>:8888/;` and cannot express it, so a Product App with only a Charles hook works on Physical Devices only.
 
 ## Switching the Charles-style hook on
@@ -123,7 +123,8 @@ Route every URL the app builds itself. URLs the lab hands back in responses (man
 | Physical Device | `http://<proxy-ip>:8888` or `http://<proxy-ip>:8080`: both listeners take the `/;` form |
 | Cloud Device | the public Proxy Base plus the device slug, `https://<tunnel-host>/<secret>/<device-slug>` |
 
-- Set it at launch, URL-encoded: `curl -d '' "http://<roku-ip>:8060/launch/dev?proxyBase=<encoded Proxy Base>"`. `scripts/launch "<device>" <anything> [proxy-base]` sends it too, with the LAN Proxy Base (port 8080) by default and the slug added for a Cloud Device; the extra `case` and `run` params it sends are ignored by an app that does not read them.
+- `roxy launch "<device>" [key=value...]` sends it: the LAN Proxy Base (port 8080) for a Physical Device, the public Proxy Base plus the slug for a Cloud Device, or `--proxy-base URL`. The `run` param it adds is ignored by an app that does not read it.
+- By hand, over ECP, URL-encoded: `curl -d '' "http://<roku-ip>:8060/launch/dev?proxyBase=<encoded Proxy Base>"`.
 - Unlike a Charles hook, the kit takes a Public Endpoint, so an app with the kit also runs through the lab on Cloud Devices.
 - The launch param is one of the usual switches ([Switching the Charles-style hook on](#switching-the-charles-style-hook-on) lists the others). To use another one, keep the kit and change where it reads the Proxy Base: `RoxyStart` (classic) or `useProxyBase` (RSG 2.0).
 
@@ -140,9 +141,9 @@ Route every URL the app builds itself. URLs the lab hands back in responses (man
 ### Trying the examples
 
 ```
-scripts/start-lab
+roxy start
 ROXY_KIT=1 scripts/deploy "<device>" kit/example-classic   # or kit/example-rsg
-scripts/launch "<device>" json                              # sends proxyBase=<LAN Proxy Base>
+roxy launch "<device>"                                      # sends proxyBase=<LAN Proxy Base>
 ```
 
 - With `proxyBase`, mitmweb shows `GET http://<proxy-ip>:8080/;https://httpbin.org/json`, and the app shows the URL and `status=200`.

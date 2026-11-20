@@ -17,11 +17,11 @@ The addresses in this guide are documentation examples: router `192.0.2.1`, Mac 
    ||api.example^$dnsrewrite=NOERROR;A;192.0.2.10,client=192.0.2.20
    ```
 3. Turn on the router's option that answers every client's DNS itself ("override DNS for all clients" or similar), so a hardcoded resolver cannot skip the rewrites.
-4. Start the lab: `scripts/start-lab --ca-routing` (adds listeners on 443 and 80). Its first start creates the lab's CA, `~/.mitmproxy/mitmproxy-ca-cert.pem`.
+4. Start the lab: `roxy start --ca-routing` (adds listeners on 443 and 80). Its first start creates the lab's CA, `~/.mitmproxy/mitmproxy-ca-cert.pem`.
 5. Build the app so every agent trusts Roku's bundle plus that CA ([The CA bundle on each agent](#the-ca-bundle-on-each-agent)):
    - a Lab App: `scripts/deploy --ca-routing "<device>" apps/classic` (or `apps/rsg`);
    - an app with the kit: `ROXY_KIT=1 scripts/deploy --ca-routing "<device>" kit/example-classic` shows how (see [Apps with the kit](#apps-with-the-kit)).
-6. Launch the app without a `proxyBase`. Its requests show in mitmweb (`http://127.0.0.1:8081`) under their Origin URLs.
+6. Launch the app: a Lab App with `roxy launch "<device>" case=json_get` (its CA Routing build ignores the Proxy Base); an app with the kit without `proxyBase` (`curl -d '' "http://192.0.2.20:8060/launch/dev"`), or it takes Prefix Routing as well. Its requests show in mitmweb (`http://127.0.0.1:8081`) under their Origin URLs.
 
 ## 1. Topology
 
@@ -62,15 +62,15 @@ A device with a hardcoded resolver (say `8.8.8.8`) would skip the rewrites. Turn
 - Prefer the router's own option to a hand-made port 53 redirect: firmware that marks or filters DNS packets can lose every client's DNS, the router's included, under a plain redirect rule.
 - It does not catch DNS over HTTPS or over TLS. Roku OS is not known to use either for apps.
 - Check: with the Mac added to a rule as above, `dig +short api.example @8.8.8.8` must also print `192.0.2.10`.
-- To see which resolver the Roku really uses, capture its DNS on the router, if it has a shell: `tcpdump -ni <lan-interface> host 192.0.2.20 and port 53 or port 853`. Queries to `192.0.2.1` go through the rewrites; any other address is a hardcoded resolver. The DNS server's query log is the better record of what the Roku asked.
+- To see which resolver the Roku really uses, watch its DNS packets on the router, if it has a shell: `tcpdump -ni <lan-interface> host 192.0.2.20 and port 53 or port 853`. Queries to `192.0.2.1` go through the rewrites; any other address is a hardcoded resolver. The DNS server's query log is the better record of what the Roku asked.
 - Before changing DNS or firewall settings over SSH, back up the config and arm a timed restore that you cancel once DNS still works: a broken answer also cuts off a session that resolves through the router.
 
 ## 4. Run the lab and the app
 
 ```
-scripts/start-lab --ca-routing                       # also listens on 443 and 80
+roxy start --ca-routing                              # also listens on 443 and 80
 scripts/deploy --ca-routing "<device>" apps/classic  # a Lab App's CA Routing build
-scripts/launch "<device>" json_get                   # the build ignores the Proxy Base
+roxy launch "<device>" case=json_get                 # the build ignores the Proxy Base
 ```
 
 - **The lab** (`--ca-routing`): a request that is not a Prefixed URL takes its Origin from `Host`, or from the TLS SNI without one. Every guard still applies, and Scenarios apply as usual. The lab adds no Proxy Base to these flows: URLs in headers and bodies stay Origin URLs, since DNS already brings them back. Without the flag a non-Prefixed request is refused with `not-prefixed`.
