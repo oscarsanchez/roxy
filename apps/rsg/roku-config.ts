@@ -11,10 +11,11 @@ const defaultProxyBase = process.env.LAB_PROXY_BASE;
 if (!defaultProxyBase) {
     throw new Error("LAB_PROXY_BASE is not set (build with scripts/deploy, or export it)");
 }
-// scripts/deploy --ca-routing sets LAB_CA_BUNDLE to a combined certificate bundle (public
-// roots plus the lab's CA) generated outside the source tree. It ships in the package only,
-// at this pkg:/ path: an HttpsAgent certificatesFile must be a pkg:/ file.
-const caBundle = process.env.LAB_CA_BUNDLE;
+// scripts/deploy --ca-routing sets ROXY_CA_BUNDLE (the variable the kit's example reads too)
+// to a combined certificate bundle (public roots plus the lab's CA) generated outside the
+// source tree. It ships in the package only, at this pkg:/ path: an HttpsAgent
+// certificatesFile must be a pkg:/ file.
+const caBundle = process.env.ROXY_CA_BUNDLE;
 const CA_BUNDLE_PATH = "certs/lab-ca-bundle.crt";
 
 const configuration: RokuConfig = {
