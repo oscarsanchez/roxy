@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# The roxy CLI and its install, as black boxes (Seam C): a temp settings root, a temp
+# The roxy CLI and its install, run as commands (Seam C): a temp settings root, a temp
 # HOME, and fakes on PATH for curl (mitmweb's API, cloudflared's metrics, ECP), rce,
 # and the Mac's network commands. No lab, no device, no network, no real settings.
 # Usage: scripts/tests/roxy.sh   (run by scripts/check)
