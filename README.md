@@ -53,7 +53,7 @@ While the lab runs, any device on your LAN subnets can relay through it to any p
 git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check (see Tests)
 ```
 
-`install.sh` links `bin/roxy` from this checkout, so `git pull` updates it, and `roxy` works from any terminal, Cursor's included. Run it again whenever you like: it refreshes the link and never overwrites a setting. It refuses, changing nothing, when `~/.local/bin/roxy` exists and is not a link.
+`install.sh` links `bin/roxy` from this checkout, so `git pull` updates it, and `roxy` works from any terminal, Cursor's included. Run it again whenever you like: it refreshes the link and never overwrites a setting. It refuses, changing nothing, when `~/.local/bin/roxy` exists and is not a link. For an agent in an app's repo, add the plugin and a pointer too: [Agents](#agents).
 
 Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/roxy/` (`$XDG_CONFIG_HOME/roxy` if you set that), never in the repo. The environment variable `ROXY_CONFIG_DIR` points the lab at another settings root, for tests or experiments. The repo ships examples only, in `settings.example/`; the install copies each one the settings root lacks, for you to fill in:
 
@@ -236,6 +236,27 @@ URLs in response headers (Location, Content-Location, Link, Refresh) and bodies 
 ### Device labels
 
 Each flow's comment names its Target Device (mitmweb comment column; filter `~comment "Living Room"`). A Physical Device is named by its `ip` in your `devices.json`. A Cloud Device is named by the device slug in its Proxy Base, `https://<tunnel-host>/<secret>/<slug>`: `roxy launch` appends the device's `slug` from `devices.json` to the public Proxy Base. A tunnel request without a known slug whose `CF-Connecting-IP` is an RCE egress IP is labelled `Cloud Device`. Other clients get no label.
+
+### Agents
+
+The `roxy` skill teaches an agent in any app's repo when and how to use the lab: start it for the app, launch, write and set Scenarios, read the flows, and the known limits. It links to the guides rather than repeating them. Claude Code gets it from this checkout's plugin (after `./install.sh`, from the checkout):
+
+```sh
+claude plugin marketplace add "$PWD"
+claude plugin install roxy@roxy
+```
+
+The plugin is a copy of the checkout: after a `git pull`, run `claude plugin update roxy@roxy`. It also puts its copy's `roxy` on the PATH of Claude's Bash tool; the terminal and Cursor use the one `install.sh` links.
+
+Signed in to Cursor, its agent loads skills from installed Claude Code plugins, so it has the skill already. Without the plugin, link it: `mkdir -p ~/.cursor/skills && ln -sfn "$PWD/skills/roxy" ~/.cursor/skills/roxy`.
+
+In each app's repo, add this pointer to its `AGENTS.md` (or `CLAUDE.md`), with the app's App Profile and how it routes; Claude Code and Cursor both read it:
+
+```markdown
+## roxy
+To see what this app requests, or to make an Origin fail, slow down or answer from a mock, use the roxy lab: the `roxy` skill, or `skills/roxy/SKILL.md` in the roxy checkout (`realpath "$(command -v roxy)"` is its `bin/roxy`).
+App Profile: `<profile>`. Routing: <its Charles hook, port 8888 | the kit, built with ROXY_KIT=1 or bs_const=roxy_kit=true>.
+```
 
 ### Flows for agents
 
