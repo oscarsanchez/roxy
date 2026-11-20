@@ -8,6 +8,8 @@ To add a format, write its rewriter and add a BodyFormat to FORMATS.
 Which bodies get which rewriter is configurable without code changes: each
 format has a mitmproxy option, lab_rewrite_<name> (e.g. lab_rewrite_json), that
 lists its content types and URL extensions. FORMATS holds the defaults.
+
+The text format is off unless the loaded App Profile turns it on (lab.app_profile).
 """
 
 from collections.abc import Sequence  # what mitmproxy's --set parser matches list options by
@@ -22,6 +24,7 @@ from lab.dash import rewrite_dash
 from lab.hls import rewrite_hls
 from lab.json_body import rewrite_json
 from lab.prefixed_url import client_proxy_base, prefixed_for_client
+from lab.text_body import rewrite_text
 from lab.vast_xml import rewrite_xml
 
 
@@ -56,14 +59,21 @@ FORMATS = (
     ),
     BodyFormat("json", rewrite_json, frozenset({"application/json"}), frozenset({".json"})),
     BodyFormat("xml", rewrite_xml, GENERIC_XML, frozenset({".xml"})),  # VAST, ad responses
+    # HTML, JS, plain text and any other text type no format above claims.
+    BodyFormat(
+        "text",
+        rewrite_text,
+        frozenset({"text/*", "application/javascript", "application/x-javascript", "application/ecmascript"}),
+        frozenset(),
+    ),
 )
 
 
-def _format_tables():
-    """(content type -> format, extension -> format) from the formats' options.
+def _format_tables(formats):
+    """(content type -> format, extension -> format) from the options of `formats`.
     On a clash, the format listed first in FORMATS wins."""
     by_content_type, by_extension = {}, {}
-    for body_format in FORMATS:
+    for body_format in formats:
         for entry in getattr(ctx.options, body_format.option):
             entry = entry.strip().lower()
             if len(entry) > 1 and entry.startswith("."):
@@ -102,7 +112,8 @@ def lab_link(flow):
 
 
 class BodyRewriter:
-    def __init__(self):
+    def __init__(self, app_profile):
+        self.app_profile = app_profile  # its rewrite_text turns the text format on
         self.by_content_type, self.by_extension = {}, {}
 
     def load(self, loader):
@@ -111,16 +122,19 @@ class BodyRewriter:
                 body_format.option, Sequence[str],
                 sorted(body_format.content_types | body_format.extensions),
                 f"Content types and URL extensions (\".ext\") whose response bodies get "
-                f"the {body_format.name} rewriter. Empty turns it off.",
+                f"the {body_format.name} rewriter (\"text/*\" covers every text/ type). "
+                "Empty turns it off.",
             )
 
     def configure(self, updated):
-        if any(body_format.option in updated for body_format in FORMATS):
-            self.by_content_type, self.by_extension = _format_tables()
+        if "lab_app" in updated or any(body_format.option in updated for body_format in FORMATS):
+            formats = [f for f in FORMATS if f.name != "text" or self.app_profile.rewrite_text]
+            self.by_content_type, self.by_extension = _format_tables(formats)
 
     def body_format_for(self, content_type, url):
         """The format whose rewriter applies, chosen by content type, falling back to
-        the URL extension; None means the body passes through untouched.
+        the URL extension, then to a whole family ("text/*"); None means the body
+        passes through untouched.
 
         A generic XML content type only says "some XML", so a format the URL extension
         names (a DASH .mpd served as text/xml) wins over it.
@@ -129,9 +143,10 @@ class BodyRewriter:
         extension = PurePosixPath(urlsplit(url).path).suffix.lower()
         by_type = self.by_content_type.get(media_type)
         by_extension = self.by_extension.get(extension)
+        by_family = self.by_content_type.get(f"{media_type.partition('/')[0]}/*")
         if media_type in GENERIC_XML:
             return by_extension or by_type
-        return by_type or by_extension
+        return by_type or by_extension or by_family
 
     def response(self, flow):
         chosen = self.body_format_for(flow.response.headers.get("content-type", ""), flow.request.url)
