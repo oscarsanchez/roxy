@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Every mechanical check, no devices or network: the pre-commit hook (.githooks) runs it.
+# Every mechanical check, no devices or network (a local mitmdump on loopback at most):
+# the pre-commit hook (.githooks) runs it.
 # Usage: scripts/check
 # It never reads your own settings: the settings root is a temp folder seeded from
 # settings.example/, and the user data directory a temp folder too.
@@ -14,7 +15,7 @@ cp -R settings.example/. "$ROXY_CONFIG_DIR"
 
 step() { echo "== $*"; }
 
-step "proxy tests (Seam A)"
+step "proxy tests (Seam A, and the mitmproxy contract in a local mitmdump)"
 (cd proxy && uv run --quiet pytest -q)
 
 step "grid tests"
