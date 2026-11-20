@@ -34,7 +34,7 @@ slug="$(jq -r --arg d "$device" '.[$d].slug' "$ROXY_CONFIG_DIR/devices.json")"
 
 # launch: exit-app, then launch/dev with the public Proxy Base plus the slug, through rce.
 : > "$RCE_LOG"
-out="$("$SCRIPTS/launch" "$device" json_get "https://tunnel.example/secret/")" || fail "launch: $out"
+out="$("$SCRIPTS/launch" --proxy-base "https://tunnel.example/secret/" "$device" case=json_get)" || fail "launch: $out"
 run="$(sed -n 's/^run=//p' <<< "$out")"
 [ -n "$run" ] || fail "launch printed no run id: $out"
 [ "$out" = "run=$run" ] || fail "launch let rce's output into its own: $out"
@@ -49,7 +49,7 @@ echo "ok: launch goes through rce ecp and rce launch"
 
 # A Device Name rce does not know stops launch after the free local lookup, naming it.
 : > "$RCE_LOG"
-if err="$(FAKE_RCE_FAIL_ON=device FAKE_RCE_EXIT=3 "$SCRIPTS/launch" "$device" json_get "https://tunnel.example/secret" 2>&1)"; then
+if err="$(FAKE_RCE_FAIL_ON=device FAKE_RCE_EXIT=3 "$SCRIPTS/launch" --proxy-base "https://tunnel.example/secret" "$device" case=json_get 2>&1)"; then
   fail "launch went on with an unknown Device Name: $err"
 fi
 case "$err" in *"Device Name '$name'"*) ;; *) fail "launch's refusal does not name the Device Name: $err" ;; esac

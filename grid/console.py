@@ -45,7 +45,7 @@ def main(argv: list[str]) -> int:
         run_id = result = None
         if args.launch:
             scenario = ["--scenario", args.scenario] if args.scenario is not None else []
-            out = subprocess.run([str(SCRIPTS / "launch"), *scenario, args.device, args.launch],
+            out = subprocess.run([str(SCRIPTS / "launch"), *scenario, args.device, f"case={args.launch}"],
                                  check=True, stdout=subprocess.PIPE, text=True).stdout
             run_id = next(line[4:] for line in out.splitlines() if line.startswith("run="))
         try:

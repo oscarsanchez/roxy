@@ -19,7 +19,8 @@ cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"
 sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
   -e 's/^LAB_SECRET=.*/LAB_SECRET=test-secret/' "$ROXY_CONFIG_DIR/secrets.env"
 
-# Fakes on PATH. curl logs one line of shell-quoted arguments per call and answers for
+# Fakes on PATH. curl logs one line of shell-quoted arguments per call (and the URL alone
+# to $CURL_LOG.urls, the request body to $CURL_LOG.body) and answers for
 # mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active), cloudflared's metrics
 # (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
 # route and ipconfig give the Mac the LAN IP 192.0.2.10.
@@ -35,6 +36,7 @@ for a in "$@"; do
   if [ "$prev" = -d ]; then printf '%s' "$a" > "$CURL_LOG.body"; fi  # the last request body
   prev="$a"
 done
+echo "$url" >> "$CURL_LOG.urls"
 down() { echo "curl: (7) Failed to connect" >&2; exit 7; }
 case "$url" in
   */options.json) [ "${FAKE_LAB_UP:-}" = 1 ] || down
@@ -102,3 +104,37 @@ out="$(FAKE_LAB_UP=1 "$ROXY" scenario clear)" || fail "scenario clear: $out"
 if err="$("$ROXY" scenario set json-503 2>&1)"; then fail "scenario set with the lab down exited 0"; fi
 case "$err" in *"could not reach mitmweb"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
 echo "ok: scenario set and clear switch the running lab's Scenario"
+
+# launch on a Physical Device: ECP on the LAN with the LAN Proxy Base and the user's params.
+: > "$CURL_LOG.urls"
+out="$("$ROXY" launch "Living Room" case=json_get "note=a b")" || fail "launch on a Physical Device: $out"
+run="$(sed -n 's/^run=//p' <<< "$out")"
+[ -n "$run" ] || fail "launch printed no run id: $out"
+want="http://192.0.2.54:8060/launch/dev?proxyBase=http%3A%2F%2F192.0.2.10%3A8080&case=json_get&note=a%20b&run=$run"
+grep -qxF "$want" "$CURL_LOG.urls" || fail "launch on a Physical Device did not ask for
+$want
+curl asked for:
+$(cat "$CURL_LOG.urls")"
+echo "ok: launch sends the LAN Proxy Base to a Physical Device"
+
+# launch on a Cloud Device: through rce, with the running tunnel's public Proxy Base plus the slug.
+: > "$RCE_LOG"
+out="$(FAKE_TUNNEL_HOST=tunnel.example "$ROXY" launch "Cloud Device" case=json_get)" \
+  || fail "launch on a Cloud Device: $out"
+run="$(sed -n 's/^run=//p' <<< "$out")"
+want="$(printf '%q ' launch player --param "proxyBase=https://tunnel.example/test-secret/cloud-device" \
+  --param case=json_get --param "run=$run")"
+grep -qxF "$want" "$RCE_LOG" || fail "launch on a Cloud Device did not run
+$want
+rce ran:
+$(cat "$RCE_LOG")"
+echo "ok: launch sends the public Proxy Base plus the device slug to a Cloud Device"
+
+# Without a tunnel, a Cloud Device launch stops before launching, naming the fix.
+: > "$RCE_LOG"
+if err="$("$ROXY" launch "Cloud Device" case=json_get 2>&1)"; then fail "launch on a Cloud Device without a tunnel exited 0"; fi
+case "$err" in *"roxy start --tunnel"*) ;; *) fail "launch without a tunnel said: $err" ;; esac
+grep -q '^launch ' "$RCE_LOG" && fail "launch without a tunnel still launched: $(cat "$RCE_LOG")"
+# A launch param that is not key=value is refused.
+"$ROXY" launch "Living Room" json_get >/dev/null 2>&1 && fail "launch took a param without ="
+echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
