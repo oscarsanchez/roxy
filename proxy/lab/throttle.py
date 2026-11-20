@@ -68,7 +68,7 @@ class PacedWriter:
         self.writer = writer
         self.bytes_per_second = bytes_per_second
         self.queue = bytearray()
-        self.closing = None  # mitmproxy's close or write_eof, held until the queue is sent
+        self.endings = []  # mitmproxy's write_eof and close, held in order until the queue is sent
         self.task = None
         self.send_on, self.close_on, self.write_eof_on = writer.write, writer.close, writer.write_eof
         writer.write, writer.close, writer.write_eof = self.write, self.close, self.write_eof
@@ -81,27 +81,34 @@ class PacedWriter:
             self.task.add_done_callback(PacedWriter.sending.discard)
 
     def close(self):
-        self.closing = self.close_on
-        if self.task is None:
-            self.hand_back()
+        self.end(self.close_on)
 
     def write_eof(self):
-        self.closing = self.write_eof_on
+        self.end(self.write_eof_on)
+
+    def end(self, ending):
+        self.endings.append(ending)
         if self.task is None:
             self.hand_back()
 
     async def send(self):
+        """Pace the queue out. The writer goes back to mitmproxy however this ends: the
+        queue sent, the client gone, a failed write, or the lab stopping (cancelled)."""
         started, sent = clock.now(), 0
-        while self.queue and not self.writer.is_closing():
-            chunk_size = max(1, round(self.bytes_per_second * TICK))
-            chunk = bytes(self.queue[:chunk_size])
-            del self.queue[:chunk_size]
-            sent += len(chunk)
-            await clock.sleep(started + sent / self.bytes_per_second - clock.now())
-            self.send_on(chunk)
-        self.hand_back()
+        try:
+            while self.queue:
+                chunk_size = max(1, round(self.bytes_per_second * TICK))
+                chunk = bytes(self.queue[:chunk_size])
+                del self.queue[:chunk_size]
+                sent += len(chunk)
+                await clock.sleep(started + sent / self.bytes_per_second - clock.now())
+                if self.writer.is_closing():  # the client went while the chunk waited
+                    break
+                self.send_on(chunk)
+        finally:
+            self.hand_back()
 
     def hand_back(self):
         del self.writer.write, self.writer.close, self.writer.write_eof, self.writer.pacer
-        if self.closing:
-            self.closing()
+        for ending in self.endings:
+            ending()

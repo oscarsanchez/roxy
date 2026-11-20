@@ -115,3 +115,40 @@ def test_a_bad_throttle_edit_is_logged_and_the_last_good_rules_stay(scenarios, c
 
     assert received[-1][0] == pytest.approx(10, abs=0.1)
     assert "not reloaded, keeping its last good rules: rule 'slow segments': throttle must be" in caplog.text
+
+
+def test_the_end_of_a_throttled_response_reaches_the_client_after_its_last_byte(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    flow = segment_get()
+
+    with Lab(**options) as lab:
+        lab.run(flow, origin_segment())
+        ended = lab.ended(flow)
+
+    assert [how for how, _ in ended] == ["write_eof", "close"]
+    assert all(when == pytest.approx(10, abs=0.1) for _, when in ended)
+
+
+def test_nothing_is_sent_to_a_client_that_hung_up_mid_response(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    flow = segment_get()
+
+    with Lab(**options) as lab:
+        lab.run(flow, origin_segment(), client_hangs_up_at=2.05)
+        received = lab.received(flow)
+
+    assert received[-1][0] < 2.05
+    assert received_by(received, 2.05) < SEGMENT_BYTES
+
+
+def test_a_lab_stopping_mid_response_still_closes_the_client_connection(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    flow = segment_get()
+
+    with Lab(**options) as lab:
+        lab.run(flow, origin_segment(), lab_stops_at=3)
+        received, ended = lab.received(flow), lab.ended(flow)
+
+    assert received_by(received, 3.05) < SEGMENT_BYTES
+    assert ended[-1][0] == "close"
+    assert ended[-1][1] == pytest.approx(3, abs=0.1)
