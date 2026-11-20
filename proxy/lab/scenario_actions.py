@@ -2,17 +2,21 @@
 
 ACTIONS maps a rule's action key to a factory `(value, scenario_dir) -> action`.
 An action has any of the mitmproxy hook methods `requestheaders`, `request`,
-`responseheaders`, `response` (sync or async); the Scenarios addon calls them
-only for flows that match the rule's filter. Factories raise ValueError for a
-bad value. To add an action, add a factory here.
+`responseheaders`, `response` (sync or async), or the lab's own
+`before_guards`; the Scenarios addon calls them only for flows that match the
+rule's filter. Factories raise ValueError for a bad value. To add an action,
+add a factory here.
 
 The Scenarios addon is last in the lab's addon chain, so response actions see
 the body after the lab's body rewriting (Prefixed URLs), as the client gets it.
+`before_guards` runs right after the Origin decoder instead, so the guards
+judge the request the Origin will actually get.
 """
 
 import asyncio
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from mitmproxy import flowfilter, http
 from mitmproxy.addons.maplocal import MapLocal, MapLocalSpec
@@ -102,6 +106,29 @@ class StatusOverride:
         flow.response.reason = http.status_codes.RESPONSES.get(self.status, "")
 
 
+class MapRemote:
+    """Send the request to another Origin, `<scheme>://<host>[:port]`. Path and
+    query are kept, and Host follows."""
+
+    def __init__(self, target, scenario_dir):
+        if not isinstance(target, str):
+            raise ValueError(f"map_remote must be <scheme>://<host>[:port], got {target!r}")
+        parts = urlsplit(target)
+        try:
+            parts.port  # ValueError when out of range
+        except ValueError as e:
+            raise ValueError(f"map_remote {target!r}: {e}") from e
+        if (
+            parts.scheme not in ("http", "https") or not parts.hostname or "@" in parts.netloc
+            or target != f"{parts.scheme}://{parts.netloc}"  # no path, query or fragment
+        ):
+            raise ValueError(f"map_remote must be <scheme>://<host>[:port], got {target!r}")
+        self.target = target
+
+    def before_guards(self, flow):
+        flow.request.url = f"{self.target}{flow.request.path}"
+
+
 ACTIONS = {
     "status": StatusOverride,
     "latency": Latency,
@@ -109,5 +136,6 @@ ACTIONS = {
     "header": header_replace,
     "body": body_replace,
     "map_local": map_local,
+    "map_remote": MapRemote,
     **MANIFEST_EDITS,
 }

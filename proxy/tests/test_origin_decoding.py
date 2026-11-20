@@ -50,7 +50,7 @@ def test_urls_sent_back_carry_the_proxy_base_the_client_used():
 def test_the_proxy_base_includes_a_secret_segment_when_present():
     flow = lab_flow("/s3cr3t/http://cdn.example:8443/a/seg.ts", host_header="lab.example")
 
-    forwarded = run_chain(flow, redirect_to("/a/seg2.ts"), lab_origin_allowlist=["cdn.example"])
+    forwarded = run_chain(flow, redirect_to("/a/seg2.ts"))
 
     assert forwarded.url == "http://cdn.example:8443/a/seg.ts"
     assert flow.response.headers["location"] == "http://lab.example/s3cr3t/http://cdn.example:8443/a/seg2.ts"
