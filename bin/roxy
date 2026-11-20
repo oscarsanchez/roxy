@@ -82,63 +82,27 @@ EOF
   esac
 }
 
+# status : the lab, App Profile and Scenario lines from the Lab Session (proxy/cli.py), with
+# the Proxy IP and Proxy Bases lines after the first.
 status() {
   [ $# -eq 0 ] || die "$(usage status | head -1)"
-  local options public app scenario found_in
+  local lab public
   load_env
-  require_env MITMWEB_PASSWORD
-  if ! options="$(mitmweb_get options.json 2>/dev/null)"; then
-    echo "$LAB_DOWN"
-    exit 1
-  fi
+  lab="$(proxy_cli status)" || { [ -z "$lab" ] || echo "$lab"; exit 1; }
   public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"
-  echo "lab: up (mitmweb UI http://127.0.0.1:$LAB_WEB_PORT)"
+  head -1 <<< "$lab"
   print_lan_addresses "$(lan_ip)"
   echo "Public Proxy Base: $public"
-  app="$(jq -r '.lab_app.value // ""' <<< "$options")"
-  scenario="$(jq -r '.lab_scenario.value // ""' <<< "$options")"
-  echo "App Profile:       ${app:-none}"
-  if [ -z "$scenario" ]; then
-    echo "Scenario:          none"
-  else
-    found_in="$(proxy_cli source ${app:+--app "$app"} "$scenario")" || exit 1
-    echo "Scenario:          $scenario  ($found_in)"
-  fi
+  tail -n +2 <<< "$lab"
 }
 
 scenario() {
   case "${1:-} $# ${2:-}" in
     "list 1 "|"list 3 --app") proxy_cli scenario "$@" ;;
-    "set 2 "*) set_scenario "$2" ;;
-    "clear 1 ") set_scenario "" ;;
+    "set 2 "*) proxy_cli scenario set -- "$2" ;;
+    "clear 1 ") proxy_cli scenario clear ;;
     *) die "$(usage scenario | head -1)" ;;
   esac
-}
-
-# flows --json [options] : the running lab's flows in the documented JSON shape, from
-# mitmweb's flow dump (the one flows endpoint that takes a filter expression).
-flows() {
-  local json=false filter="" dump shape_args=() status=0
-  while [ $# -gt 0 ]; do
-    case "$1" in
-      --json) json=true; shift ;;
-      --filter) [ $# -ge 2 ] || die "$(usage flows | head -1)"; filter="$2"; shift 2 ;;
-      --since|--limit) [ $# -ge 2 ] || die "$(usage flows | head -1)"; shape_args+=("$1" "$2"); shift 2 ;;
-      *) die "$(usage flows | head -1)" ;;
-    esac
-  done
-  $json || die "roxy flows prints JSON only: pass --json"
-  load_env
-  require_env MITMWEB_PASSWORD
-  dump="$(mktemp)"
-  on_exit "rm -f $(printf %q "$dump")"
-  mitmweb_get "flows/dump${filter:+?filter=$(uri_encode "$filter")}" > "$dump" 2>/dev/null || status=$?
-  case "$status" in
-    0) ;;
-    22) die "mitmweb refused to list the flows${filter:+ for the filter '$filter'}: an invalid filter expression, or a wrong MITMWEB_PASSWORD" ;;
-    *) die "$LAB_DOWN" ;;
-  esac
-  (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py ${shape_args[@]+"${shape_args[@]}"}) < "$dump"
 }
 
 # console DEVICE [options] : a Cloud Device's console through rce, a Physical Device's
@@ -177,7 +141,7 @@ case "$cmd" in
   status) status "$@" ;;
   scenario) scenario "$@" ;;
   launch) exec "$SCRIPTS/launch" "$@" ;;
-  flows) flows "$@" ;;
+  flows) proxy_cli flows "$@" ;;
   console) console "$@" ;;
   app) app "$@" ;;
 esac

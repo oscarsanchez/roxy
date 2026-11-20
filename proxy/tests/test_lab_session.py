@@ -244,6 +244,19 @@ def test_a_limit_keeps_the_last_flows_after_since(recorded_flows):
     assert times(session.flows(since=parse_since("2025-11-20T10:00:00Z"), limit=1)) == ["10:02"]
 
 
+def test_a_throttled_flow_is_timed_to_its_last_byte_at_the_client(scenarios):
+    options = scenarios("slow-segments", '[[rule]]\nname = "slow"\nfilter = "~u /video/"\nthrottle = { kbps = 400 }\n')
+    flow = lab_flow("/https://test-streams.mux.dev/video/720p/segment-1.ts")
+    response = tutils.tresp(headers=http.Headers(content_type="video/mp2t"), content=b"\x47" * 500_000)  # 500 KB
+    response.timestamp_end = flow.request.timestamp_start + 3  # the Origin took 3 s
+    with Lab(**options) as lab:
+        lab.run(flow, response)
+
+    [timed] = LabSession(FakeMitmweb([flow])).flows()
+
+    assert timed["duration_ms"] == pytest.approx(13_000, abs=100)  # then 10 s paced
+
+
 def test_reading_the_flows_never_changes_the_lab(recorded_flows):
     lab = FakeMitmweb(recorded_flows)
 

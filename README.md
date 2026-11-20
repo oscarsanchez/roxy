@@ -260,7 +260,7 @@ App Profile: `<profile>`. Routing: <its Charles hook, port 8888 | the kit, built
 
 ### Flows for agents
 
-`roxy flows --json` prints the running lab's flows, so an agent can see what the app requested without opening mitmweb. It reads mitmweb's API with `MITMWEB_PASSWORD` and is read-only: it never holds, resumes or edits a flow. With the lab down it says so and exits non-zero.
+`roxy flows --json` prints the running lab's flows, so an agent can see what the app requested without opening mitmweb. It reads mitmweb's API with `MITMWEB_PASSWORD` and is read-only: it never holds, resumes or edits a flow. With the lab down it says so and exits non-zero; a filter expression mitmweb rejects and a wrong `MITMWEB_PASSWORD` each get their own error.
 
 ```sh
 roxy flows --json                                       # every flow in mitmweb, oldest first

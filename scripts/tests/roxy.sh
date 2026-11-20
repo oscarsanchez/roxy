@@ -1,13 +1,16 @@
 #!/usr/bin/env bash
 # The roxy CLI and its install, run as commands (Seam C): a temp settings root, a temp
-# HOME, and fakes on PATH for curl (mitmweb's API, cloudflared's metrics, ECP), rce,
-# and the Mac's network commands. No lab, no device, no network, no real settings.
+# HOME, a fake mitmweb on a local port, and fakes on PATH for curl (cloudflared's metrics,
+# ECP), rce, and the Mac's network commands. No lab, no device, no network, no real settings.
+# proxy/tests/test_lab_session.py covers the Lab Session (status, Scenarios, flows) at
+# LabSession's interface; this keeps one smoke check per subcommand.
 # Usage: scripts/tests/roxy.sh   (run by scripts/check)
 set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 ROXY="$REPO/bin/roxy"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+mitmweb_pid=""
+trap '[ -z "$mitmweb_pid" ] || kill "$mitmweb_pid"; rm -rf "$TMP"' EXIT
 export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER MITMWEB_PASSWORD LAB_SECRET
 
@@ -19,42 +22,24 @@ cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"
 sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
   -e 's/^LAB_SECRET=.*/LAB_SECRET=test-secret/' "$ROXY_CONFIG_DIR/secrets.env"
 
-# Fakes on PATH. curl logs one line of shell-quoted arguments per call (and the URL alone
-# to $CURL_LOG.urls, the request body to $CURL_LOG.body) and answers for
-# mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active and the App Profile
-# FAKE_APP loaded, its flow dump in FAKE_FLOWS_DUMP, or FAKE_FLOWS_STATUS: an HTTP
-# error for it), cloudflared's metrics
-# (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
+# Fakes on PATH. curl logs the URL of each call to $CURL_LOG.urls and answers for
+# cloudflared's metrics (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs one line
+# of shell-quoted arguments per call.
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
-# command (proxy/cli.py and roxy flows run Python) goes to the real uv.
+# command (proxy/cli.py runs Python) goes to the real uv.
 # route and ipconfig give the Mac the LAN IP 192.0.2.10.
 export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log" REAL_UV="$(command -v uv)"
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/curl" <<'EOF'
 #!/usr/bin/env bash
-printf '%q ' "$@" >> "$CURL_LOG"
-echo >> "$CURL_LOG"
-url="" prev=""
+url=""
 for a in "$@"; do
   case "$a" in http://*|https://*) url="$a" ;; esac
-  if [ "$prev" = -d ]; then printf '%s' "$a" > "$CURL_LOG.body"; fi  # the last request body
-  prev="$a"
 done
 echo "$url" >> "$CURL_LOG.urls"
-down() { echo "curl: (7) Failed to connect" >&2; exit 7; }
 case "$url" in
-  */options.json) [ "${FAKE_LAB_UP:-}" = 1 ] || down
-    printf '{"lab_scenario": {"value": "%s"}, "lab_app": {"value": "%s"}}\n' \
-      "${FAKE_SCENARIO:-}" "${FAKE_APP:-}" ;;
-  */options) [ "${FAKE_LAB_UP:-}" = 1 ] || down
-    case " $* " in *" -w "*) printf '\n200' ;; esac ;;
-  */flows/dump*) [ "${FAKE_LAB_UP:-}" = 1 ] || down
-    if [ -n "${FAKE_FLOWS_STATUS:-}" ]; then
-      echo "curl: (22) The requested URL returned error: $FAKE_FLOWS_STATUS" >&2; exit 22
-    fi
-    cat "$FAKE_FLOWS_DUMP" ;;
-  */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || down
+  */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || { echo "curl: (7) Failed to connect" >&2; exit 7; }
     printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
 esac
 EOF
@@ -75,6 +60,59 @@ printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
 chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH"
 
+# The fake mitmweb, on a free local port: signed in with test-password, it answers
+# options.json from $FAKE_OPTIONS, saves each options PUT's body to $FAKE_OPTIONS.put, and
+# has no flows. roxy runs against a port nothing listens on (the lab down) unless lab_up.
+export FAKE_OPTIONS="$TMP/options.json"
+"$REAL_UV" run --quiet --project "$REPO/proxy" python - "$TMP/mitmweb.port" <<'EOF' &
+import os, sys
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+OPTIONS = os.environ["FAKE_OPTIONS"]
+
+
+class Mitmweb(BaseHTTPRequestHandler):
+    def do_GET(self):
+        self.answer(lambda: open(OPTIONS, "rb").read() if self.path == "/options.json" else b"")
+
+    def do_PUT(self):
+        def save():
+            with open(OPTIONS + ".put", "wb") as f:
+                f.write(self.rfile.read(int(self.headers["Content-Length"])))
+            return b""
+        self.answer(save)
+
+    def answer(self, body):
+        signed_in = self.headers.get("Authorization") == "Bearer test-password"
+        body = body() if signed_in else b""
+        self.send_response(200 if signed_in else 403)
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def log_message(self, *args):
+        pass
+
+
+server = HTTPServer(("127.0.0.1", 0), Mitmweb)
+with open(sys.argv[1] + ".tmp", "w") as f:
+    f.write(str(server.server_port))
+os.rename(sys.argv[1] + ".tmp", sys.argv[1])
+server.serve_forever()
+EOF
+mitmweb_pid=$!
+until [ -s "$TMP/mitmweb.port" ]; do sleep 0.1; done
+MITMWEB_PORT="$(cat "$TMP/mitmweb.port")"
+export LAB_WEB_PORT="$("$REAL_UV" run --quiet --project "$REPO/proxy" python -c \
+  'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+# lab_up APP SCENARIO COMMAND... : run COMMAND with the fake mitmweb up, App Profile APP
+# loaded and SCENARIO active ('' for none).
+lab_up() {
+  printf '{"lab_app": {"value": "%s"}, "lab_scenario": {"value": "%s"}}' "$1" "$2" > "$FAKE_OPTIONS"
+  shift 2
+  LAB_WEB_PORT="$MITMWEB_PORT" "$@"
+}
+
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
 for args in "" start status scenario launch flows console app; do
   # shellcheck disable=SC2086
@@ -92,18 +130,20 @@ if out="$("$ROXY" status 2>&1)"; then fail "status exited 0 with the lab down: $
 case "$out" in *"lab: down"*) ;; *) fail "status with the lab down said: $out" ;; esac
 echo "ok: status says when the lab is down"
 
-# status: the lab up reports the Proxy IP, the Proxy Bases and the active Scenario.
-out="$(FAKE_LAB_UP=1 FAKE_SCENARIO=json-503 FAKE_TUNNEL_HOST=tunnel.example "$ROXY" status)" \
+# status: the lab up (signed in) reports the Proxy IP, the Proxy Bases and the active Scenario.
+out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503 "$ROXY" status)" \
   || fail "status with the lab up exited non-zero: $out"
-for want in "lab: up" "Proxy IP:          192.0.2.10" \
-  "LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888" \
-  "Public Proxy Base: https://tunnel.example/test-secret" "App Profile:       none" \
-  "Scenario:          json-503  (lab)"; do
-  case "$out" in *"$want"*) ;; *) fail "status with the lab up lacks '$want':
-$out" ;; esac
-done
-grep -q 'Authorization:\\ Bearer\\ test-password' "$CURL_LOG" || fail "status did not sign in to mitmweb"
-out="$(FAKE_LAB_UP=1 "$ROXY" status)" || fail "status without a tunnel or Scenario exited non-zero: $out"
+want="lab: up (mitmweb UI http://127.0.0.1:$MITMWEB_PORT)
+Proxy IP:          192.0.2.10  (for an app's debug proxy setting)
+LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888  (each takes the / and /; forms)
+Public Proxy Base: https://tunnel.example/test-secret
+App Profile:       none
+Scenario:          json-503  (lab)"
+[ "$out" = "$want" ] || fail "status with the lab up said:
+$out
+not:
+$want"
+out="$(lab_up "" "" "$ROXY" status)" || fail "status without a tunnel or Scenario exited non-zero: $out"
 for want in "Public Proxy Base: none" "Scenario:          none"; do
   case "$out" in *"$want"*) ;; *) fail "status without a tunnel or Scenario lacks '$want':
 $out" ;; esac
@@ -118,10 +158,11 @@ case "$out" in *"App Profile: none"*) ;; *) fail "scenario list without a profil
 echo "ok: scenario list shows the lab's Scenarios"
 
 # scenario set and clear switch the running lab's active Scenario through mitmweb's options API.
-scenario_sent() { jq -c . "$CURL_LOG.body"; }
-out="$(FAKE_LAB_UP=1 "$ROXY" scenario set json-503)" || fail "scenario set: $out"
+scenario_sent() { jq -c . "$FAKE_OPTIONS.put"; }
+out="$(lab_up "" "" "$ROXY" scenario set json-503)" || fail "scenario set: $out"
+[ "$out" = scenario=json-503 ] || fail "scenario set said: $out"
 [ "$(scenario_sent)" = '{"lab_scenario":"json-503"}' ] || fail "scenario set sent $(scenario_sent)"
-out="$(FAKE_LAB_UP=1 "$ROXY" scenario clear)" || fail "scenario clear: $out"
+out="$(lab_up "" json-503 "$ROXY" scenario clear)" || fail "scenario clear: $out"
 [ "$(scenario_sent)" = '{"lab_scenario":""}' ] || fail "scenario clear sent $(scenario_sent)"
 if err="$("$ROXY" scenario set json-503 2>&1)"; then fail "scenario set with the lab down exited 0"; fi
 case "$err" in *"lab: down"*"roxy start"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
@@ -216,72 +257,23 @@ rm "$scenarios_a/json-503.toml"
 echo "ok: scenario list shows each Scenario once by source, a clash as refused, and the clash fails the start"
 
 # status names the running lab's App Profile, and where its active Scenario came from.
-out="$(FAKE_LAB_UP=1 FAKE_APP=app-a FAKE_SCENARIO=empty-catalog "$ROXY" status)" || fail "status with app-a: $out"
+out="$(lab_up app-a empty-catalog "$ROXY" status)" || fail "status with app-a: $out"
 for want in "App Profile:       app-a" "Scenario:          empty-catalog  (App Profile app-a)"; do
   case "$out" in *"$want"*) ;; *) fail "status with app-a lacks '$want':
 $out" ;; esac
 done
 echo "ok: status names the App Profile and the active Scenario's source"
 
-# flows --json with the lab down: a clear error and a non-zero exit.
+# flows --json: the lab down says so; the lab up takes every option and prints a JSON array
+# (here empty: the fake mitmweb has no flows). test_lab_session.py covers the flows themselves.
 if err="$("$ROXY" flows --json 2>&1)"; then fail "flows --json exited 0 with the lab down: $err"; fi
 case "$err" in *"lab: down"*"roxy start"*) ;; *) fail "flows --json with the lab down said: $err" ;; esac
-echo "ok: flows --json says when the lab is down"
-
-# flows --json with the lab up: mitmweb's flow dump, recorded by the full lab chain
-# (proxy/tests/flows_dump.py describes its three flows), in the README's shape.
-export FAKE_FLOWS_DUMP="$TMP/flows.mitm"
-(cd "$REPO/proxy" && PYTHONPATH=. uv run --quiet python tests/flows_dump.py "$FAKE_FLOWS_DUMP")
-flows_json() { FAKE_LAB_UP=1 "$ROXY" flows --json "$@"; }
-out="$(flows_json)" || fail "flows --json with the lab up: $out"
-[ "$(jq 'type == "array" and length == 3 and all(.id | type == "string")' <<< "$out")" = true ] \
-  || fail "flows --json is not an array of 3 flows with ids: $out"
-want='{"time":"2025-11-20T10:00:00.000Z","device":"Living Room","method":"POST","url":"https://httpbin.org/post","status":200,"request_bytes":8,"response_bytes":12,"duration_ms":250,"refusal":null,"scenario_rules":[]}'
-[ "$(jq -c '.[0] | del(.id)' <<< "$out")" = "$want" ] || fail "flows --json gave the first flow as
-$(jq -c '.[0]' <<< "$out")
-not
-$want"
-echo "ok: flows --json prints each flow in the documented shape"
-
-# A flow the lab refused carries its refusal reason; a flow a Scenario touched names the rule.
-[ "$(jq -c '.[1] | [.device, .status, .refusal]' <<< "$out")" = '["Bedroom",403,"origin-address"]' ] \
-  || fail "flows --json gave the refused flow as $(jq -c '.[1]' <<< "$out")"
-[ "$(jq -c '.[2] | [.status, .refusal, .scenario_rules]' <<< "$out")" = '[503,null,["httpbin json fails"]]' ] \
-  || fail "flows --json gave the flow json-503 touched as $(jq -c '.[2]' <<< "$out")"
-echo "ok: flows --json names a flow's refusal reason and the Scenario rules applied"
-
-# --since takes a roxy launch run id (launch time in seconds, then random digits) or a time.
-times() { jq -c 'map(.time[11:16])' <<< "$1"; }
-out="$(flows_json --since 176363286012345)" || fail "flows --json --since RUN: $out"
-[ "$(times "$out")" = '["10:01","10:02"]' ] || fail "flows --json --since a 10:01 run gave $(times "$out")"
-out="$(flows_json --since 2025-11-20T10:02:00Z)" || fail "flows --json --since TIME: $out"
-[ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:02 gave $(times "$out")"
-if err="$(flows_json --since yesterday 2>&1)"; then fail "flows --json took --since yesterday"; fi
-case "$err" in *"--since"*) ;; *) fail "flows --json --since yesterday said: $err" ;; esac
-echo "ok: flows --json --since takes a run id or a time"
-
-# --limit N keeps the last N flows, after --since.
-out="$(flows_json --limit 2)" || fail "flows --json --limit 2: $out"
-[ "$(times "$out")" = '["10:01","10:02"]' ] || fail "flows --json --limit 2 gave $(times "$out")"
-out="$(flows_json --since 2025-11-20T10:00:00Z --limit 1)" || fail "flows --json --since --limit: $out"
-[ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:00 --limit 1 gave $(times "$out")"
-flows_json --limit 0 >/dev/null 2>&1 && fail "flows --json took --limit 0"
-echo "ok: flows --json --limit keeps the last N flows"
-
-# --filter: mitmweb's dump applies the mitmproxy filter expression; one it rejects is named.
-: > "$CURL_LOG.urls"
-flows_json --filter '~d httpbin.org & ~u /json' >/dev/null || fail "flows --json --filter exited non-zero"
-grep -qxF 'http://127.0.0.1:8081/flows/dump?filter=~d%20httpbin.org%20%26%20~u%20%2Fjson' "$CURL_LOG.urls" \
-  || fail "flows --json --filter asked mitmweb for: $(cat "$CURL_LOG.urls")"
-if err="$(FAKE_FLOWS_STATUS=400 flows_json --filter '~bad' 2>&1)"; then fail "flows --json took a filter mitmweb rejects"; fi
-case "$err" in *"filter"*"~bad"*) ;; *) fail "flows --json with a filter mitmweb rejects said: $err" ;; esac
-echo "ok: flows --json --filter passes the expression to mitmweb"
-
-# Read-only: every call roxy flows made was a plain GET, which never holds or edits a flow.
-: > "$CURL_LOG"
-flows_json --filter '~u /json' --since 1763632800 --limit 1 >/dev/null || fail "flows --json with every option"
-grep -E -- '(^| )(-X|--request|-d|--data[a-z-]*) ' "$CURL_LOG" && fail "flows --json sent more than a GET"
-echo "ok: flows --json only reads"
+out="$(lab_up "" "" "$ROXY" flows --json --filter '~u /json' --since 176363286012345 --limit 1)" \
+  || fail "flows --json with every option: $out"
+[ "$out" = "[]" ] || fail "flows --json with no flows printed: $out"
+if err="$(lab_up "" "" "$ROXY" flows --json --since yesterday 2>&1)"; then fail "flows --json took --since yesterday"; fi
+case "$err" in *"--since"*"yesterday"*) ;; *) fail "flows --json --since yesterday said: $err" ;; esac
+echo "ok: flows --json says when the lab is down, and takes its options"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

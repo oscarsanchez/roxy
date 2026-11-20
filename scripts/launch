@@ -32,7 +32,7 @@ shift
 for param in "$@"; do
   case "$param" in ?*=*) ;; *) die "launch params are key=value, not '$param'. $usage" ;; esac
 done
-run_id="$(new_run_id)"
+run_id="$(proxy_cli run-id)"
 params=("$@" "run=$run_id")
 lab_lock devices  # the scenario is lab-wide, so one lock covers every Target Device
 
@@ -64,7 +64,7 @@ else
   die "device '$device' has no launch route: set ip (Physical Device) or rce_device_name (Cloud Device) in $DEVICES_FILE"
 fi
 
-if $scenario_given; then set_scenario "$scenario"; fi
+if $scenario_given; then proxy_cli scenario set -- "$scenario"; fi
 
 exit_app || true  # fresh process for every run
 launch_dev || die "ECP launch on $device failed"

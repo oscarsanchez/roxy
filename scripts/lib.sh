@@ -14,8 +14,7 @@ CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-p
 
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
-LAB_WEB_PORT=8081  # mitmweb UI, localhost only
-LAB_DOWN="lab: down (no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT; roxy start)"  # when no lab answers
+LAB_WEB_PORT="${LAB_WEB_PORT:-8081}"  # mitmweb UI, localhost only; LAB_WEB_PORT overrides it (tests)
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
@@ -134,9 +133,14 @@ require_lab_settings() {
   [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }
 
-# proxy_cli ARG... : App Profiles and their Scenarios (proxy/cli.py describes the commands),
-# run in the caller's folder, which resolving and app new read. Refusals print error: ... and exit 1.
-proxy_cli() { uv run --quiet --project "$REPO_ROOT/proxy" python "$REPO_ROOT/proxy/cli.py" "$@"; }
+# proxy_cli ARG... : App Profiles, their Scenarios and the running Lab Session (proxy/cli.py
+# describes the commands), run in the caller's folder, which resolving and app new read. It
+# loads secrets.env first, when there is one, for MITMWEB_PASSWORD, and passes LAB_WEB_PORT.
+# Refusals print error: ... and exit 1.
+proxy_cli() {
+  [ ! -f "$SECRETS_FILE" ] || load_env
+  LAB_WEB_PORT="$LAB_WEB_PORT" uv run --quiet --project "$REPO_ROOT/proxy" python "$REPO_ROOT/proxy/cli.py" "$@"
+}
 
 # The Mac's address on the default-route interface.
 lan_ip() {
@@ -174,37 +178,6 @@ public_proxy_base() {
   require_env LAB_SECRET
   echo "https://$host/$LAB_SECRET"
 }
-
-# mitmweb_curl PATH [CURL-ARG...] : call PATH on the running lab's mitmweb API, signed in;
-# fails when no lab answers. Needs load_env.
-mitmweb_curl() {
-  local path="$1"
-  shift
-  curl -sS -H "Authorization: Bearer $MITMWEB_PASSWORD" "$@" "http://127.0.0.1:$LAB_WEB_PORT/$path"
-}
-
-# mitmweb_get PATH : GET PATH from the running lab's mitmweb API; also fails on an HTTP error.
-mitmweb_get() { mitmweb_curl "$1" -f; }
-
-# set_scenario NAME : make NAME the running lab's active Scenario through mitmweb's API;
-# '' clears it. Prints scenario=NAME (or none).
-set_scenario() {
-  local answer
-  load_env
-  require_env MITMWEB_PASSWORD
-  # Non-GET mitmweb API calls need a matching XSRF cookie and header (any value).
-  answer="$(mitmweb_curl options -X PUT \
-    -H "Cookie: _mitmproxy_xsrf=lab" -H "X-XSRFToken: lab" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n --arg s "$1" '{lab_scenario: $s}')" \
-    -w '\n%{http_code}')" || die "$LAB_DOWN"
-  [ "${answer##*$'\n'}" = 200 ] || die "mitmweb refused scenario '$1': ${answer%$'\n'*}"
-  echo "scenario=${1:-none}"
-}
-
-# new_run_id : a fresh roxy launch run id: the launch time in Unix seconds (10 digits), then
-# random digits. proxy/flows.py reads the launch time back (RUN_ID_TIME_DIGITS, --since RUN).
-new_run_id() { echo "$(date +%s)$RANDOM"; }
 
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {
