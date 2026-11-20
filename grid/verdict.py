@@ -96,9 +96,12 @@ def result_line(console: str, case: str, run_id: str) -> str | None:
 
 def device_flows(flows: list[dict], device: str, start: float, end: float) -> list[dict]:
     """The flows (mitmweb /flows.json entries) the Target Device named `device` started
-    in [start, end): the lab's device label (the flow comment) names it, natively and
-    under Compose alike."""
-    return [f for f in flows if start <= f["request"]["timestamp_start"] < end and f.get("comment") == device]
+    in [start, end): the lab's device label names it, natively and under Compose alike. The
+    label is the flow comment, up to the ` | ` before the Scenario rules that acted on it."""
+    return [
+        f for f in flows
+        if start <= f["request"]["timestamp_start"] < end and (f.get("comment") or "").partition(" | ")[0] == device
+    ]
 
 
 def fields(result: str) -> dict[str, str]:

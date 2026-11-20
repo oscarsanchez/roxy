@@ -189,6 +189,15 @@ def test_a_cloud_devices_flows_are_the_ones_labelled_with_its_name_whatever_thei
     assert [f["request"]["timestamp_start"] for f in device_flows(flows, "Cloud Device", 100.0, 110.0)] == [105.0, 106.0]
 
 
+def test_a_flow_a_scenario_acted_on_is_still_its_devices():
+    flows = [
+        lab_flow("Living Room | json-503/httpbin json fails", 105.0),  # the lab adds the rules after the label
+        lab_flow("Living Room 2 | json-503/httpbin json fails", 106.0),
+        lab_flow("json-503/httpbin json fails", 107.0),  # unlabelled
+    ]
+    assert [f["request"]["timestamp_start"] for f in device_flows(flows, "Living Room", 100.0, 110.0)] == [105.0]
+
+
 def test_the_verdict_is_a_row_for_the_evaluation_grid():
     v = judge(JSON_CELL, BASELINE, MANIPULATED, PROXY_BASE)
     assert row(JSON_CELL, v) == (
