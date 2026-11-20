@@ -95,7 +95,8 @@ class Scenarios:
             self.path, self.mtime, self.rules = None, None, []
             return
         try:
-            path = find_scenario(name, self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
+            profile = self.app_profile.profile
+            path = find_scenario(name, profile and profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
             mtime, rules = path.stat().st_mtime_ns, load_scenario(path)
         except (ValueError, OSError) as e:
             raise exceptions.OptionsError(f"scenario {name!r}: {e}") from e

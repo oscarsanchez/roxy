@@ -51,7 +51,8 @@ class OriginDecoder:
 
     def _fallback_origin_url(self, flow):
         """The Origin URL the loaded App Profile's fallback Origin gives this bare path, or None."""
-        fallback = self.app_profile.fallback_origin
+        profile = self.app_profile.profile
+        fallback = profile and profile.fallback_origin
         return fallback and fallback.origin_url(flow.request.path)
 
     @staticmethod

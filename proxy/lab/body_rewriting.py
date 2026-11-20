@@ -132,7 +132,9 @@ class BodyRewriter:
 
     def configure(self, updated):
         if "lab_app" in updated or any(body_format.option in updated for body_format in FORMATS):
-            formats = [f for f in FORMATS if not f.opt_in or self.app_profile.rewrite_text]
+            profile = self.app_profile.profile
+            opted_in = profile is not None and profile.rewrite_text
+            formats = [f for f in FORMATS if not f.opt_in or opted_in]
             self.by_content_type, self.by_extension = _format_tables(formats)
 
     def body_format_for(self, content_type, url):
