@@ -8,6 +8,9 @@ export ROXY_CONFIG_DIR="${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rox
 SECRETS_FILE="$ROXY_CONFIG_DIR/secrets.env"
 DEVICES_FILE="$ROXY_CONFIG_DIR/devices.json"
 SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
+# App Profiles: APPS_DIR/<name>/profile.json ({"repo", "origin_allowlist"}) and
+# APPS_DIR/<name>/scenarios/ (its Scenarios and their mocks). proxy/lab/app_profile.py loads one.
+APPS_DIR="$ROXY_CONFIG_DIR/apps"
 # Saved sessions: the user data directory, in the folder for sessions without an App Profile.
 CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/no-profile"
 

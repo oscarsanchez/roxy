@@ -17,6 +17,7 @@ The roxy lab from any terminal. roxy <subcommand> --help describes one.
   scenario   list the Scenarios, or set or clear the active one
   launch     launch the dev channel on a Target Device, with its Proxy Base
   console    open a Target Device's debug console
+  app        create or list App Profiles
 EOF
     ;;
     start) cat <<'EOF'
@@ -55,6 +56,14 @@ usage: roxy console <device> [--launch CASE [--scenario NAME]] [--seconds N]
 A Physical Device's debug console, recorded to out/console/ for N seconds (default 60);
 --launch launches CASE once connected. A Cloud Device's console streams through
 rce console while its Run is up (no options).
+EOF
+    ;;
+    app) cat <<'EOF'
+usage: roxy app new NAME | list
+An App Profile keeps one Product App's Scenarios, their mocks and its Public Endpoint
+allowlist in your roxy settings, outside every repo.
+  new NAME  create the App Profile NAME for the git repo you are in
+  list      the App Profiles and their repos
 EOF
     ;;
   esac
@@ -99,12 +108,40 @@ console() {
   exec "$SCRIPTS/console" "$@"
 }
 
+# app_new NAME : an empty App Profile for the git repo of the current folder.
+app_new() {
+  local name="$1" repo dir
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "an App Profile name is letters, digits, '.', '_' and '-': '$name'"
+  dir="$APPS_DIR/$name"
+  [ ! -e "$dir" ] || die "the App Profile '$name' already exists, in $dir"
+  repo="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run roxy app new inside the app's git repo"
+  repo="$(cd "$repo" && pwd -P)"
+  mkdir -p "$dir/scenarios"
+  jq -n --arg repo "$repo" '{repo: $repo, origin_allowlist: []}' > "$dir/profile.json"
+  echo "App Profile '$name' for $repo"
+  echo "  Scenarios, with their mocks next to them: $dir/scenarios/"
+  echo "  Public Endpoint Origins: origin_allowlist in $dir/profile.json"
+}
+
+app() {
+  local f
+  case "${1:-} $#" in
+    "new 2") app_new "$2" ;;
+    "list 1")
+      for f in "$APPS_DIR"/*/profile.json; do
+        [ -f "$f" ] || { echo "no App Profiles (roxy app new NAME, in an app's repo)"; break; }
+        printf '%-20s %s\n' "$(basename "$(dirname "$f")")" "$(jq -r .repo "$f")"
+      done ;;
+    *) die "$(usage app | head -1)" ;;
+  esac
+}
+
 cmd="${1:-}"
 [ -n "$cmd" ] || { usage roxy >&2; exit 2; }
 shift
 case "$cmd" in
   -h|--help) usage roxy; exit 0 ;;
-  start|status|scenario|launch|console) ;;
+  start|status|scenario|launch|console|app) ;;
   *) die "unknown subcommand '$cmd' (roxy --help lists them)" ;;
 esac
 case "${1:-}" in -h|--help) usage "$cmd"; exit 0 ;; esac
@@ -115,4 +152,5 @@ case "$cmd" in
   scenario) scenario "$@" ;;
   launch) exec "$SCRIPTS/launch" "$@" ;;
   console) console "$@" ;;
+  app) app "$@" ;;
 esac

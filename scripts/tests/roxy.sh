@@ -58,7 +58,7 @@ chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH"
 
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
-for args in "" start status scenario launch console; do
+for args in "" start status scenario launch console app; do
   # shellcheck disable=SC2086
   out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
   case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
@@ -145,6 +145,31 @@ echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
 "$ROXY" console "Cloud Device" >/dev/null || fail "console on a Cloud Device exited non-zero"
 [ "$(tail -1 "$RCE_LOG")" = "$(printf '%q ' console player)" ] || fail "console on a Cloud Device ran: $(cat "$RCE_LOG")"
 echo "ok: console on a Cloud Device goes through rce console"
+
+# App Profiles, in two temp app repos. A git hook (scripts/check from the pre-commit hook)
+# exports the checkout's GIT_DIR, which would point their git commands at the roxy repo.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
+repos="$TMP/repos"
+for app in app-a app-b; do git init -q "$repos/$app"; mkdir -p "$repos/$app/src/nested"; done
+root_a="$(cd "$repos/app-a" && pwd -P)" root_b="$(cd "$repos/app-b" && pwd -P)"
+listed_repo() { "$ROXY" app list | awk -v n="$1" '$1 == n {print $2}'; }
+
+# app new, run in a subfolder of an app's repo, records the repo's git root; app list shows
+# every profile with its repo.
+out="$(cd "$repos/app-a/src/nested" && "$ROXY" app new app-a)" || fail "app new app-a: $out"
+out="$(cd "$repos/app-b" && "$ROXY" app new app-b)" || fail "app new app-b: $out"
+[ "$(listed_repo app-a)" = "$root_a" ] || fail "app list shows app-a at '$(listed_repo app-a)', not its git root $root_a"
+[ "$(listed_repo app-b)" = "$root_b" ] || fail "app list shows app-b at '$(listed_repo app-b)', not $root_b"
+echo "ok: app new records the repo's git root, and app list shows each profile"
+
+# app new refuses a name that exists, keeping that profile; and a folder outside any repo.
+if err="$(cd "$repos/app-b" && "$ROXY" app new app-a 2>&1)"; then fail "app new took the existing name app-a"; fi
+case "$err" in *"app-a"*"exists"*) ;; *) fail "app new of an existing name said: $err" ;; esac
+[ "$(listed_repo app-a)" = "$root_a" ] || fail "a refused app new changed app-a's repo to $(listed_repo app-a)"
+if err="$(cd "$TMP" && "$ROXY" app new loose 2>&1)"; then fail "app new outside a git repo exited 0"; fi
+case "$err" in *"git repo"*) ;; *) fail "app new outside a git repo said: $err" ;; esac
+"$ROXY" app new ../escape >/dev/null 2>&1 && fail "app new took the name ../escape"
+echo "ok: app new refuses an existing name, a folder outside a repo, and a name that is a path"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
