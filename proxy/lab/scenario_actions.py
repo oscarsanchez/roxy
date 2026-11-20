@@ -13,7 +13,6 @@ the body after the lab's body rewriting (Prefixed URLs), as the client gets it.
 judge the request the Origin will actually get.
 """
 
-import asyncio
 import re
 from pathlib import Path
 from urllib.parse import urlsplit
@@ -23,6 +22,7 @@ from mitmproxy.addons.maplocal import MapLocal, MapLocalSpec
 from mitmproxy.addons.modifybody import ModifyBody
 from mitmproxy.addons.modifyheaders import ModifyHeaders, ModifySpec
 
+from lab import clock
 from lab.manifest_edits import ACTIONS as MANIFEST_EDITS
 from lab.throttle import Throttle
 
@@ -81,7 +81,7 @@ class Latency:
         self.seconds = seconds
 
     async def request(self, flow):
-        await asyncio.sleep(self.seconds)
+        await clock.sleep(self.seconds)
 
 
 class Drop:

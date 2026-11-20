@@ -1,5 +1,4 @@
 import json
-import time
 from pathlib import Path
 
 import pytest
@@ -53,10 +52,11 @@ latency = 0.3
 ''')
     flow = json_get()
 
-    started = time.monotonic()
-    forwarded = run_chain(flow, origin_json(), **options)
+    with Lab(**options) as lab:
+        forwarded = lab.run(flow, origin_json())
+        waited = lab.reached_origin_after(flow)
 
-    assert time.monotonic() - started >= 0.3
+    assert waited == pytest.approx(0.3)
     assert forwarded.url == "https://httpbin.org/json"
     assert flow.response.status_code == 200
 

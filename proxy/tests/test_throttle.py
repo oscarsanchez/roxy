@@ -1,8 +1,6 @@
 """The `throttle` Scenario action: a matching flow's response reaches the client
 at no more than the rule's bandwidth. Time is the lab's test clock (tests/chain.py):
-pacing never really sleeps here."""
-
-import time
+pacing and latency never really sleep here."""
 
 import pytest
 from mitmproxy import http
@@ -75,12 +73,11 @@ throttle = { kbps = 800 }
     flow = segment_get()
 
     with Lab(**options) as lab:
-        started = time.monotonic()
         lab.run(flow, origin_segment())
-        waited = time.monotonic() - started
+        waited = lab.reached_origin_after(flow)
         received = lab.received(flow)
 
-    assert waited >= 0.2
+    assert waited == pytest.approx(0.2)
     assert received[-1][0] == pytest.approx(5, abs=0.1)  # 500 KB at 100 KB a second
 
 

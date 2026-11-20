@@ -19,7 +19,7 @@ from mitmproxy.proxy.mode_specs import ProxyMode
 from mitmproxy.proxy.server import ConnectionIO
 from mitmproxy.test import taddons, tflow, tutils
 
-from lab import addon_chain, throttle
+from lab import addon_chain, clock
 
 LAN_PROXY_BASE_HOST = "192.0.2.10:8080"
 LAN_PROXY_BASE = f"http://{LAN_PROXY_BASE_HOST}"
@@ -103,7 +103,8 @@ def run_chain(flow, origin_response, **options):
 
 
 class TestClock:
-    """The lab's clock in tests: sleeping moves time on at once, so pacing never really waits."""
+    """The lab's clock in tests (lab/clock.py): sleeping moves time on at once, so latency
+    and pacing never really wait, and share one timeline."""
 
     def __init__(self):
         self.time = 0.0
@@ -161,6 +162,7 @@ class Lab:
         self.clock = TestClock()
         self._proxyserver = Proxyserver()
         self._sent = {}  # flow id -> (when its response started, its ClientWriter)
+        self._reached_origin = {}  # flow id -> seconds from run to the Origin getting the request
         # owns its own event loop
         self._context = taddons.context(
             *addon_chain(), serverplayback.ServerPlayback(), save.Save(), self._proxyserver
@@ -200,18 +202,23 @@ class Lab:
         hangs up. `lab_stops_at`: seconds after the response starts at which mitmweb
         stops, cancelling the tasks still sending it, as asyncio does on the way out.
         """
-        real_clock, throttle.clock = throttle.clock, self.clock
+        real_clock, clock.current = clock.current, self.clock
         try:
             run = self._run(flow, origin_response, client_hangs_up_at, lab_stops_at)
             return self._context.master.event_loop.run_until_complete(run)
         finally:
-            throttle.clock = real_clock
+            clock.current = real_clock
 
     def received(self, flow):
         """What reached the client of a flow `run` answered: (seconds since its response
         started, byte count) for each write, the response head included."""
         started, client = self._sent[flow.id]
         return [(when - started, size) for when, size in client.writes]
+
+    def reached_origin_after(self, flow):
+        """Seconds on the lab's clock between `run` starting a flow and the Origin getting
+        its request (a forwarded flow only)."""
+        return self._reached_origin[flow.id]
 
     def ended(self, flow):
         """How mitmproxy's end of the connection reached the client of a flow `run`
@@ -271,6 +278,7 @@ class Lab:
             raise AssertionError("the lab never closed the client connection") from None
 
     async def _exchange(self, flow, origin_response):
+        arrived = self.clock.now()
         manager = self._context.master.addons
         for hook in (hooks.HttpRequestHeadersHook(flow), hooks.HttpRequestHook(flow)):
             for addon in manager.chain:
@@ -278,6 +286,7 @@ class Lab:
         forwarded = None
         if flow.response is None and not flow.error:
             forwarded = flow.request.copy()
+            self._reached_origin[flow.id] = self.clock.now() - arrived
             if forwarded.http_version == "HTTP/2.0":  # checked for every test, whatever it asserts
                 sent = [h for h in HTTP2_FORBIDDEN_HEADERS if h in forwarded.headers]
                 assert not sent, f"the lab forwarded HTTP/2 with connection-specific headers: {sent}"

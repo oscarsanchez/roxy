@@ -19,19 +19,12 @@ sent unthrottled, and the event log says so.
 import asyncio
 import logging
 import math
-import time
 
 from mitmproxy import ctx
 
+from lab import clock
+
 TICK = 0.1  # seconds of bandwidth sent at a time
-
-
-class Clock:
-    now = staticmethod(time.monotonic)
-    sleep = staticmethod(asyncio.sleep)
-
-
-clock = Clock()  # every pause goes through it; tests/chain.py swaps in a test clock
 
 
 def paced_seconds(flow):
