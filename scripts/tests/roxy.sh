@@ -124,7 +124,7 @@ out="$(FAKE_LAB_UP=1 "$ROXY" scenario set json-503)" || fail "scenario set: $out
 out="$(FAKE_LAB_UP=1 "$ROXY" scenario clear)" || fail "scenario clear: $out"
 [ "$(scenario_sent)" = '{"lab_scenario":""}' ] || fail "scenario clear sent $(scenario_sent)"
 if err="$("$ROXY" scenario set json-503 2>&1)"; then fail "scenario set with the lab down exited 0"; fi
-case "$err" in *"could not reach mitmweb"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
+case "$err" in *"lab: down"*"roxy start"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
 echo "ok: scenario set and clear switch the running lab's Scenario"
 
 # launch on a Physical Device: ECP on the LAN with the LAN Proxy Base and the user's params.
@@ -247,7 +247,7 @@ echo "ok: status names the App Profile and the active Scenario's source"
 
 # flows --json with the lab down: a clear error and a non-zero exit.
 if err="$("$ROXY" flows --json 2>&1)"; then fail "flows --json exited 0 with the lab down: $err"; fi
-case "$err" in *"lab is down"*"roxy start"*) ;; *) fail "flows --json with the lab down said: $err" ;; esac
+case "$err" in *"lab: down"*"roxy start"*) ;; *) fail "flows --json with the lab down said: $err" ;; esac
 echo "ok: flows --json says when the lab is down"
 
 # flows --json with the lab up: mitmweb's flow dump, recorded by the full lab chain

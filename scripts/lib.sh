@@ -19,6 +19,7 @@ CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-p
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
 LAB_WEB_PORT=8081  # mitmweb UI, localhost only
+LAB_DOWN="lab: down (no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT; roxy start)"  # when no lab answers
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
@@ -174,13 +175,18 @@ lan_ip() {
   echo "$ip"
 }
 
-lan_proxy_base() { echo "http://$(lan_ip):$LAB_PORT"; }
+# lan_proxy_base [IP [PORT]] : the LAN Proxy Base on IP (default: the Mac's LAN IP) and PORT
+# (default: the LAN listener's).
+lan_proxy_base() {
+  local ip="${1-$(lan_ip)}"
+  echo "http://$ip:${2:-$LAB_PORT}"
+}
 
 # print_lan_addresses IP : the Proxy IP and LAN Proxy Bases lines, as start-lab and
 # roxy status print them.
 print_lan_addresses() {
   echo "Proxy IP:          $1  (for an app's debug proxy setting)"
-  echo "LAN Proxy Bases:   http://$1:$LAB_PORT  http://$1:$LAB_CHARLES_PORT  (each takes the / and /; forms)"
+  echo "LAN Proxy Bases:   $(lan_proxy_base "$1")  $(lan_proxy_base "$1" "$LAB_CHARLES_PORT")  (each takes the / and /; forms)"
 }
 
 # tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.
@@ -197,11 +203,16 @@ public_proxy_base() {
   echo "https://$host/$LAB_SECRET"
 }
 
-# mitmweb_get PATH : GET PATH from the running lab's mitmweb API; fails when no lab
-# answers. Needs load_env.
-mitmweb_get() {
-  curl -fsS -H "Authorization: Bearer $MITMWEB_PASSWORD" "http://127.0.0.1:$LAB_WEB_PORT/$1"
+# mitmweb_curl PATH [CURL-ARG...] : call PATH on the running lab's mitmweb API, signed in;
+# fails when no lab answers. Needs load_env.
+mitmweb_curl() {
+  local path="$1"
+  shift
+  curl -sS -H "Authorization: Bearer $MITMWEB_PASSWORD" "$@" "http://127.0.0.1:$LAB_WEB_PORT/$path"
 }
+
+# mitmweb_get PATH : GET PATH from the running lab's mitmweb API; also fails on an HTTP error.
+mitmweb_get() { mitmweb_curl "$1" -f; }
 
 # set_scenario NAME : make NAME the running lab's active Scenario through mitmweb's API;
 # '' clears it. Prints scenario=NAME (or none).
@@ -210,12 +221,11 @@ set_scenario() {
   load_env
   require_env MITMWEB_PASSWORD
   # Non-GET mitmweb API calls need a matching XSRF cookie and header (any value).
-  answer="$(curl -sS -X PUT "http://127.0.0.1:$LAB_WEB_PORT/options" \
-    -H "Authorization: Bearer $MITMWEB_PASSWORD" \
+  answer="$(mitmweb_curl options -X PUT \
     -H "Cookie: _mitmproxy_xsrf=lab" -H "X-XSRFToken: lab" \
     -H "Content-Type: application/json" \
     -d "$(jq -n --arg s "$1" '{lab_scenario: $s}')" \
-    -w '\n%{http_code}')" || die "could not reach mitmweb on port $LAB_WEB_PORT (is the lab running? roxy start)"
+    -w '\n%{http_code}')" || die "$LAB_DOWN"
   [ "${answer##*$'\n'}" = 200 ] || die "mitmweb refused scenario '$1': ${answer%$'\n'*}"
   echo "scenario=${1:-none}"
 }
@@ -226,8 +236,8 @@ new_run_id() { echo "$(date +%s)$RANDOM"; }
 
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {
-  command -v jq >/dev/null || die "jq is required (brew install jq)"
-  [ -f "$DEVICES_FILE" ] || missing_setting_file "$DEVICES_FILE"
+  require_jq
+  require_setting_file "$DEVICES_FILE"
   jq -e --arg n "$1" 'has($n)' "$DEVICES_FILE" >/dev/null \
     || die "unknown device '$1'. Known: $(jq -r 'keys | join(", ")' "$DEVICES_FILE")"
   jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // empty' "$DEVICES_FILE"
@@ -236,8 +246,8 @@ device_field() {
 # grid_device SETUP : the Target Device that scripts/grid fills SETUP cells on (physical,
 # cloud or ca-routing: grid/verdict.py setup), named in settings.json grid_devices.
 grid_device() {
-  command -v jq >/dev/null || die "jq is required (brew install jq)"
-  [ -f "$SETTINGS_FILE" ] || missing_setting_file "$SETTINGS_FILE"
+  require_jq
+  require_setting_file "$SETTINGS_FILE"
   jq -er --arg s "$1" '.grid_devices[$s] // empty' "$SETTINGS_FILE" \
     || die "missing setting grid_devices.$1 (a device name from devices.json) in $SETTINGS_FILE"
 }

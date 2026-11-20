@@ -88,7 +88,7 @@ status() {
   load_env
   require_env MITMWEB_PASSWORD
   if ! options="$(mitmweb_get options.json 2>/dev/null)"; then
-    echo "lab: down (no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT; roxy start)"
+    echo "$LAB_DOWN"
     exit 1
   fi
   public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"
@@ -150,7 +150,7 @@ flows() {
   case "$status" in
     0) ;;
     22) die "mitmweb refused to list the flows${filter:+ for the filter '$filter'}: an invalid filter expression, or a wrong MITMWEB_PASSWORD" ;;
-    *) die "the lab is down: no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT (roxy start)" ;;
+    *) die "$LAB_DOWN" ;;
   esac
   (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py ${shape_args[@]+"${shape_args[@]}"}) < "$dump"
 }
