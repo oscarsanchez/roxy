@@ -1,0 +1,107 @@
+"""The `throttle` Scenario action: a bandwidth cap on what the client receives.
+
+`throttle = { kbps = N }` sends a matching flow's response to the client at no
+more than N kilobits per second, per flow. The response is paced, not delayed:
+it starts at once and arrives slowly, as over a slow link.
+
+mitmproxy has no hook while it sends a body, and a `flow.response.stream`
+callable runs on the event loop, so it cannot wait without stalling every flow
+(and a streamed body would skip the lab's body rewriting). So the action waits
+until the response is final, at the `response` hook, then takes over the client
+connection's writer: mitmproxy's writes queue there, and a task sends them on
+at the paced rate before handing the writer back.
+"""
+
+import asyncio
+import math
+import time
+
+from mitmproxy import ctx
+
+TICK = 0.1  # seconds of bandwidth sent at a time
+
+
+class Clock:
+    now = staticmethod(time.monotonic)
+    sleep = staticmethod(asyncio.sleep)
+
+
+clock = Clock()  # every pause goes through it; tests/chain.py swaps in a test clock
+
+
+class Throttle:
+    def __init__(self, value, scenario_dir):
+        kbps = value.get("kbps") if isinstance(value, dict) and set(value) == {"kbps"} else None
+        if type(kbps) not in (int, float) or not 0 < kbps < math.inf:
+            raise ValueError(f"throttle must be {{ kbps = N }} with N a positive number, got {value!r}")
+        self.bytes_per_second = kbps * 1000 / 8
+
+    def response(self, flow):
+        writer = client_writer(flow)
+        if writer is not None:
+            PacedWriter.take_over(writer, self.bytes_per_second)
+
+
+def client_writer(flow):
+    """mitmproxy's writer for the flow's client connection; None if the client is gone
+    (or never was, as for a flow replayed from mitmweb)."""
+    handler = ctx.master.addons.get("proxyserver").connections.get(flow.client_conn.id)
+    transport = handler and handler.transports.get(flow.client_conn)
+    return transport and transport.writer
+
+
+class PacedWriter:
+    """Holds a client writer's writes and sends them on at a fixed rate. Closing the
+    connection waits for the queue, so the client still gets the whole response."""
+
+    sending = set()  # running pacers, kept referenced until they finish
+
+    @classmethod
+    def take_over(cls, writer, bytes_per_second):
+        pacer = getattr(writer, "pacer", None)
+        if pacer is None:
+            writer.pacer = cls(writer, bytes_per_second)
+        else:  # two throttle rules matched: the lower cap wins
+            pacer.bytes_per_second = min(pacer.bytes_per_second, bytes_per_second)
+
+    def __init__(self, writer, bytes_per_second):
+        self.writer = writer
+        self.bytes_per_second = bytes_per_second
+        self.queue = bytearray()
+        self.closing = None  # mitmproxy's close or write_eof, held until the queue is sent
+        self.task = None
+        self.send_on, self.close_on, self.write_eof_on = writer.write, writer.close, writer.write_eof
+        writer.write, writer.close, writer.write_eof = self.write, self.close, self.write_eof
+
+    def write(self, data):
+        self.queue += data
+        if self.task is None:
+            self.task = asyncio.create_task(self.send())
+            PacedWriter.sending.add(self.task)
+            self.task.add_done_callback(PacedWriter.sending.discard)
+
+    def close(self):
+        self.closing = self.close_on
+        if self.task is None:
+            self.hand_back()
+
+    def write_eof(self):
+        self.closing = self.write_eof_on
+        if self.task is None:
+            self.hand_back()
+
+    async def send(self):
+        started, sent = clock.now(), 0
+        while self.queue and not self.writer.is_closing():
+            chunk_size = max(1, round(self.bytes_per_second * TICK))
+            chunk = bytes(self.queue[:chunk_size])
+            del self.queue[:chunk_size]
+            sent += len(chunk)
+            await clock.sleep(started + sent / self.bytes_per_second - clock.now())
+            self.send_on(chunk)
+        self.hand_back()
+
+    def hand_back(self):
+        del self.writer.write, self.writer.close, self.writer.write_eof, self.writer.pacer
+        if self.closing:
+            self.closing()

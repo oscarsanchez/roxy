@@ -1,0 +1,218 @@
+#!/usr/bin/env bash
+# roxy: the lab's CLI, from any terminal. A thin dispatcher over scripts/, which keep the
+# one implementation of each behaviour. install.sh links it onto the PATH.
+# Usage: roxy <subcommand> [args...]; roxy <subcommand> --help describes one.
+set -euo pipefail
+. "$(dirname "$(realpath "${BASH_SOURCE[0]}")")/../scripts/lib.sh"
+SCRIPTS="$REPO_ROOT/scripts"
+
+# usage SUBCOMMAND : its help text.
+usage() {
+  case "$1" in
+    roxy) cat <<'EOF'
+usage: roxy <subcommand> [args...]
+The roxy lab from any terminal. roxy <subcommand> --help describes one.
+  start      run the lab in the foreground, until Ctrl-C
+  status     whether the lab is up, its Proxy IP, Proxy Bases, App Profile and Scenario
+  scenario   list the Scenarios, or set or clear the active one
+  launch     launch the dev channel on a Target Device, with its Proxy Base
+  flows      the running lab's flows as JSON, for agents (read-only)
+  console    open a Target Device's debug console
+  app        create or list App Profiles
+EOF
+    ;;
+    start) cat <<'EOF'
+usage: roxy start [--app NAME] [--tunnel] [--ca-routing] [--replay SESSION]
+Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI and the Proxy Bases.
+  --app NAME        load the App Profile NAME; without it, the profile whose repo holds
+                    the current folder, if any (roxy app list)
+  --tunnel          also open the Public Endpoint, for Cloud Devices
+  --ca-routing      also listen on ports 443 and 80 for CA Routing
+  --replay SESSION  answer from a saved session (.mitm) instead of the Origins
+EOF
+    ;;
+    status) cat <<'EOF'
+usage: roxy status
+Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
+and the active Scenario, with its source. Exits 1 when the lab is down.
+EOF
+    ;;
+    scenario) cat <<'EOF'
+usage: roxy scenario list [--app NAME] | set NAME | clear
+  list      the Scenarios of the App Profile roxy start would load here (or NAME's)
+            and the lab's own, each with its source
+  set NAME  make NAME the running lab's active Scenario (lab-wide)
+  clear     leave the running lab with no active Scenario
+EOF
+    ;;
+    launch) cat <<'EOF'
+usage: roxy launch [--scenario NAME] [--proxy-base URL] <device> [key=value...]
+Launch the dev channel on <device> (a name in devices.json), with proxyBase and your
+launch params. It never builds or sideloads. proxyBase is the LAN Proxy Base for a
+Physical Device, and the running tunnel's public Proxy Base plus the device slug for a
+Cloud Device (roxy start --tunnel). Prints run=<id>, also sent as the run param.
+  --scenario NAME   set the running lab's active Scenario first ('' clears it)
+  --proxy-base URL  send URL instead (a Cloud Device's slug is still added)
+EOF
+    ;;
+    flows) cat <<'EOF'
+usage: roxy flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
+The running lab's flows, oldest first, as one JSON array in the shape the README
+documents (Flows for agents). Read-only: it never holds or edits a flow.
+  --filter EXPR     only flows matching a mitmproxy filter expression, e.g. '~d example.com'
+  --since RUN|TIME  only flows since a roxy launch run id, or a time like 2026-11-20T10:00:00Z
+  --limit N         only the last N flows
+EOF
+    ;;
+    console) cat <<'EOF'
+usage: roxy console <device> [--launch CASE [--scenario NAME]] [--seconds N]
+A Physical Device's debug console, recorded to out/console/ for N seconds (default 60);
+--launch launches CASE once connected. A Cloud Device's console streams through
+rce console while its Run is up (no options).
+EOF
+    ;;
+    app) cat <<'EOF'
+usage: roxy app new NAME | list
+An App Profile keeps one Product App's Scenarios, their mocks and its Public Endpoint
+allowlist in your roxy settings, outside every repo.
+  new NAME  create the App Profile NAME for the git repo you are in
+  list      the App Profiles and their repos
+EOF
+    ;;
+  esac
+}
+
+status() {
+  [ $# -eq 0 ] || die "$(usage status | head -1)"
+  local options public app scenario
+  load_env
+  require_env MITMWEB_PASSWORD
+  if ! options="$(mitmweb_get options.json 2>/dev/null)"; then
+    echo "lab: down (no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT; roxy start)"
+    exit 1
+  fi
+  public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"
+  echo "lab: up (mitmweb UI http://127.0.0.1:$LAB_WEB_PORT)"
+  print_lan_addresses "$(lan_ip)"
+  echo "Public Proxy Base: $public"
+  app="$(jq -r '.lab_app.value // ""' <<< "$options")"
+  scenario="$(jq -r '.lab_scenario.value // ""' <<< "$options")"
+  echo "App Profile:       ${app:-none}"
+  if [ -z "$scenario" ]; then
+    echo "Scenario:          none"
+  elif [ -n "$app" ] && [ -f "$(app_scenarios_dir "$app")/$scenario.toml" ]; then
+    echo "Scenario:          $scenario  (App Profile $app)"
+  else
+    echo "Scenario:          $scenario  (lab)"
+  fi
+}
+
+# list_scenarios DIR SOURCE : a line per Scenario in DIR, with its SOURCE.
+list_scenarios() {
+  local f
+  for f in "$1"/*.toml; do
+    [ -f "$f" ] || continue
+    printf '%-28s %s\n' "$(basename "$f" .toml)" "$2"
+  done
+}
+
+scenario() {
+  local app
+  case "${1:-} $# ${2:-}" in
+    "list 1 "|"list 3 --app")
+      app="$(resolve_app "${3:-}")"
+      echo "App Profile: ${app:-none}"
+      [ -z "$app" ] || list_scenarios "$(app_scenarios_dir "$app")" "App Profile $app"
+      list_scenarios "$LAB_SCENARIOS_DIR" lab ;;
+    "set 2 "*) set_scenario "$2" ;;
+    "clear 1 ") set_scenario "" ;;
+    *) die "$(usage scenario | head -1)" ;;
+  esac
+}
+
+# flows --json [options] : the running lab's flows in the documented JSON shape, from
+# mitmweb's flow dump (the one flows endpoint that takes a filter expression).
+flows() {
+  local json=false filter="" dump shape_args=() status=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=true; shift ;;
+      --filter) [ $# -ge 2 ] || die "$(usage flows | head -1)"; filter="$2"; shift 2 ;;
+      --since|--limit) [ $# -ge 2 ] || die "$(usage flows | head -1)"; shape_args+=("$1" "$2"); shift 2 ;;
+      *) die "$(usage flows | head -1)" ;;
+    esac
+  done
+  $json || die "roxy flows prints JSON only: pass --json"
+  load_env
+  require_env MITMWEB_PASSWORD
+  dump="$(mktemp)"
+  on_exit "rm -f $(printf %q "$dump")"
+  mitmweb_get "flows/dump${filter:+?filter=$(uri_encode "$filter")}" > "$dump" 2>/dev/null || status=$?
+  case "$status" in
+    0) ;;
+    22) die "mitmweb refused to list the flows${filter:+ for the filter '$filter'}: an invalid filter expression, or a wrong MITMWEB_PASSWORD" ;;
+    *) die "the lab is down: no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT (roxy start)" ;;
+  esac
+  (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py ${shape_args[@]+"${shape_args[@]}"}) < "$dump"
+}
+
+# console DEVICE [options] : a Cloud Device's console through rce, a Physical Device's
+# through scripts/console.
+console() {
+  [ $# -ge 1 ] || die "$(usage console | head -1)"
+  local rce_name
+  rce_name="$(rce_device_name "$1")"
+  if [ -n "$rce_name" ]; then
+    [ $# -eq 1 ] || die "a Cloud Device's console takes no options: $(usage console | head -1)"
+    exec rce console "$rce_name"
+  fi
+  exec "$SCRIPTS/console" "$@"
+}
+
+# app_new NAME : an empty App Profile for the git repo of the current folder.
+app_new() {
+  local name="$1" repo dir
+  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "an App Profile name is letters, digits, '.', '_' and '-': '$name'"
+  dir="$APPS_DIR/$name"
+  [ ! -e "$dir" ] || die "the App Profile '$name' already exists, in $dir"
+  repo="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run roxy app new inside the app's git repo"
+  repo="$(cd "$repo" && pwd -P)"
+  mkdir -p "$dir/scenarios"
+  jq -n --arg repo "$repo" '{repo: $repo, origin_allowlist: []}' > "$dir/profile.json"
+  echo "App Profile '$name' for $repo"
+  echo "  Scenarios, with their mocks next to them: $dir/scenarios/"
+  echo "  Public Endpoint Origins: origin_allowlist in $dir/profile.json"
+}
+
+app() {
+  local f
+  case "${1:-} $#" in
+    "new 2") app_new "$2" ;;
+    "list 1")
+      for f in "$APPS_DIR"/*/profile.json; do
+        [ -f "$f" ] || { echo "no App Profiles (roxy app new NAME, in an app's repo)"; break; }
+        printf '%-20s %s\n' "$(basename "$(dirname "$f")")" "$(jq -r .repo "$f")"
+      done ;;
+    *) die "$(usage app | head -1)" ;;
+  esac
+}
+
+cmd="${1:-}"
+[ -n "$cmd" ] || { usage roxy >&2; exit 2; }
+shift
+case "$cmd" in
+  -h|--help) usage roxy; exit 0 ;;
+  start|status|scenario|launch|flows|console|app) ;;
+  *) die "unknown subcommand '$cmd' (roxy --help lists them)" ;;
+esac
+case "${1:-}" in -h|--help) usage "$cmd"; exit 0 ;; esac
+
+case "$cmd" in
+  start) exec "$SCRIPTS/start-lab" "$@" ;;
+  status) status "$@" ;;
+  scenario) scenario "$@" ;;
+  launch) exec "$SCRIPTS/launch" "$@" ;;
+  flows) flows "$@" ;;
+  console) console "$@" ;;
+  app) app "$@" ;;
+esac

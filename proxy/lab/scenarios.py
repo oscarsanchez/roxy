@@ -9,7 +9,8 @@ A scenario is `<lab_scenarios_dir>/<name>.toml`, a list of rules:
 
 Set `lab_scenario` (mitmweb options, `--set`, or the options API) to switch
 scenarios without a restart; empty means none. The active file is reloaded
-when it changes.
+when it changes. The loaded App Profile's Scenarios (lab.app_profile) join the
+lab's own; a name in both is refused rather than one picked silently.
 """
 
 import logging
@@ -29,6 +30,11 @@ class Rule:
         self.name = name
         self.matches = flowfilter.parse(filter_expr)  # ValueError on bad syntax
         self.action = action
+
+
+def applied_rules(flow):
+    """The names of the Scenario rules that acted on this flow, in the order they first did."""
+    return flow.metadata.get("lab_scenario_rules", [])
 
 
 def load_scenario(path):
@@ -54,7 +60,8 @@ def load_scenario(path):
 
 
 class Scenarios:
-    def __init__(self):
+    def __init__(self, app_profile):
+        self.app_profile = app_profile
         self.path = None  # active scenario file, None for no scenario
         self.mtime = None
         self.rules = []
@@ -64,19 +71,27 @@ class Scenarios:
         loader.add_option("lab_scenarios_dir", str, str(DEFAULT_SCENARIOS_DIR), "Directory of lab scenario files.")
 
     def configure(self, updated):
-        if not {"lab_scenario", "lab_scenarios_dir"} & updated:
+        if not {"lab_scenario", "lab_scenarios_dir", "lab_app"} & updated:
             return
         name = ctx.options.lab_scenario
         if not name:
             self.path, self.mtime, self.rules = None, None, []
             return
-        path = Path(ctx.options.lab_scenarios_dir) / f"{name}.toml"
         try:
+            path = self._find(name)
             mtime, rules = path.stat().st_mtime_ns, load_scenario(path)
         except (ValueError, OSError) as e:
             raise exceptions.OptionsError(f"scenario {name!r}: {e}") from e
         self.path, self.mtime, self.rules = path, mtime, rules
         logging.info(f"lab scenario {name!r} active: {len(rules)} rule(s)")
+
+    def _find(self, name):
+        """The scenario file NAME: the loaded App Profile's or the lab's own."""
+        dirs = [self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir)]
+        found = [d / f"{name}.toml" for d in dirs if d and (d / f"{name}.toml").is_file()]
+        if len(found) > 1:
+            raise ValueError(f"in both {found[0]} and {found[1]}")
+        return found[0] if found else dirs[-1] / f"{name}.toml"  # a missing file fails its stat
 
     def reload_if_changed(self):
         """Pick up edits to the active file. A broken edit keeps the last good rules."""
@@ -114,6 +129,9 @@ class Scenarios:
         for rule in self.rules:
             handler = getattr(rule.action, hook, None)
             if handler and rule.matches(flow):
+                applied = flow.metadata.setdefault("lab_scenario_rules", [])
+                if rule.name not in applied:
+                    applied.append(rule.name)
                 result = handler(flow)
                 if result is not None:
                     await result

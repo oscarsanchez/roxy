@@ -38,17 +38,18 @@ def _non_public(addresses):
     return any(not ip.is_global for ip in addresses)
 
 
-def _host_allowed(host):
+def _host_allowed(host, allowlist):
     """Exact match, or a leading-dot entry (".mux.com") for any subdomain."""
     host = host.lower().rstrip(".")
     return any(
         host.endswith(entry) if entry.startswith(".") else host == entry
-        for entry in (e.lower() for e in ctx.options.lab_origin_allowlist)
+        for entry in (e.lower() for e in allowlist)
     )
 
 
 class Guards:
-    def __init__(self):
+    def __init__(self, app_profile):
+        self.app_profile = app_profile  # its allowlist joins the lab's own on the Public Endpoint
         self.lan_subnets = []
         self.rce_egress_ips = set()
 
@@ -105,7 +106,9 @@ class Guards:
             refuse(flow, 403, "secret-segment")
         elif not self._client_allowed(flow):
             refuse(flow, 403, "client-ip")
-        elif through_tunnel(flow) and not _host_allowed(flow.request.host):
+        elif through_tunnel(flow) and not _host_allowed(
+            flow.request.host, [*ctx.options.lab_origin_allowlist, *self.app_profile.origin_allowlist]
+        ):
             # The Public Endpoint only: the LAN relays to any public Origin, as Charles does.
             refuse(flow, 403, "origin-host")
         elif _non_public(await _origin_addresses(flow.request.host, flow.request.port)):

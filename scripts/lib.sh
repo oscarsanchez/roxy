@@ -8,8 +8,13 @@ export ROXY_CONFIG_DIR="${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rox
 SECRETS_FILE="$ROXY_CONFIG_DIR/secrets.env"
 DEVICES_FILE="$ROXY_CONFIG_DIR/devices.json"
 SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
-# Saved sessions: the user data directory, in the folder for sessions without an App Profile.
-CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/no-profile"
+# App Profiles: APPS_DIR/<name>/profile.json ({"repo", "origin_allowlist"}) and
+# APPS_DIR/<name>/scenarios/ (its Scenarios and their mocks). proxy/lab/app_profile.py loads one.
+APPS_DIR="$ROXY_CONFIG_DIR/apps"
+LAB_SCENARIOS_DIR="$REPO_ROOT/proxy/scenarios"  # the lab's own Scenarios
+# Saved sessions: the user data directory, in the loaded App Profile's folder (LAB_APP, which
+# scripts/start-lab exports), or the one for sessions without a profile.
+CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-profile}"
 
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
@@ -17,6 +22,7 @@ LAB_WEB_PORT=8081  # mitmweb UI, localhost only
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
+TUNNEL_METRICS="127.0.0.1:20241"  # cloudflared's local metrics server: readiness and the quick tunnel hostname
 
 LAB_LOCK_DIR="${LAB_LOCK_DIR:-$HOME/.cache/roxy/locks}"  # per user, shared by every checkout
 
@@ -102,6 +108,29 @@ require_settings() {
     || die "missing setting lan_subnets (your LAN's subnets, CIDR) in $SETTINGS_FILE"
 }
 
+# resolve_app [NAME] : the App Profile to load: NAME (an unknown one fails), else the one
+# whose repo holds the current folder (the deepest, for nested repos), else none (empty).
+resolve_app() {
+  local here f repo best="" best_repo=""
+  if [ -n "${1:-}" ]; then
+    [ -f "$APPS_DIR/$1/profile.json" ] || die "unknown App Profile '$1' (roxy app list shows them)"
+    echo "$1"
+    return
+  fi
+  here="$(pwd -P)"
+  for f in "$APPS_DIR"/*/profile.json; do
+    [ -f "$f" ] || continue
+    repo="$(jq -r .repo "$f")"
+    case "$here/" in
+      "$repo/"*) [ ${#repo} -le ${#best_repo} ] || { best="$(basename "$(dirname "$f")")"; best_repo="$repo"; } ;;
+    esac
+  done
+  echo "$best"
+}
+
+# app_scenarios_dir NAME : the folder of App Profile NAME's Scenarios and their mocks.
+app_scenarios_dir() { echo "$APPS_DIR/$1/scenarios"; }
+
 # The Mac's address on the default-route interface.
 lan_ip() {
   local iface ip
@@ -112,6 +141,50 @@ lan_ip() {
 }
 
 lan_proxy_base() { echo "http://$(lan_ip):$LAB_PORT"; }
+
+# print_lan_addresses IP : the Proxy IP and LAN Proxy Bases lines, as start-lab and
+# roxy status print them.
+print_lan_addresses() {
+  echo "Proxy IP:          $1  (for an app's debug proxy setting)"
+  echo "LAN Proxy Bases:   http://$1:$LAB_PORT  http://$1:$LAB_CHARLES_PORT  (each takes the / and /; forms)"
+}
+
+# tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.
+tunnel_host() {
+  curl -fsS "http://$TUNNEL_METRICS/quicktunnel" 2>/dev/null | jq -er '.hostname | select(. != "")'
+}
+
+# public_proxy_base : the running tunnel's public Proxy Base, without a device slug;
+# fails when no tunnel is up. Needs load_env.
+public_proxy_base() {
+  local host
+  host="$(tunnel_host)" || return 1
+  require_env LAB_SECRET
+  echo "https://$host/$LAB_SECRET"
+}
+
+# mitmweb_get PATH : GET PATH from the running lab's mitmweb API; fails when no lab
+# answers. Needs load_env.
+mitmweb_get() {
+  curl -fsS -H "Authorization: Bearer $MITMWEB_PASSWORD" "http://127.0.0.1:$LAB_WEB_PORT/$1"
+}
+
+# set_scenario NAME : make NAME the running lab's active Scenario through mitmweb's API;
+# '' clears it. Prints scenario=NAME (or none).
+set_scenario() {
+  local answer
+  load_env
+  require_env MITMWEB_PASSWORD
+  # Non-GET mitmweb API calls need a matching XSRF cookie and header (any value).
+  answer="$(curl -sS -X PUT "http://127.0.0.1:$LAB_WEB_PORT/options" \
+    -H "Authorization: Bearer $MITMWEB_PASSWORD" \
+    -H "Cookie: _mitmproxy_xsrf=lab" -H "X-XSRFToken: lab" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg s "$1" '{lab_scenario: $s}')" \
+    -w '\n%{http_code}')" || die "could not reach mitmweb on port $LAB_WEB_PORT (is the lab running? roxy start)"
+  [ "${answer##*$'\n'}" = 200 ] || die "mitmweb refused scenario '$1': ${answer%$'\n'*}"
+  echo "scenario=${1:-none}"
+}
 
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {

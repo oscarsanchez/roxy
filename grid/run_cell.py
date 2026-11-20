@@ -229,7 +229,8 @@ def launch_once(session: Session, scenario: str) -> Run:
     device, cell, console, config = session.device, session.cell, session.console, session.config
     mark, start = len(console.text), time.time()
     out = subprocess.run(
-        [str(SCRIPTS / "launch"), "--scenario", scenario, device, cell.case, session.proxy_base],
+        [str(SCRIPTS / "launch"), "--scenario", scenario, "--proxy-base", session.proxy_base, device,
+         f"case={cell.case}"],
         check=True, stdout=subprocess.PIPE, text=True,
     ).stdout
     run_id = next(line[4:] for line in out.splitlines() if line.startswith("run="))

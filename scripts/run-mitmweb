@@ -3,6 +3,7 @@
 # scripts/start-lab (macOS, through uv) and compose.yaml (Docker).
 # Usage: scripts/run-mitmweb MITMWEB-COMMAND...   e.g. scripts/run-mitmweb uv run mitmweb
 # Env: MITMWEB_PASSWORD; LAB_SECRET (Public Endpoint, optional);
+#   LAB_APP: the App Profile to load (scripts/start-lab resolves it), empty for none.
 #   LAB_LOCAL_HOST: where the UI and the tunnel listener bind, 127.0.0.1 by default.
 #   A container sets 0.0.0.0, and Compose keeps them local instead (UI published
 #   on localhost only, tunnel listener not published at all).
@@ -66,6 +67,7 @@ exec "$@" \
   --set keep_host_header=true \
   --set connection_strategy=lazy \
   --set lab_secret="${LAB_SECRET:-}" \
+  --set lab_app="${LAB_APP:-}" \
   --set lab_tunnel_port="$LAB_TUNNEL_PORT" \
   --set save_stream_file="$session" \
   --set web_columns=tls --set web_columns=icon --set web_columns=path --set web_columns=method \
