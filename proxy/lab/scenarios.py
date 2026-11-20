@@ -10,7 +10,8 @@ A scenario is `<lab_scenarios_dir>/<name>.toml`, a list of rules:
 Set `lab_scenario` (mitmweb options, `--set`, or the options API) to switch
 scenarios without a restart; empty means none. The active file is reloaded
 when it changes. The loaded App Profile's Scenarios (lab.app_profile) join the
-lab's own; a name in both is refused rather than one picked silently.
+lab's own: find_scenario holds the lookup rule, for this addon and for the shell
+scripts (scenario_lookup.py).
 """
 
 import logging
@@ -35,6 +36,22 @@ class Rule:
 def applied_rules(flow):
     """The names of the Scenario rules that acted on this flow, in the order they first did."""
     return flow.metadata.get("lab_scenario_rules", [])
+
+
+def find_scenario(name, app_scenarios_dir, lab_scenarios_dir):
+    """The file of the Scenario NAME: the loaded App Profile's (in app_scenarios_dir, None
+    without a profile), else the lab's own. A name in both is refused (ValueError) rather
+    than one picked silently; a name in neither gives the lab's path, which fails to load."""
+    lab_file = lab_scenarios_dir / f"{name}.toml"
+    app_file = app_scenarios_dir and app_scenarios_dir / f"{name}.toml"
+    if not (app_file and app_file.is_file()):
+        return lab_file
+    if lab_file.is_file():
+        raise ValueError(
+            f"the Scenario {name!r} is in both the lab's Scenarios ({lab_file}) "
+            f"and the App Profile's ({app_file}); rename the profile's"
+        )
+    return app_file
 
 
 def load_scenario(path):
@@ -78,20 +95,12 @@ class Scenarios:
             self.path, self.mtime, self.rules = None, None, []
             return
         try:
-            path = self._find(name)
+            path = find_scenario(name, self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
             mtime, rules = path.stat().st_mtime_ns, load_scenario(path)
         except (ValueError, OSError) as e:
             raise exceptions.OptionsError(f"scenario {name!r}: {e}") from e
         self.path, self.mtime, self.rules = path, mtime, rules
         logging.info(f"lab scenario {name!r} active: {len(rules)} rule(s)")
-
-    def _find(self, name):
-        """The scenario file NAME: the loaded App Profile's or the lab's own."""
-        dirs = [self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir)]
-        found = [d / f"{name}.toml" for d in dirs if d and (d / f"{name}.toml").is_file()]
-        if len(found) > 1:
-            raise ValueError(f"in both {found[0]} and {found[1]}")
-        return found[0] if found else dirs[-1] / f"{name}.toml"  # a missing file fails its stat
 
     def reload_if_changed(self):
         """Pick up edits to the active file. A broken edit keeps the last good rules."""

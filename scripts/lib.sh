@@ -131,6 +131,11 @@ resolve_app() {
 # app_scenarios_dir NAME : the folder of App Profile NAME's Scenarios and their mocks.
 app_scenarios_dir() { echo "$APPS_DIR/$1/scenarios"; }
 
+# scenario_lookup [--app NAME] check | source SCENARIO : the Scenario lookup rule (the App
+# Profile's Scenarios, then the lab's; a name in both refused), which the proxy holds:
+# check fails naming every clash, source prints 'App Profile NAME' or 'lab'.
+scenario_lookup() { (cd "$REPO_ROOT/proxy" && uv run --quiet python scenario_lookup.py "$@"); }
+
 # The Mac's address on the default-route interface.
 lan_ip() {
   local iface ip

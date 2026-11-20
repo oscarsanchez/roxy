@@ -16,6 +16,14 @@ from mitmproxy.exceptions import OptionsError
 from lab.config import settings_root
 
 
+def profile_folder(name):
+    return settings_root() / "apps" / name
+
+
+def profile_scenarios_dir(name):
+    return profile_folder(name) / "scenarios"
+
+
 class AppProfile:
     def __init__(self):
         self.origin_allowlist = []
@@ -34,11 +42,11 @@ class AppProfile:
         if not name:
             self.origin_allowlist, self.scenarios_dir = [], None
             return
-        folder = settings_root() / "apps" / name
+        folder = profile_folder(name)
         try:
             allowlist = json.loads((folder / "profile.json").read_text())["origin_allowlist"]
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise OptionsError(f"App Profile {name!r} in {folder}: {e!r}") from e
         if not isinstance(allowlist, list) or not all(isinstance(host, str) for host in allowlist):
             raise OptionsError(f"App Profile {name!r}: origin_allowlist must be a list of hosts")
-        self.origin_allowlist, self.scenarios_dir = allowlist, folder / "scenarios"
+        self.origin_allowlist, self.scenarios_dir = allowlist, profile_scenarios_dir(name)

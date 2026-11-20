@@ -84,7 +84,7 @@ EOF
 
 status() {
   [ $# -eq 0 ] || die "$(usage status | head -1)"
-  local options public app scenario
+  local options public app scenario found_in
   load_env
   require_env MITMWEB_PASSWORD
   if ! options="$(mitmweb_get options.json 2>/dev/null)"; then
@@ -100,10 +100,9 @@ status() {
   echo "App Profile:       ${app:-none}"
   if [ -z "$scenario" ]; then
     echo "Scenario:          none"
-  elif [ -n "$app" ] && [ -f "$(app_scenarios_dir "$app")/$scenario.toml" ]; then
-    echo "Scenario:          $scenario  (App Profile $app)"
   else
-    echo "Scenario:          $scenario  (lab)"
+    found_in="$(scenario_lookup ${app:+--app "$app"} source "$scenario")" || exit 1
+    echo "Scenario:          $scenario  ($found_in)"
   fi
 }
 

@@ -41,12 +41,7 @@ require_env MITMWEB_PASSWORD
 require_settings
 LAB_APP="$(resolve_app "$app")"
 export LAB_APP  # read by scripts/run-mitmweb
-if [ -n "$LAB_APP" ]; then
-  for f in "$(app_scenarios_dir "$LAB_APP")"/*.toml; do
-    [ -f "$LAB_SCENARIOS_DIR/$(basename "$f")" ] || continue
-    die "the Scenario '$(basename "$f" .toml)' is in both the lab's Scenarios ($LAB_SCENARIOS_DIR) and App Profile '$LAB_APP' ($f); rename the profile's"
-  done
-fi
+if [ -n "$LAB_APP" ]; then scenario_lookup --app "$LAB_APP" check || exit 1; fi
 lab_lock lab  # one lab per user; deploy, launch and grid take the devices lock instead
 if $tunnel; then
   require_env LAB_SECRET
