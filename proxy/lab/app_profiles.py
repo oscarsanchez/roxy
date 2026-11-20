@@ -1,7 +1,8 @@
 """App Profiles: what the lab keeps for each Product App, in the user's settings root and
 never in a repo. The one place that knows their layout:
 
-    <settings root>/apps/<name>/profile.json   {"repo": "<git root>", "origin_allowlist": [...]}
+    <settings root>/apps/<name>/profile.json   {"repo": "<git root>", "origin_allowlist": [...],
+                                                "fallback_origin": {"path": "<regex>", "origin": "https://host"}}
     <settings root>/apps/<name>/scenarios/     its Scenarios, with their mocks next to them
 """
 
@@ -43,14 +44,45 @@ class ScenarioInBoth(AppProfileError):
     one picked silently."""
 
 
+class FallbackOrigin(NamedTuple):
+    """The Origin for a request that names none (a bare path on a LAN listener), when its
+    path matches `path`."""
+
+    path: re.Pattern
+    origin: str  # scheme://host[:port]
+
+    def origin_url(self, path):
+        """The Origin URL for the bare request PATH (path and query, as received), or None
+        if the regex finds no match in its path."""
+        return f"{self.origin}{path}" if self.path.search(path.split("?", 1)[0]) else None
+
+
 class Profile(NamedTuple):
     repo: Path
     origin_allowlist: list
     scenarios_dir: Path
     file: Path  # its profile.json, where the user edits origin_allowlist
+    fallback_origin: FallbackOrigin | None = None  # optional in profile.json
 
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
+ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]+(?::[0-9]+)?")
+
+
+def _fallback_origin(value):
+    """profile.json's fallback_origin as a FallbackOrigin (None if absent). Raises
+    ValueError saying what is wrong with it."""
+    if value is None:
+        return None
+    if not (isinstance(value, dict) and isinstance(value.get("path"), str) and isinstance(value.get("origin"), str)):
+        raise ValueError('fallback_origin must be {"path": "<regex>", "origin": "https://host"}')
+    try:
+        path = re.compile(value["path"])
+    except re.error as e:
+        raise ValueError(f"fallback_origin path is not a regex ({e})") from e
+    if not ORIGIN.fullmatch(value["origin"]):
+        raise ValueError(f"fallback_origin origin must be http(s)://host[:port], not {value['origin']!r}")
+    return FallbackOrigin(path, value["origin"])
 
 
 class AppProfiles:
@@ -100,7 +132,11 @@ class AppProfiles:
             raise BadProfile(f"App Profile {name!r} in {file}: {e!r}") from e
         if not isinstance(allowlist, list) or not all(isinstance(host, str) for host in allowlist):
             raise BadProfile(f"App Profile {name!r}: origin_allowlist must be a list of hosts, in {file}")
-        return Profile(repo, allowlist, self._folder(name) / "scenarios", file)
+        try:
+            fallback = _fallback_origin(doc.get("fallback_origin"))
+        except ValueError as e:
+            raise BadProfile(f"App Profile {name!r}: {e}, in {file}") from e
+        return Profile(repo, allowlist, self._folder(name) / "scenarios", file, fallback)
 
     def scenarios(self, app):
         """Every Scenario App Profile APP (None: no profile) sees, as (name, source): the
