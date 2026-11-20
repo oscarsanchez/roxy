@@ -133,6 +133,23 @@ mitmweb_get() {
   curl -fsS -H "Authorization: Bearer $MITMWEB_PASSWORD" "http://127.0.0.1:$LAB_WEB_PORT/$1"
 }
 
+# set_scenario NAME : make NAME the running lab's active Scenario through mitmweb's API;
+# '' clears it. Prints scenario=NAME (or none).
+set_scenario() {
+  local answer
+  load_env
+  require_env MITMWEB_PASSWORD
+  # Non-GET mitmweb API calls need a matching XSRF cookie and header (any value).
+  answer="$(curl -sS -X PUT "http://127.0.0.1:$LAB_WEB_PORT/options" \
+    -H "Authorization: Bearer $MITMWEB_PASSWORD" \
+    -H "Cookie: _mitmproxy_xsrf=lab" -H "X-XSRFToken: lab" \
+    -H "Content-Type: application/json" \
+    -d "$(jq -n --arg s "$1" '{lab_scenario: $s}')" \
+    -w '\n%{http_code}')" || die "could not reach mitmweb on port $LAB_WEB_PORT (is the lab running? roxy start)"
+  [ "${answer##*$'\n'}" = 200 ] || die "mitmweb refused scenario '$1': ${answer%$'\n'*}"
+  echo "scenario=${1:-none}"
+}
+
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {
   command -v jq >/dev/null || die "jq is required (brew install jq)"

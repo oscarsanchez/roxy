@@ -48,19 +48,7 @@ else
   die "device '$device' has no launch route: set ip (Physical Device) or rce_device_name (Cloud Device) in $DEVICES_FILE"
 fi
 
-if $scenario_given; then
-  load_env
-  require_env MITMWEB_PASSWORD
-  # Non-GET mitmweb API calls need a matching XSRF cookie and header (any value).
-  answer="$(curl -sS -X PUT "http://127.0.0.1:$LAB_WEB_PORT/options" \
-    -H "Authorization: Bearer $MITMWEB_PASSWORD" \
-    -H "Cookie: _mitmproxy_xsrf=lab" -H "X-XSRFToken: lab" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n --arg s "$scenario" '{lab_scenario: $s}')" \
-    -w '\n%{http_code}')" || die "could not reach mitmweb on port $LAB_WEB_PORT (is scripts/start-lab running?)"
-  [ "${answer##*$'\n'}" = 200 ] || die "mitmweb refused scenario '$scenario': ${answer%$'\n'*}"
-  echo "scenario=${scenario:-none}"
-fi
+if $scenario_given; then set_scenario "$scenario"; fi
 
 exit_app || true  # fresh process for every run
 launch_dev || die "ECP launch on $device failed"

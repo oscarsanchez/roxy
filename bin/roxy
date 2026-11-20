@@ -77,6 +77,16 @@ status() {
   echo "Scenario:          $(jq -r '.lab_scenario.value // "" | if . == "" then "none" else . end' <<< "$options")"
 }
 
+scenario() {
+  local f
+  case "${1:-} $#" in
+    "list 1") for f in "$REPO_ROOT"/proxy/scenarios/*.toml; do basename "$f" .toml; done ;;
+    "set 2") set_scenario "$2" ;;
+    "clear 1") set_scenario "" ;;
+    *) die "$(usage scenario | head -1)" ;;
+  esac
+}
+
 cmd="${1:-}"
 [ -n "$cmd" ] || { usage roxy >&2; exit 2; }
 shift
@@ -90,6 +100,7 @@ case "${1:-}" in -h|--help) usage "$cmd"; exit 0 ;; esac
 case "$cmd" in
   start) exec "$SCRIPTS/start-lab" "$@" ;;
   status) status "$@" ;;
+  scenario) scenario "$@" ;;
   launch) exec "$SCRIPTS/launch" "$@" ;;
   *) die "roxy $cmd: not built yet" ;;
 esac

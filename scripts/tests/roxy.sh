@@ -29,7 +29,12 @@ cat > "$TMP/bin/curl" <<'EOF'
 #!/usr/bin/env bash
 printf '%q ' "$@" >> "$CURL_LOG"
 echo >> "$CURL_LOG"
-url=""; for a in "$@"; do case "$a" in http://*|https://*) url="$a" ;; esac; done
+url="" prev=""
+for a in "$@"; do
+  case "$a" in http://*|https://*) url="$a" ;; esac
+  if [ "$prev" = -d ]; then printf '%s' "$a" > "$CURL_LOG.body"; fi  # the last request body
+  prev="$a"
+done
 down() { echo "curl: (7) Failed to connect" >&2; exit 7; }
 case "$url" in
   */options.json) [ "${FAKE_LAB_UP:-}" = 1 ] || down
@@ -82,3 +87,18 @@ for want in "Public Proxy Base: none" "Scenario:          none"; do
 $out" ;; esac
 done
 echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenario"
+
+# scenario list: the lab's own Scenarios, with or without a running lab.
+out="$("$ROXY" scenario list)" || fail "scenario list: $out"
+for want in json-503 hls-404; do grep -qx "$want" <<< "$out" || fail "scenario list lacks $want: $out"; done
+echo "ok: scenario list shows the lab's Scenarios"
+
+# scenario set and clear switch the running lab's active Scenario through mitmweb's options API.
+scenario_sent() { jq -c . "$CURL_LOG.body"; }
+out="$(FAKE_LAB_UP=1 "$ROXY" scenario set json-503)" || fail "scenario set: $out"
+[ "$(scenario_sent)" = '{"lab_scenario":"json-503"}' ] || fail "scenario set sent $(scenario_sent)"
+out="$(FAKE_LAB_UP=1 "$ROXY" scenario clear)" || fail "scenario clear: $out"
+[ "$(scenario_sent)" = '{"lab_scenario":""}' ] || fail "scenario clear sent $(scenario_sent)"
+if err="$("$ROXY" scenario set json-503 2>&1)"; then fail "scenario set with the lab down exited 0"; fi
+case "$err" in *"could not reach mitmweb"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
+echo "ok: scenario set and clear switch the running lab's Scenario"
