@@ -9,7 +9,8 @@ Usage (from proxy/; needs ROXY_CONFIG_DIR, as scripts/lib.sh exports it):
 import argparse
 import sys
 
-from lab.app_profile import profile_scenarios_dir
+from lab.app_profiles import AppProfiles
+from lab.config import settings_root
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, find_scenario
 
 
@@ -19,7 +20,7 @@ def main():
     parser.add_argument("command", choices=["check", "source"])
     parser.add_argument("scenario", nargs="?")
     args = parser.parse_args()
-    app_dir = profile_scenarios_dir(args.app) if args.app else None
+    app_dir = AppProfiles(settings_root(), DEFAULT_SCENARIOS_DIR).profile(args.app).scenarios_dir if args.app else None
     if args.command == "source":
         if not args.scenario:
             parser.error("source needs a Scenario name")

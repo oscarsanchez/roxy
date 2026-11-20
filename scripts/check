@@ -52,8 +52,10 @@ step "glossary"
 (cd proxy && uv run --quiet python ../scripts/check-glossary)
 
 step "test imports"
-# Proxy tests reach the lab through tests/chain.py (the full addon chain), never a lab module.
-if grep -nE '^[[:space:]]*(from|import)[[:space:]]+lab([.[:space:]]|$)' proxy/tests/test_*.py; then
+# Proxy tests reach the lab through tests/chain.py (the full addon chain), never a lab module;
+# App Profiles, which bin/roxy and scripts/start-lab use too, are tested at their own interface.
+if grep -nE '^[[:space:]]*(from|import)[[:space:]]+lab([.[:space:]]|$)' proxy/tests/test_*.py \
+  | grep -vE ':[[:space:]]*from lab\.app_profiles import '; then
   die "proxy tests import lab modules (above); go through tests/chain.py instead"
 fi
 
