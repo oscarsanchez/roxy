@@ -22,12 +22,14 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 # Fakes on PATH. curl logs one line of shell-quoted arguments per call (and the URL alone
 # to $CURL_LOG.urls, the request body to $CURL_LOG.body) and answers for
 # mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active and the App Profile
-# FAKE_APP loaded), cloudflared's metrics
+# FAKE_APP loaded, its flow dump in FAKE_FLOWS_DUMP, or FAKE_FLOWS_STATUS: an HTTP
+# error for it), cloudflared's metrics
 # (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
-# $UV_LOG and, as mitmweb does, creates the file it saves the session to.
+# $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
+# command (roxy flows runs Python) goes to the real uv.
 # route and ipconfig give the Mac the LAN IP 192.0.2.10.
-export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log"
+export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log" REAL_UV="$(command -v uv)"
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -47,6 +49,11 @@ case "$url" in
       "${FAKE_SCENARIO:-}" "${FAKE_APP:-}" ;;
   */options) [ "${FAKE_LAB_UP:-}" = 1 ] || down
     case " $* " in *" -w "*) printf '\n200' ;; esac ;;
+  */flows/dump*) [ "${FAKE_LAB_UP:-}" = 1 ] || down
+    if [ -n "${FAKE_FLOWS_STATUS:-}" ]; then
+      echo "curl: (22) The requested URL returned error: $FAKE_FLOWS_STATUS" >&2; exit 22
+    fi
+    cat "$FAKE_FLOWS_DUMP" ;;
   */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || down
     printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
 esac
@@ -58,6 +65,7 @@ echo >> "$RCE_LOG"
 EOF
 cat > "$TMP/bin/uv" <<'EOF'
 #!/usr/bin/env bash
+[ "${1:-} ${2:-}" = "run mitmweb" ] || exec "$REAL_UV" "$@"
 printf '%s\n' "$@" > "$UV_LOG"
 session="$(sed -n 's/^save_stream_file=//p' "$UV_LOG")"
 [ -z "$session" ] || touch "$session"
@@ -68,7 +76,7 @@ chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH"
 
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
-for args in "" start status scenario launch console app; do
+for args in "" start status scenario launch flows console app; do
   # shellcheck disable=SC2086
   out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
   case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
@@ -236,6 +244,66 @@ for want in "App Profile:       app-a" "Scenario:          empty-catalog  (App P
 $out" ;; esac
 done
 echo "ok: status names the App Profile and the active Scenario's source"
+
+# flows --json with the lab down: a clear error and a non-zero exit.
+if err="$("$ROXY" flows --json 2>&1)"; then fail "flows --json exited 0 with the lab down: $err"; fi
+case "$err" in *"lab is down"*"roxy start"*) ;; *) fail "flows --json with the lab down said: $err" ;; esac
+echo "ok: flows --json says when the lab is down"
+
+# flows --json with the lab up: mitmweb's flow dump, recorded by the full lab chain
+# (proxy/tests/flows_dump.py describes its three flows), in the README's shape.
+export FAKE_FLOWS_DUMP="$TMP/flows.mitm"
+(cd "$REPO/proxy" && PYTHONPATH=. uv run --quiet python tests/flows_dump.py "$FAKE_FLOWS_DUMP")
+flows_json() { FAKE_LAB_UP=1 "$ROXY" flows --json "$@"; }
+out="$(flows_json)" || fail "flows --json with the lab up: $out"
+[ "$(jq 'type == "array" and length == 3 and all(.id | type == "string")' <<< "$out")" = true ] \
+  || fail "flows --json is not an array of 3 flows with ids: $out"
+want='{"time":"2025-11-20T10:00:00.000Z","device":"Living Room","method":"POST","url":"https://httpbin.org/post","status":200,"request_bytes":8,"response_bytes":12,"duration_ms":250,"refusal":null,"scenario_rules":[]}'
+[ "$(jq -c '.[0] | del(.id)' <<< "$out")" = "$want" ] || fail "flows --json gave the first flow as
+$(jq -c '.[0]' <<< "$out")
+not
+$want"
+echo "ok: flows --json prints each flow in the documented shape"
+
+# A flow the lab refused carries its refusal reason; a flow a Scenario touched names the rule.
+[ "$(jq -c '.[1] | [.device, .status, .refusal]' <<< "$out")" = '["Bedroom",403,"origin-address"]' ] \
+  || fail "flows --json gave the refused flow as $(jq -c '.[1]' <<< "$out")"
+[ "$(jq -c '.[2] | [.status, .refusal, .scenario_rules]' <<< "$out")" = '[503,null,["httpbin json fails"]]' ] \
+  || fail "flows --json gave the flow json-503 touched as $(jq -c '.[2]' <<< "$out")"
+echo "ok: flows --json names a flow's refusal reason and the Scenario rules applied"
+
+# --since takes a roxy launch run id (launch time in seconds, then random digits) or a time.
+times() { jq -c 'map(.time[11:16])' <<< "$1"; }
+out="$(flows_json --since 176363286012345)" || fail "flows --json --since RUN: $out"
+[ "$(times "$out")" = '["10:01","10:02"]' ] || fail "flows --json --since a 10:01 run gave $(times "$out")"
+out="$(flows_json --since 2025-11-20T10:02:00Z)" || fail "flows --json --since TIME: $out"
+[ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:02 gave $(times "$out")"
+if err="$(flows_json --since yesterday 2>&1)"; then fail "flows --json took --since yesterday"; fi
+case "$err" in *"--since"*) ;; *) fail "flows --json --since yesterday said: $err" ;; esac
+echo "ok: flows --json --since takes a run id or a time"
+
+# --limit N keeps the last N flows, after --since.
+out="$(flows_json --limit 2)" || fail "flows --json --limit 2: $out"
+[ "$(times "$out")" = '["10:01","10:02"]' ] || fail "flows --json --limit 2 gave $(times "$out")"
+out="$(flows_json --since 2025-11-20T10:00:00Z --limit 1)" || fail "flows --json --since --limit: $out"
+[ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:00 --limit 1 gave $(times "$out")"
+flows_json --limit 0 >/dev/null 2>&1 && fail "flows --json took --limit 0"
+echo "ok: flows --json --limit keeps the last N flows"
+
+# --filter: mitmweb's dump applies the mitmproxy filter expression; one it rejects is named.
+: > "$CURL_LOG.urls"
+flows_json --filter '~d httpbin.org & ~u /json' >/dev/null || fail "flows --json --filter exited non-zero"
+grep -qxF 'http://127.0.0.1:8081/flows/dump?filter=~d%20httpbin.org%20%26%20~u%20%2Fjson' "$CURL_LOG.urls" \
+  || fail "flows --json --filter asked mitmweb for: $(cat "$CURL_LOG.urls")"
+if err="$(FAKE_FLOWS_STATUS=400 flows_json --filter '~bad' 2>&1)"; then fail "flows --json took a filter mitmweb rejects"; fi
+case "$err" in *"filter"*"~bad"*) ;; *) fail "flows --json with a filter mitmweb rejects said: $err" ;; esac
+echo "ok: flows --json --filter passes the expression to mitmweb"
+
+# Read-only: every call roxy flows made was a plain GET, which never holds or edits a flow.
+: > "$CURL_LOG"
+flows_json --filter '~u /json' --since 1763632800 --limit 1 >/dev/null || fail "flows --json with every option"
+grep -E -- '(^| )(-X|--request|-d|--data[a-z-]*) ' "$CURL_LOG" && fail "flows --json sent more than a GET"
+echo "ok: flows --json only reads"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

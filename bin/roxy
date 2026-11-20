@@ -16,6 +16,7 @@ The roxy lab from any terminal. roxy <subcommand> --help describes one.
   status     whether the lab is up, its Proxy IP, Proxy Bases, App Profile and Scenario
   scenario   list the Scenarios, or set or clear the active one
   launch     launch the dev channel on a Target Device, with its Proxy Base
+  flows      the running lab's flows as JSON, for agents (read-only)
   console    open a Target Device's debug console
   app        create or list App Profiles
 EOF
@@ -52,6 +53,15 @@ Physical Device, and the running tunnel's public Proxy Base plus the device slug
 Cloud Device (roxy start --tunnel). Prints run=<id>, also sent as the run param.
   --scenario NAME   set the running lab's active Scenario first ('' clears it)
   --proxy-base URL  send URL instead (a Cloud Device's slug is still added)
+EOF
+    ;;
+    flows) cat <<'EOF'
+usage: roxy flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
+The running lab's flows, oldest first, as one JSON array in the shape the README
+documents (Flows for agents). Read-only: it never holds or edits a flow.
+  --filter EXPR     only flows matching a mitmproxy filter expression, e.g. '~d example.com'
+  --since RUN|TIME  only flows since a roxy launch run id, or a time like 2026-11-20T10:00:00Z
+  --limit N         only the last N flows
 EOF
     ;;
     console) cat <<'EOF'
@@ -120,6 +130,32 @@ scenario() {
   esac
 }
 
+# flows --json [options] : the running lab's flows in the documented JSON shape, from
+# mitmweb's flow dump (the one flows endpoint that takes a filter expression).
+flows() {
+  local json=false filter="" dump shape_args=() status=0
+  while [ $# -gt 0 ]; do
+    case "$1" in
+      --json) json=true; shift ;;
+      --filter) [ $# -ge 2 ] || die "$(usage flows | head -1)"; filter="$2"; shift 2 ;;
+      --since|--limit) [ $# -ge 2 ] || die "$(usage flows | head -1)"; shape_args+=("$1" "$2"); shift 2 ;;
+      *) die "$(usage flows | head -1)" ;;
+    esac
+  done
+  $json || die "roxy flows prints JSON only: pass --json"
+  load_env
+  require_env MITMWEB_PASSWORD
+  dump="$(mktemp)"
+  on_exit "rm -f $(printf %q "$dump")"
+  mitmweb_get "flows/dump${filter:+?filter=$(uri_encode "$filter")}" > "$dump" 2>/dev/null || status=$?
+  case "$status" in
+    0) ;;
+    22) die "mitmweb refused to list the flows${filter:+ for the filter '$filter'}: an invalid filter expression, or a wrong MITMWEB_PASSWORD" ;;
+    *) die "the lab is down: no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT (roxy start)" ;;
+  esac
+  (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py ${shape_args[@]+"${shape_args[@]}"}) < "$dump"
+}
+
 # console DEVICE [options] : a Cloud Device's console through rce, a Physical Device's
 # through scripts/console.
 console() {
@@ -166,7 +202,7 @@ cmd="${1:-}"
 shift
 case "$cmd" in
   -h|--help) usage roxy; exit 0 ;;
-  start|status|scenario|launch|console|app) ;;
+  start|status|scenario|launch|flows|console|app) ;;
   *) die "unknown subcommand '$cmd' (roxy --help lists them)" ;;
 esac
 case "${1:-}" in -h|--help) usage "$cmd"; exit 0 ;; esac
@@ -176,6 +212,7 @@ case "$cmd" in
   status) status "$@" ;;
   scenario) scenario "$@" ;;
   launch) exec "$SCRIPTS/launch" "$@" ;;
+  flows) flows "$@" ;;
   console) console "$@" ;;
   app) app "$@" ;;
 esac

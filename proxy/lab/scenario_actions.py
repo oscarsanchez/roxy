@@ -24,6 +24,7 @@ from mitmproxy.addons.modifybody import ModifyBody
 from mitmproxy.addons.modifyheaders import ModifyHeaders, ModifySpec
 
 from lab.manifest_edits import ACTIONS as MANIFEST_EDITS
+from lab.throttle import Throttle
 
 
 ALL = flowfilter.match_all  # the rule's own filter has already matched
@@ -132,6 +133,7 @@ class MapRemote:
 ACTIONS = {
     "status": StatusOverride,
     "latency": Latency,
+    "throttle": Throttle,
     "drop": Drop,
     "header": header_replace,
     "body": body_replace,

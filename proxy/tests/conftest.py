@@ -37,3 +37,14 @@ def dns(monkeypatch):
 
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
     return answers
+
+
+@pytest.fixture
+def scenarios(tmp_path):
+    """Write scenario files into a scenarios dir; returns lab options that activate one."""
+
+    def write(name, toml):
+        (tmp_path / f"{name}.toml").write_text(toml)
+        return {"lab_scenarios_dir": str(tmp_path), "lab_scenario": name}
+
+    return write

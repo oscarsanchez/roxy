@@ -77,6 +77,7 @@ roxy start --replay <session>.mitm   # answer from a saved session (see Recordin
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
 roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenario
+roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
 ```
 
 `roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every session is saved in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
@@ -134,6 +135,7 @@ name = "json fails"
 filter = "~d httpbin.org & ~u /json"
 status = 503                                    # status override (the Origin's body is kept)
 # latency = 2.5                                 # seconds, before the request reaches the Origin
+# throttle = { kbps = 400 }                     # the response reaches the client at no more than 400 kbps
 # drop = true                                   # close the connection, no answer, Origin not contacted
 # header = { name = "Cache-Control", value = "no-store" }   # replace; "" removes (mitmproxy modify_headers)
 # body = { pattern = "regex", replacement = "text" }        # regex replace (mitmproxy modify_body)
@@ -142,6 +144,8 @@ status = 503                                    # status override (the Origin's 
 ```
 
 `header` and `body` act on the request and the response, like their mitmproxy built-ins: add `~q` or `~s` to the filter to pick one.
+
+`throttle` caps each matching flow on its own (no shared link), like Charles's Throttle without the presets: the response starts at once and arrives slowly, so a player sees a slow download, not a late one, and ABR can step down. It paces the response after every other rule and the lab's own rewriting, and takes a positive `kbps`. Add a `latency` rule with the same filter for a slow, high-latency link. On a Cloud Device the paced bytes go through the quick tunnel: keep such runs short.
 
 `map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other: a private address is refused, and through the tunnel so is a host off the allowlist. Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
 
@@ -232,6 +236,36 @@ URLs in response headers (Location, Content-Location, Link, Refresh) and bodies 
 ### Device labels
 
 Each flow's comment names its Target Device (mitmweb comment column; filter `~comment "Living Room"`). A Physical Device is named by its `ip` in your `devices.json`. A Cloud Device is named by the device slug in its Proxy Base, `https://<tunnel-host>/<secret>/<slug>`: `roxy launch` appends the device's `slug` from `devices.json` to the public Proxy Base. A tunnel request without a known slug whose `CF-Connecting-IP` is an RCE egress IP is labelled `Cloud Device`. Other clients get no label.
+
+### Flows for agents
+
+`roxy flows --json` prints the running lab's flows, so an agent can see what the app requested without opening mitmweb. It reads mitmweb's API with `MITMWEB_PASSWORD` and is read-only: it never holds, resumes or edits a flow. With the lab down it says so and exits non-zero.
+
+```sh
+roxy flows --json                                       # every flow in mitmweb, oldest first
+roxy flows --json --since 176363286012345               # since a roxy launch (its run=<id>)
+roxy flows --json --since 2025-11-20T10:00:00Z          # since a time (ISO 8601; local time without an offset)
+roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20   # a mitmproxy filter expression; the last 20
+```
+
+`--filter` is applied by mitmweb, then `--since` and `--limit` (the last N flows). The output is one JSON array, one flow per line:
+
+```json
+[{"id": "35f7b2d8-754f-43c6-9044-607c1660affb", "time": "2025-11-20T10:02:00.000Z", "device": "Living Room", "method": "GET", "url": "https://httpbin.org/json", "status": 503, "request_bytes": 0, "response_bytes": 17, "duration_ms": 250, "refusal": null, "scenario_rules": ["httpbin json fails"]}]
+```
+
+| Field | Value |
+| --- | --- |
+| `id` | mitmweb's flow id |
+| `time` | when the flow started, ISO 8601 UTC with milliseconds |
+| `device` | its device label (Device labels), `null` for none |
+| `method` | the request method |
+| `url` | the Origin URL; for a request the lab could not decode (`not-prefixed`), the dummy reverse target |
+| `status` | the status the client got, `null` without a response (dropped, failed) |
+| `request_bytes`, `response_bytes` | body sizes as sent, `null` without that message |
+| `duration_ms` | from the request's start to the response's end, `null` without a complete response |
+| `refusal` | the reason the lab refused it (its `X-Lab-Blocked` value, such as `origin-address`), `null` if it did not; an `X-Lab-Blocked` header from an Origin or a Scenario is not a refusal |
+| `scenario_rules` | the names of the active Scenario's rules that acted on it, in the order they first did; `[]` for none |
 
 ### Recording and replay
 

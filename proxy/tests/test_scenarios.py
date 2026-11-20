@@ -12,17 +12,6 @@ def json_get():
     return lab_flow("/https://httpbin.org/json")
 
 
-@pytest.fixture
-def scenarios(tmp_path):
-    """Write scenario files into a scenarios dir; returns lab options that activate one."""
-
-    def write(name, toml):
-        (tmp_path / f"{name}.toml").write_text(toml)
-        return {"lab_scenarios_dir": str(tmp_path), "lab_scenario": name}
-
-    return write
-
-
 def test_status_override_changes_the_status_the_client_sees(scenarios):
     options = scenarios("fail-json", '''
 [[rule]]
