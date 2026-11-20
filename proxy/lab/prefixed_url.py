@@ -10,25 +10,32 @@ the rewriters reach build through prefixed_for_client.
 """
 
 import re
+from typing import NamedTuple
 from urllib.parse import urlsplit
 
 _PREFIXED = re.compile(
     r"^(?P<proxy_base>https?://[^/?#]+(?:/(?!https?:)[^/?#]+){0,2})"
-    r"/(?P<scheme>https?):/{1,2}"  # tolerate a client-collapsed "https:/host"
+    r"(?P<separator>/)(?P<scheme>https?):/{1,2}"  # tolerate a client-collapsed "https:/host"
     r"(?P<rest>[^/?#]+.*)$"
 )
 
 
-def build_prefixed_url(proxy_base, origin_url):
-    return f"{proxy_base.rstrip('/')}/{origin_url}"
+class PrefixedUrl(NamedTuple):
+    proxy_base: str
+    separator: str
+    origin_url: str
+
+
+def build_prefixed_url(proxy_base, separator, origin_url):
+    return f"{proxy_base.rstrip('/')}{separator}{origin_url}"
 
 
 def parse_prefixed_url(url):
-    """Return (proxy_base, origin_url), or None if url is not a Prefixed URL."""
+    """Return a PrefixedUrl, or None if url is not a Prefixed URL."""
     match = _PREFIXED.match(url)
     if match is None:
         return None
-    return match["proxy_base"], f"{match['scheme']}://{match['rest']}"
+    return PrefixedUrl(match["proxy_base"], match["separator"], f"{match['scheme']}://{match['rest']}")
 
 
 def _path_segment(proxy_base, index):
@@ -54,5 +61,5 @@ def prefixed_for_client(flow, origin_url):
     responses are never parsed: an Origin URL may embed another URL.
     """
     if flow.is_replay == "response" and (parsed := parse_prefixed_url(origin_url)):
-        origin_url = parsed[1]
-    return build_prefixed_url(flow.metadata["proxy_base"], origin_url)
+        origin_url = parsed.origin_url
+    return build_prefixed_url(flow.metadata["proxy_base"], flow.metadata["separator"], origin_url)
