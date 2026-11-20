@@ -310,3 +310,76 @@ def test_a_broken_edit_keeps_the_last_good_rules(scenarios):
         lab.run(flow, origin_json())
 
     assert flow.response.status_code == 503
+
+
+RETITLE = '''
+[[rule]]
+name = "retitle"
+filter = "~s & ~u /json"
+body = {{ pattern = "{old}", replacement = "{new}" }}
+'''
+
+
+def title(flow):
+    return json.loads(flow.response.content)["slideshow"]["title"]
+
+
+@pytest.mark.parametrize("active, expected", [
+    ("to-lab,to-both", "Both Slide Show"),
+    ("to-both,to-lab", "Lab Slide Show"),
+])
+def test_several_active_scenarios_all_act_in_set_order(scenarios, active, expected):
+    options = scenarios("to-lab", RETITLE.format(old="Sample Slide Show", new="Lab Slide Show"))
+    scenarios("to-both", RETITLE.format(old="Lab Slide Show", new="Both Slide Show"))
+    flow = json_get()
+
+    run_chain(flow, origin_json(), **{**options, "lab_scenario": active})
+
+    assert title(flow) == expected
+
+
+def test_removing_one_active_scenario_stops_only_its_rules(scenarios):
+    options = scenarios("fail-json", FAIL_JSON.format(status=418))
+    scenarios("to-lab", RETITLE.format(old="Sample Slide Show", new="Lab Slide Show"))
+
+    with Lab(**{**options, "lab_scenario": "fail-json,to-lab"}) as lab:
+        both = json_get()
+        lab.run(both, origin_json())
+        lab.set_options(lab_scenario="to-lab")
+        one = json_get()
+        lab.run(one, origin_json())
+
+    assert (both.response.status_code, title(both)) == (418, "Lab Slide Show")
+    assert (one.response.status_code, title(one)) == (200, "Lab Slide Show")
+
+
+def test_a_broken_edit_to_one_active_scenario_leaves_the_others_alone(scenarios):
+    options = scenarios("fail-json", FAIL_JSON.format(status=418))
+    scenarios("to-lab", RETITLE.format(old="Sample Slide Show", new="Lab Slide Show"))
+    scenarios("to-both", RETITLE.format(old="Lab Slide Show", new="Both Slide Show"))
+
+    with Lab(**{**options, "lab_scenario": "fail-json,to-lab"}) as lab:
+        scenarios("fail-json", "not toml [")
+        scenarios("to-lab", RETITLE.format(old="Sample Slide Show", new="Edited Slide Show"))
+        edited = json_get()
+        lab.run(edited, origin_json())
+        lab.set_options(lab_scenario="fail-json,to-lab,to-both")  # adding one keeps the broken one's rules
+        added = json_get()
+        lab.run(added, origin_json())
+
+    assert (edited.response.status_code, title(edited)) == (418, "Edited Slide Show")
+    assert added.response.status_code == 418
+
+
+@pytest.mark.parametrize("refused", ["fail-json,no-such-scenario", "fail-json,to-lab,fail-json"])
+def test_a_set_with_an_unknown_or_repeated_name_is_refused_and_the_active_set_stays(scenarios, refused):
+    options = scenarios("fail-json", FAIL_JSON.format(status=418))
+    scenarios("to-lab", RETITLE.format(old="Sample Slide Show", new="Lab Slide Show"))
+
+    with Lab(**{**options, "lab_scenario": "to-lab"}) as lab:
+        with pytest.raises(OptionsError):
+            lab.set_options(lab_scenario=refused)
+        flow = json_get()
+        lab.run(flow, origin_json())
+
+    assert (flow.response.status_code, title(flow)) == (200, "Lab Slide Show")

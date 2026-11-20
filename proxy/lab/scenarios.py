@@ -1,4 +1,4 @@
-"""Scenarios: named files of Manipulation rules, one of them active lab-wide.
+"""Scenarios: named files of Manipulation rules, any number of them active lab-wide.
 
 A scenario is `<lab_scenarios_dir>/<name>.toml`, a list of rules:
 
@@ -8,8 +8,9 @@ A scenario is `<lab_scenarios_dir>/<name>.toml`, a list of rules:
     status = 503                           # exactly one action (see scenario_actions)
 
 Set `lab_scenario` (mitmweb options, `--set`, or the options API) to switch
-scenarios without a restart; empty means none. The active file is reloaded
-when it changes. The loaded App Profile's Scenarios (lab.app_profile) join the
+scenarios without a restart: the active ones in order, comma-separated (`a,b`);
+empty means none. Their rules apply in that order, then file order. Each active
+file is reloaded when it changes. The loaded App Profile's Scenarios (lab.app_profile) join the
 lab's own: find_scenario holds the lookup rule, for this addon and for lab.app_profiles
 (the CLI's Scenario listing and sources).
 """
@@ -34,8 +35,18 @@ class Rule:
 
 
 def applied_rules(flow):
-    """The names of the Scenario rules that acted on this flow, in the order they first did."""
+    """The Scenario rules that acted on this flow, as `<scenario>/<rule>`, in the order they first did."""
     return flow.metadata.get("lab_scenario_rules", [])
+
+
+def scenario_names(value):
+    """The active Scenarios' names, in order, from a `lab_scenario` value."""
+    return [name.strip() for name in value.split(",") if name.strip()]
+
+
+def scenario_value(names):
+    """The `lab_scenario` value that makes NAMES the active Scenarios, in order."""
+    return ",".join(names)
 
 
 def find_scenario(name, app_scenarios_dir, lab_scenarios_dir):
@@ -76,48 +87,63 @@ def load_scenario(path):
     return rules
 
 
-class Scenarios:
-    def __init__(self, app_profile):
-        self.app_profile = app_profile
-        self.path = None  # active scenario file, None for no scenario
-        self.mtime = None
-        self.rules = []
+class ActiveScenario:
+    """One active Scenario: its file and its last good rules, reloaded when the file changes."""
 
-    def load(self, loader):
-        loader.add_option("lab_scenario", str, "", "Active lab scenario (a file name without .toml); empty for none.")
-        loader.add_option("lab_scenarios_dir", str, str(DEFAULT_SCENARIOS_DIR), "Directory of lab scenario files.")
-
-    def configure(self, updated):
-        if not {"lab_scenario", "lab_scenarios_dir", "lab_app"} & updated:
-            return
-        name = ctx.options.lab_scenario
-        if not name:
-            self.path, self.mtime, self.rules = None, None, []
-            return
-        try:
-            path = find_scenario(name, self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
-            mtime, rules = path.stat().st_mtime_ns, load_scenario(path)
-        except (ValueError, OSError) as e:
-            raise exceptions.OptionsError(f"scenario {name!r}: {e}") from e
-        self.path, self.mtime, self.rules = path, mtime, rules
-        logging.info(f"lab scenario {name!r} active: {len(rules)} rule(s)")
+    def __init__(self, name, path):
+        self.name, self.path = name, path
+        self.mtime, self.rules = path.stat().st_mtime_ns, load_scenario(path)
 
     def reload_if_changed(self):
-        """Pick up edits to the active file. A broken edit keeps the last good rules."""
+        """Pick up edits to the file. A broken edit keeps the last good rules."""
         try:
             mtime = self.path.stat().st_mtime_ns
             if mtime == self.mtime:
                 return
             self.mtime = mtime  # report a broken edit once, not on every flow
             self.rules = load_scenario(self.path)
-            logging.info(f"lab scenario {self.path.stem!r} reloaded: {len(self.rules)} rule(s)")
+            logging.info(f"lab scenario {self.name!r} reloaded: {len(self.rules)} rule(s)")
         except (ValueError, OSError) as e:
-            logging.error(f"lab scenario {self.path.stem!r} not reloaded, keeping its last good rules: {e}")
+            logging.error(f"lab scenario {self.name!r} not reloaded, keeping its last good rules: {e}")
+
+
+class Scenarios:
+    def __init__(self, app_profile):
+        self.app_profile = app_profile
+        self.active = []  # ActiveScenario, in set order
+
+    def load(self, loader):
+        loader.add_option(
+            "lab_scenario", str, "",
+            "Active lab scenarios, in order: file names without .toml, comma-separated; empty for none.",
+        )
+        loader.add_option("lab_scenarios_dir", str, str(DEFAULT_SCENARIOS_DIR), "Directory of lab scenario files.")
+
+    def configure(self, updated):
+        if not {"lab_scenario", "lab_scenarios_dir", "lab_app"} & updated:
+            return
+        # A Scenario that stays active keeps its rules, even after a broken edit, unless
+        # where Scenarios are found changed.
+        kept = {} if {"lab_scenarios_dir", "lab_app"} & updated else {s.name: s for s in self.active}
+        names = scenario_names(ctx.options.lab_scenario)
+        active = []
+        for name in names:
+            try:
+                if names.count(name) > 1:
+                    raise ValueError("listed more than once")
+                active.append(kept.get(name) or ActiveScenario(
+                    name, find_scenario(name, self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
+                ))
+            except (ValueError, OSError) as e:
+                raise exceptions.OptionsError(f"scenario {name!r}: {e}") from e
+        self.active = active
+        for scenario in active:
+            logging.info(f"lab scenario {scenario.name!r} active: {len(scenario.rules)} rule(s)")
 
     async def before_guards(self, flow):
         """Called by ScenariosBeforeGuards, the first of this addon's hooks per flow."""
-        if self.path:
-            self.reload_if_changed()  # once per flow, so a flow sees one version
+        for scenario in self.active:
+            scenario.reload_if_changed()  # once per flow, so a flow sees one version
         await self._dispatch("before_guards", flow)
 
     async def requestheaders(self, flow):
@@ -135,15 +161,16 @@ class Scenarios:
     async def _dispatch(self, hook, flow):
         if refused(flow):  # a guard's answer must stay visible
             return
-        for rule in self.rules:
-            handler = getattr(rule.action, hook, None)
-            if handler and rule.matches(flow):
-                applied = flow.metadata.setdefault("lab_scenario_rules", [])
-                if rule.name not in applied:
-                    applied.append(rule.name)
-                result = handler(flow)
-                if result is not None:
-                    await result
+        for scenario in self.active:
+            for rule in scenario.rules:
+                handler = getattr(rule.action, hook, None)
+                if handler and rule.matches(flow):
+                    applied, named = flow.metadata.setdefault("lab_scenario_rules", []), f"{scenario.name}/{rule.name}"
+                    if named not in applied:
+                        applied.append(named)
+                    result = handler(flow)
+                    if result is not None:
+                        await result
 
 
 class ScenariosBeforeGuards:

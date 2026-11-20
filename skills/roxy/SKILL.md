@@ -46,7 +46,7 @@ status = 503
 - `url` is the Origin URL, never the Prefixed URL.
 - `status` null: no response (dropped, or the connection failed).
 - `refusal` set: the lab refused it with a 403 or 400. `origin-host`: a Cloud Device request to a host off the allowlist; add it to `origin_allowlist` in the App Profile's `profile.json` and restart the lab. `origin-address`: the Origin resolves to a private address. `not-prefixed`: the request was not a Prefixed URL. `client-ip`, `secret-segment`: the client or the Public Endpoint secret was wrong.
-- `scenario_rules`: the active Scenario's rules that acted on it.
+- `scenario_rules`: the active Scenarios' rules that acted on it, each named `<scenario>/<rule>`.
 - A request missing from the output went straight to its Origin: it was built outside the Charles hook or the kit (Prefix Routing guide, What the lab never sees).
 - Lab down: it says so and exits non-zero.
 

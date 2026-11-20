@@ -81,6 +81,19 @@ throttle = { kbps = 800 }
     assert received[-1][0] == pytest.approx(5, abs=0.1)  # 500 KB at 100 KB a second
 
 
+@pytest.mark.parametrize("active", ["slow,slower", "slower,slow"])
+def test_two_active_scenarios_throttling_one_flow_cap_it_at_the_lower_rate(scenarios, active):
+    options = scenarios("slow", SLOW_SEGMENTS.format(kbps=800))
+    scenarios("slower", SLOW_SEGMENTS.format(kbps=400))
+    flow = segment_get()
+
+    with Lab(**{**options, "lab_scenario": active}) as lab:
+        lab.run(flow, origin_segment())
+        received = lab.received(flow)
+
+    assert received[-1][0] == pytest.approx(10, abs=0.1)  # 500 KB at 50 KB a second
+
+
 BAD_THROTTLES =["0", "-400", '"fast"', "true", "nan", "inf"]
 BAD_TABLES = ["400", "{ rate = 400 }", "{ kbps = 400, burst = 10 }"]
 
