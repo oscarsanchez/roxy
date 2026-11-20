@@ -23,8 +23,10 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 # to $CURL_LOG.urls, the request body to $CURL_LOG.body) and answers for
 # mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active), cloudflared's metrics
 # (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
+# uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
+# $UV_LOG and, as mitmweb does, creates the file it saves the session to.
 # route and ipconfig give the Mac the LAN IP 192.0.2.10.
-export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log"
+export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log"
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/curl" <<'EOF'
 #!/usr/bin/env bash
@@ -51,6 +53,12 @@ cat > "$TMP/bin/rce" <<'EOF'
 #!/usr/bin/env bash
 printf '%q ' "$@" >> "$RCE_LOG"
 echo >> "$RCE_LOG"
+EOF
+cat > "$TMP/bin/uv" <<'EOF'
+#!/usr/bin/env bash
+printf '%s\n' "$@" > "$UV_LOG"
+session="$(sed -n 's/^save_stream_file=//p' "$UV_LOG")"
+[ -z "$session" ] || touch "$session"
 EOF
 printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
 printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
@@ -170,6 +178,25 @@ if err="$(cd "$TMP" && "$ROXY" app new loose 2>&1)"; then fail "app new outside 
 case "$err" in *"git repo"*) ;; *) fail "app new outside a git repo said: $err" ;; esac
 "$ROXY" app new ../escape >/dev/null 2>&1 && fail "app new took the name ../escape"
 echo "ok: app new refuses an existing name, a folder outside a repo, and a name that is a path"
+
+# roxy start loads --app NAME from anywhere, else the profile whose repo holds the current
+# folder, else none; an unknown --app fails before mitmweb starts.
+start_in() { local dir="$1"; shift; rm -f "$UV_LOG"; (cd "$dir" && "$ROXY" start "$@" 2>&1); }
+started_app() { sed -n 's/^lab_app=//p' "$UV_LOG"; }
+out="$(start_in "$TMP" --app app-b)" || fail "start --app app-b: $out"
+[ "$(started_app)" = app-b ] || fail "start --app app-b loaded '$(started_app)'"
+case "$out" in *"App Profile:       app-b"*) ;; *) fail "start --app app-b does not say so: $out" ;; esac
+out="$(start_in "$repos/app-a/src/nested")" || fail "start in app-a's repo: $out"
+[ "$(started_app)" = app-a ] || fail "start in a folder of app-a's repo loaded '$(started_app)'"
+out="$(start_in "$repos/app-a" --app app-b)" || fail "start --app app-b in app-a's repo: $out"
+[ "$(started_app)" = app-b ] || fail "start --app app-b in app-a's repo loaded '$(started_app)'"
+out="$(start_in "$TMP")" || fail "start outside every profile's repo: $out"
+[ -e "$UV_LOG" ] && [ -z "$(started_app)" ] || fail "start outside every profile's repo loaded '$(started_app)'"
+case "$out" in *"App Profile:       none"*) ;; *) fail "start without a profile does not say so: $out" ;; esac
+if out="$(start_in "$TMP" --app nope)"; then fail "start --app nope exited 0"; fi
+case "$out" in *"unknown App Profile 'nope'"*) ;; *) fail "start --app nope said: $out" ;; esac
+[ ! -e "$UV_LOG" ] || fail "start --app nope started mitmweb"
+echo "ok: start loads the App Profile named, else the current repo's, else none; an unknown name fails"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

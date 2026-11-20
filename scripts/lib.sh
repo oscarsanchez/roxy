@@ -106,6 +106,26 @@ require_settings() {
     || die "missing setting lan_subnets (your LAN's subnets, CIDR) in $SETTINGS_FILE"
 }
 
+# resolve_app [NAME] : the App Profile to load: NAME (an unknown one fails), else the one
+# whose repo holds the current folder (the deepest, for nested repos), else none (empty).
+resolve_app() {
+  local here f repo best="" best_repo=""
+  if [ -n "${1:-}" ]; then
+    [ -f "$APPS_DIR/$1/profile.json" ] || die "unknown App Profile '$1' (roxy app list shows them)"
+    echo "$1"
+    return
+  fi
+  here="$(pwd -P)"
+  for f in "$APPS_DIR"/*/profile.json; do
+    [ -f "$f" ] || continue
+    repo="$(jq -r .repo "$f")"
+    case "$here/" in
+      "$repo/"*) [ ${#repo} -le ${#best_repo} ] || { best="$(basename "$(dirname "$f")")"; best_repo="$repo"; } ;;
+    esac
+  done
+  echo "$best"
+}
+
 # The Mac's address on the default-route interface.
 lan_ip() {
   local iface ip

@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Start the lab: mitmweb with the lab addon chain, listening on the LAN for Prefixed URLs.
-# Usage: scripts/start-lab [--tunnel] [--ca-routing] [--replay SESSION]
+# Usage: scripts/start-lab [--app NAME] [--tunnel] [--ca-routing] [--replay SESSION]
+#   --app NAME loads the App Profile NAME; without it, the profile whose repo holds the
+#   current folder, if any (resolve_app in scripts/lib.sh).
 #   --tunnel also opens a Cloudflare quick tunnel to the listener (the Public
 #   Endpoint, for Cloud Devices) and prints the public Proxy Base. Stopping the
 #   lab (Ctrl-C) closes the tunnel too.
@@ -15,12 +17,14 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-usage="usage: scripts/start-lab [--tunnel] [--ca-routing] [--replay SESSION]"
+usage="usage: scripts/start-lab [--app NAME] [--tunnel] [--ca-routing] [--replay SESSION]"
+app=""
 tunnel=false
 export LAB_CA_ROUTING=false  # read by scripts/run-mitmweb
 replay=""
 while [ $# -gt 0 ]; do
   case "$1" in
+    --app) [ $# -ge 2 ] || die "$usage"; app="$2"; shift 2 ;;
     --tunnel) tunnel=true; shift ;;
     --ca-routing) LAB_CA_ROUTING=true; shift ;;
     --replay) [ $# -ge 2 ] || die "$usage"; replay="$2"; shift 2 ;;
@@ -35,6 +39,8 @@ fi
 load_env
 require_env MITMWEB_PASSWORD
 require_settings
+LAB_APP="$(resolve_app "$app")"
+export LAB_APP  # read by scripts/run-mitmweb
 lab_lock lab  # one lab per user; deploy, launch and grid take the devices lock instead
 if $tunnel; then
   require_env LAB_SECRET
@@ -57,6 +63,11 @@ quick_tunnel_host() {
 echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in $SECRETS_FILE)"
 ip="$(lan_ip)" || true  # lan_ip names the problem; the lab still starts
 print_lan_addresses "$ip"
+if [ -n "$LAB_APP" ]; then
+  echo "App Profile:       $LAB_APP  ($(jq -r .repo "$APPS_DIR/$LAB_APP/profile.json"))"
+else
+  echo "App Profile:       none"
+fi
 if [ "$LAB_CA_ROUTING" = true ]; then
   echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $ip; point lab Origins here in DNS (README, CA Routing)"
 fi
