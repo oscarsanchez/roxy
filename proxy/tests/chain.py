@@ -201,12 +201,22 @@ class Lab:
 
     def run_together(self, *exchanges):
         """Run several (flow, origin_response) exchanges at once, as `run` does one: concurrent
-        requests, each on its own client connection, their responses sent over the same time.
+        requests, each on its own client connection, whose responses all start at the same
+        moment (an Origin lookup really waits, so the hooks may finish in any order).
         Returns each forwarded request, in order."""
         return self._run_in_lab(self._run_all(exchanges))
 
     async def _run_all(self, exchanges):
-        return await asyncio.gather(*(self._run(flow, response, None, None) for flow, response in exchanges))
+        clients = {flow.client_conn.id: ClientWriter(self.clock) for flow, _ in exchanges}
+        self._clients.update(clients)
+        try:
+            forwarded = await asyncio.gather(*(self._exchange(flow, response) for flow, response in exchanges))
+            answered = [flow for flow, _ in exchanges if flow.response is not None and not flow.error]
+            await asyncio.gather(*(self._send(flow, clients[flow.client_conn.id], None) for flow in answered))
+            return forwarded
+        finally:
+            for client_id in clients:
+                del self._clients[client_id]
 
     def _run_in_lab(self, run):
         """Run the coroutine `run` on the lab's event loop, with the test's clock and client writers."""
