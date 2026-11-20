@@ -29,12 +29,12 @@ mitmweb runs in mitmproxy's `reverse` mode. Its UI listens on `127.0.0.1` only, 
 
 1. **Origin decoding**: recovers the Origin and the client's Proxy Base from the Prefixed URL path, or from Host/SNI in CA Routing.
 2. **Device labels**: names the Target Device that sent the flow.
-3. **Guards**: refuse anything but an allowed client, an allowlisted Origin host and a public Origin address (see [Guards](#guards)).
+3. **Guards**: refuse anything but an allowed client and a public Origin address, and on the Public Endpoint an allowlisted Origin host (see [Guards](#guards)).
 4. **Request header cleanup**: `Host` is the Origin's, `Referer` and `Origin` are decoded back, tunnel headers are stripped.
 5. **Response header and body rewriting**: URLs in headers and in HLS, DASH, VAST/XML and JSON bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests come back through the lab.
 6. **Scenarios**: the active Scenario's Manipulation rules, last, so they see the response as the client gets it.
 
-While the lab runs, any client on your LAN subnets can relay through it to the allowlisted Origins.
+While the lab runs, any device on your LAN subnets can relay through it to any public host, the same as with Charles.
 
 ## Quickstart
 
@@ -182,10 +182,11 @@ LAB_REPLAY=<session>.mitm docker compose up    # replay (path relative to the sa
 
 ### Guards
 
-The lab forwards a request only if the client is allowed, the Origin host is on the allowlist, and the Origin resolves to public addresses only. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed`; through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
+The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed`; through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
 
-- A LAN client must be on one of your `lan_subnets`.
-- A request through the tunnel (it arrives on the tunnel listener, port 8082, which only cloudflared can reach) needs the secret path segment, and its `CF-Connecting-IP` must be one of the RCE egress IPs. Tunnel headers are trusted only there: a LAN client sending them is judged by its real IP.
+- A LAN client must be on one of your `lan_subnets`, and may reach any public Origin: the allowlist guards the Public Endpoint only.
+- Relay exposure: while the lab runs, any device on your LAN subnets can use it as an HTTP relay to any public host, the same as with Charles. Only private, loopback, link-local and unique-local Origins stay out of reach.
+- A request through the tunnel (it arrives on the tunnel listener, port 8082, which only cloudflared can reach) needs the secret path segment, its `CF-Connecting-IP` must be one of the RCE egress IPs, and its Origin host must be on the allowlist. Tunnel headers are trusted only there: a LAN client sending them is judged by its real IP.
 - The address guard resolves the Origin, and mitmproxy then dials one of the addresses it checked (IPv4 first), never a later DNS answer: a name that turns private between the check and the connect (DNS rebinding) is not dialled. The cost: no server connection reuse across requests.
 - Tunnel and forwarding headers (`CF-*`, `X-Forwarded-*`, `CDN-Loop`, `Forwarded`, `Via`...) never reach the Origin.
 - Secrets on the command line: `scripts/run-mitmweb` passes `MITMWEB_PASSWORD` and `LAB_SECRET` to mitmweb as `--set` flags, so any local user can read them with `ps`. Accepted for a single-user lab Mac; do not run the lab on a shared machine.
