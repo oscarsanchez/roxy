@@ -67,5 +67,9 @@ A named set of Manipulation rules; one Scenario at a time is active, for every T
 _Avoid_: mock set, rule file
 
 **App Profile**:
-What the lab keeps for one Product App, in your own lab settings and outside every repo: its repo location, the Origins it may reach through the Public Endpoint, its Scenarios and their mocks. Optional; at most one is loaded per lab session.
+What the lab keeps for one Product App, in your own lab settings and outside every repo: its repo location, the Origins it may reach through the Public Endpoint, its Scenarios and their mocks. Optional; at most one is loaded per Lab Session.
 _Avoid_: app config, app settings
+
+**Lab Session**:
+One run of the lab, from the moment it starts until it stops. It loads at most one App Profile and has at most one active Scenario at a time; switching App Profile means a new Lab Session.
+_Avoid_: lab instance, proxy session
