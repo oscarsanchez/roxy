@@ -11,7 +11,7 @@ Shown in the flow list's comment column and filterable with `~comment "Living Ro
 
 from lab.clients import ip_address, through_tunnel, tunnel_client_ip
 from lab.config import load_settings
-from lab.prefixed_url import device_slug
+from lab.prefixed_url import client_proxy_base, device_slug
 
 
 class DeviceLabels:
@@ -31,7 +31,7 @@ class DeviceLabels:
     def requestheaders(self, flow):
         if not through_tunnel(flow):
             flow.comment = self.physical_devices.get(ip_address(flow.client_conn.peername[0]), "")
-        elif name := self.cloud_devices.get(device_slug(flow.metadata.get("proxy_base", ""))):
+        elif (client := client_proxy_base(flow)) and (name := self.cloud_devices.get(device_slug(client[0]))):
             flow.comment = name
         elif tunnel_client_ip(flow) in self.guards.rce_egress_ips:
             flow.comment = "Cloud Device"

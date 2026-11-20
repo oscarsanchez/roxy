@@ -9,7 +9,7 @@ from Host, else SNI.
 from mitmproxy import ctx
 
 from lab.clients import client_scheme, through_tunnel
-from lab.prefixed_url import parse_prefixed_url
+from lab.prefixed_url import parse_prefixed_url, remember_client
 from lab.refusal import refuse
 
 
@@ -24,9 +24,7 @@ class OriginDecoder:
         # Needs keep_host_header=true, or Host is already the dummy reverse target.
         parsed = parse_prefixed_url(f"{client_scheme(flow)}://{flow.request.host_header}{flow.request.path}")
         if parsed is not None:
-            # rewriters use the client's own Proxy Base and separator
-            flow.metadata["proxy_base"] = parsed.proxy_base
-            flow.metadata["separator"] = parsed.separator
+            remember_client(flow, parsed)  # rewriters use the client's own Proxy Base and separator
             flow.request.url = parsed.origin_url
         elif (host := self._ca_routed_host(flow)) is not None:
             flow.request.url = f"{client_scheme(flow)}://{host}{flow.request.path}"

@@ -17,7 +17,7 @@ from mitmproxy.exceptions import OptionsError
 
 from lab.clients import ip_address, through_tunnel, tunnel_client_ip
 from lab.config import load_config, load_settings
-from lab.prefixed_url import secret_segment
+from lab.prefixed_url import client_proxy_base, secret_segment
 from lab.refusal import refuse
 
 CONFIG = load_config("guards")
@@ -95,7 +95,8 @@ class Guards:
 
     def _secret_given(self, flow):
         secret = ctx.options.lab_secret
-        given = secret_segment(flow.metadata["proxy_base"])
+        proxy_base, _ = client_proxy_base(flow)
+        given = secret_segment(proxy_base)
         return bool(secret) and hmac.compare_digest(given.encode(), secret.encode())
 
     async def requestheaders(self, flow):

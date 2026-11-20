@@ -8,6 +8,9 @@ The secret segment and device slug are for the Public Endpoint (Cloud Devices).
 
 Every addon that reads or writes Prefixed URLs uses these two functions;
 the rewriters reach build through prefixed_for_client.
+
+It also owns where a flow keeps its client's Proxy Base and separator:
+remember_client writes them, client_proxy_base reads them.
 """
 
 import re
@@ -54,6 +57,22 @@ def device_slug(proxy_base):
     return _path_segment(proxy_base, 1)
 
 
+def remember_client(flow, parsed):
+    """Keep the Proxy Base and separator of the PrefixedUrl `parsed` that `flow` arrived as.
+
+    Plain strings in flow.metadata, under keys saved sessions already hold.
+    """
+    flow.metadata["proxy_base"] = parsed.proxy_base
+    flow.metadata["separator"] = parsed.separator
+
+
+def client_proxy_base(flow):
+    """(proxy_base, separator) of the client that made `flow`, or None if its request was not Prefixed."""
+    if "proxy_base" not in flow.metadata:
+        return None
+    return flow.metadata["proxy_base"], flow.metadata["separator"]
+
+
 def prefixed_for_client(flow, origin_url):
     """origin_url as a Prefixed URL with the Proxy Base of the client that made `flow`.
 
@@ -63,8 +82,8 @@ def prefixed_for_client(flow, origin_url):
     live one only a URL with this client's Proxy Base: an Origin URL may embed
     another URL.
     """
-    proxy_base = flow.metadata["proxy_base"]
+    proxy_base, separator = client_proxy_base(flow)
     parsed = parse_prefixed_url(origin_url)
     if parsed and (flow.is_replay == "response" or parsed.proxy_base == proxy_base):
         origin_url = parsed.origin_url
-    return build_prefixed_url(proxy_base, flow.metadata["separator"], origin_url)
+    return build_prefixed_url(proxy_base, separator, origin_url)

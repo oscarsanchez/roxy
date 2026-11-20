@@ -21,7 +21,7 @@ from mitmproxy.exceptions import OptionsError
 from lab.dash import rewrite_dash
 from lab.hls import rewrite_hls
 from lab.json_body import rewrite_json
-from lab.prefixed_url import prefixed_for_client
+from lab.prefixed_url import client_proxy_base, prefixed_for_client
 from lab.vast_xml import rewrite_xml
 
 
@@ -132,7 +132,7 @@ class BodyRewriter:
         body_format = self.body_format_for(flow.response.headers.get("content-type", ""), flow.request.url)
         if body_format is not None:
             flow.metadata["body_format"] = body_format.name  # e.g. "hls", for manifest edits
-        if "proxy_base" not in flow.metadata or body_format is None:
+        if client_proxy_base(flow) is None or body_format is None:
             return  # not Prefixed, or binary/unknown content: never decoded, passes byte for byte
         body = flow.response.text  # decoded: compression is mitmproxy's job
         rewritten = body_format.rewrite(body, lab_link(flow))

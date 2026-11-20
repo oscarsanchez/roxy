@@ -4,7 +4,7 @@ traffic comes back through the lab."""
 import re
 from urllib.parse import urljoin, urlsplit
 
-from lab.prefixed_url import prefixed_for_client
+from lab.prefixed_url import client_proxy_base, prefixed_for_client
 
 # Where the URL sits in each header value (the "url" group is replaced).
 _WHOLE_VALUE = re.compile(r"(?P<url>.+)")
@@ -19,7 +19,7 @@ _COOKIE_PATH = re.compile(r";\s*path\s*=\s*(?P<url>[^;]+)", re.IGNORECASE)
 
 class ResponseHeaderRewriter:
     def responseheaders(self, flow):
-        if "proxy_base" not in flow.metadata:  # the lab answered a non-Prefixed request itself
+        if client_proxy_base(flow) is None:  # the lab answered a non-Prefixed request itself
             return
         response = flow.response
         urls = dict(_URLS)
