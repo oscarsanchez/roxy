@@ -114,6 +114,13 @@ lan_ip() {
 
 lan_proxy_base() { echo "http://$(lan_ip):$LAB_PORT"; }
 
+# print_lan_addresses IP : the Proxy IP and LAN Proxy Bases lines, as start-lab and
+# roxy status print them.
+print_lan_addresses() {
+  echo "Proxy IP:          $1  (for an app's debug proxy setting)"
+  echo "LAN Proxy Bases:   http://$1:$LAB_PORT  http://$1:$LAB_CHARLES_PORT  (each takes the / and /; forms)"
+}
+
 # tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.
 tunnel_host() {
   curl -fsS "http://$TUNNEL_METRICS/quicktunnel" 2>/dev/null | jq -er '.hostname | select(. != "")'

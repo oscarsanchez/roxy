@@ -77,7 +77,8 @@ echo "ok: status says when the lab is down"
 # status: the lab up reports the Proxy IP, the Proxy Bases and the active Scenario.
 out="$(FAKE_LAB_UP=1 FAKE_SCENARIO=json-503 FAKE_TUNNEL_HOST=tunnel.example "$ROXY" status)" \
   || fail "status with the lab up exited non-zero: $out"
-for want in "lab: up" "Proxy IP:          192.0.2.10" "LAN Proxy Base:    http://192.0.2.10:8080" \
+for want in "lab: up" "Proxy IP:          192.0.2.10" \
+  "LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888" \
   "Public Proxy Base: https://tunnel.example/test-secret" "Scenario:          json-503"; do
   case "$out" in *"$want"*) ;; *) fail "status with the lab up lacks '$want':
 $out" ;; esac

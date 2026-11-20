@@ -71,8 +71,7 @@ status() {
   fi
   public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"
   echo "lab: up (mitmweb UI http://127.0.0.1:$LAB_WEB_PORT)"
-  echo "Proxy IP:          $(lan_ip)"
-  echo "LAN Proxy Base:    $(lan_proxy_base)"
+  print_lan_addresses "$(lan_ip)"
   echo "Public Proxy Base: $public"
   echo "Scenario:          $(jq -r '.lab_scenario.value // "" | if . == "" then "none" else . end' <<< "$options")"
 }
