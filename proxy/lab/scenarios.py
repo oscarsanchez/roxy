@@ -119,6 +119,9 @@ class Scenarios:
         for rule in self.rules:
             handler = getattr(rule.action, hook, None)
             if handler and rule.matches(flow):
+                applied = flow.metadata.setdefault("lab_scenario_rules", [])
+                if rule.name not in applied:
+                    applied.append(rule.name)
                 result = handler(flow)
                 if result is not None:
                     await result

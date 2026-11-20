@@ -168,6 +168,13 @@ not
 $want"
 echo "ok: flows --json prints each flow in the documented shape"
 
+# A flow the lab refused carries its refusal reason; a flow a Scenario touched names the rule.
+[ "$(jq -c '.[1] | [.device, .status, .refusal]' <<< "$out")" = '["Bedroom",403,"origin-address"]' ] \
+  || fail "flows --json gave the refused flow as $(jq -c '.[1]' <<< "$out")"
+[ "$(jq -c '.[2] | [.status, .refusal, .scenario_rules]' <<< "$out")" = '[503,null,["httpbin json fails"]]' ] \
+  || fail "flows --json gave the flow json-503 touched as $(jq -c '.[2]' <<< "$out")"
+echo "ok: flows --json names a flow's refusal reason and the Scenario rules applied"
+
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
 home="$TMP/home"
