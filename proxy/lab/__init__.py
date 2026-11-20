@@ -1,5 +1,6 @@
 """roxy: the lab's mitmproxy addon chain."""
 
+from lab.app_profile import AppProfile
 from lab.body_rewriting import BodyRewriter
 from lab.device_labels import DeviceLabels
 from lab.guards import Guards
@@ -12,9 +13,11 @@ from lab.scenarios import Scenarios, ScenariosBeforeGuards
 
 def addon_chain():
     """Fresh lab addon instances, in hook order."""
-    guards = Guards()
+    app_profile = AppProfile()
+    guards = Guards(app_profile)
     scenarios = Scenarios()
     return [
+        app_profile,  # first: the others read the loaded profile when they configure
         OriginDecoder(),
         ScenariosBeforeGuards(scenarios),  # Origin swaps (map_remote), judged by the guards
         DeviceLabels(guards),  # before the guards: refused flows are labelled too
