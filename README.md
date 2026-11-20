@@ -230,13 +230,13 @@ roxy app list                                            # each profile and its 
 - `scenarios/<scenario>.toml`: its Scenarios, written like the lab's own, with their mocks next to them (`map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`).
 - `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain). Optional: `"rewrite_text": true` turns the text body format on for this app (Header and body rewriting), and `fallback_origin`, below.
 
-A **fallback Origin** catches requests that reach the lab with no Origin in them: a bare path on the LAN proxy port, such as `/live/…/hls/…/seg.ts`, which a Charles hook leaves behind when the app resolves a root-relative URL against the proxy instead of the CDN. In `profile.json`:
+A **fallback Origin**, for LAN listeners only, catches requests that reach the lab with no Origin in them: a bare path on the LAN proxy port, such as `/live/…/hls/…/seg.ts`, which a Charles hook leaves behind when the app resolves a root-relative URL against the proxy instead of the CDN. In `profile.json`:
 
 ```json
 "fallback_origin": {"path": "^/live/[^/]+/hls/", "origin": "https://cdn.example"}
 ```
 
-A bare path the `path` regex matches (searched in the path, not the query) goes to `origin` with its path and query kept, as if it had arrived Prefixed with the client's Proxy Base in the `/;` form: URLs in its response come back as `<Proxy Base>/;<Origin URL>`, while relative ones stay relative and so arrive as bare paths again: write the regex to match those too. Every guard still judges it, so a private Origin is refused `origin-address`. Any other bare path is still refused `not-prefixed`. The Public Endpoint never takes a fallback: a Cloud Device sends Prefixed URLs behind the secret, and a bare path there gets `secret-segment` as before. With CA Routing on, a non-Prefixed request takes its Origin from Host/SNI, never from the fallback. `origin` is `http(s)://host[:port]`; a bad regex or Origin stops the start, naming the profile.
+A bare path the `path` regex matches (searched in the path, not the query) goes to `origin` with its path and query kept, as if it had arrived Prefixed with the client's Proxy Base in the `/;` form: URLs in its response come back as `<Proxy Base>/;<Origin URL>`, while relative ones stay relative and so arrive as bare paths again: write the regex to match those too. Every guard still judges it, so a private Origin is refused `origin-address`. Any other bare path is still refused `not-prefixed`. The Public Endpoint never takes a fallback: it needs a Prefixed URL behind the secret, and a bare path there gets `secret-segment` as before. With CA Routing on, every non-Prefixed request takes its Origin from Host/SNI, on the LAN proxy port too, so the fallback Origin never applies. `origin` is `http(s)://host[:port]`; a bad regex or Origin stops the start, naming the profile.
 
 `roxy start` loads at most one: `--app <name>` (an unknown name fails), else the profile whose repo holds the current folder, else none. To switch apps, stop the lab and start it in the other app's folder. A profile Scenario named like one of the lab's own stops the start, naming both; `roxy scenario list` shows that name once, as `refused: in both (rename the profile's)`. Restart the lab after editing `profile.json`; a Scenario file reloads as usual.
 
@@ -329,7 +329,7 @@ Every session is saved in the saved-session folder, `~/.local/share/roxy/capture
 
 ### CA Routing (Physical Devices only)
 
-DNS on the router (a per-client DNS server such as AdGuard Home, answering every client's DNS) points lab Origins at the Mac, and a CA Routing build of the Lab App (classic or RSG 2.0) calls Origin URLs directly while trusting the lab's CA. mitmweb adds `reverse` listeners on 443 and 80, terminates TLS for the SNI it is given, and takes the Origin from Host/SNI.
+DNS on the router (a per-client DNS server such as AdGuard Home, answering every client's DNS) points lab Origins at the Mac, and a CA Routing build of the Lab App (classic or RSG 2.0) calls Origin URLs directly while trusting the lab's CA. mitmweb adds `reverse` listeners on 443 and 80, terminates TLS for the SNI it is given, and takes the Origin from Host/SNI. That holds for every non-Prefixed request while CA Routing is on, so an App Profile's [fallback Origin](#app-profiles) never applies.
 
 ```sh
 scripts/start-lab --ca-routing                          # also listens on 443/80; Origin from Host/SNI
