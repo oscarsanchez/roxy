@@ -21,7 +21,8 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 
 # Fakes on PATH. curl logs one line of shell-quoted arguments per call (and the URL alone
 # to $CURL_LOG.urls, the request body to $CURL_LOG.body) and answers for
-# mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active), cloudflared's metrics
+# mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active and the App Profile
+# FAKE_APP loaded), cloudflared's metrics
 # (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to.
@@ -42,7 +43,8 @@ echo "$url" >> "$CURL_LOG.urls"
 down() { echo "curl: (7) Failed to connect" >&2; exit 7; }
 case "$url" in
   */options.json) [ "${FAKE_LAB_UP:-}" = 1 ] || down
-    printf '{"lab_scenario": {"value": "%s"}}\n' "${FAKE_SCENARIO:-}" ;;
+    printf '{"lab_scenario": {"value": "%s"}, "lab_app": {"value": "%s"}}\n' \
+      "${FAKE_SCENARIO:-}" "${FAKE_APP:-}" ;;
   */options) [ "${FAKE_LAB_UP:-}" = 1 ] || down
     case " $* " in *" -w "*) printf '\n200' ;; esac ;;
   */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || down
@@ -87,7 +89,8 @@ out="$(FAKE_LAB_UP=1 FAKE_SCENARIO=json-503 FAKE_TUNNEL_HOST=tunnel.example "$RO
   || fail "status with the lab up exited non-zero: $out"
 for want in "lab: up" "Proxy IP:          192.0.2.10" \
   "LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888" \
-  "Public Proxy Base: https://tunnel.example/test-secret" "Scenario:          json-503"; do
+  "Public Proxy Base: https://tunnel.example/test-secret" "App Profile:       none" \
+  "Scenario:          json-503  (lab)"; do
   case "$out" in *"$want"*) ;; *) fail "status with the lab up lacks '$want':
 $out" ;; esac
 done
@@ -100,8 +103,10 @@ done
 echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenario"
 
 # scenario list: the lab's own Scenarios, with or without a running lab.
+source_of() { awk -v n="$1" '$1 == n {$1 = ""; sub(/^ +/, ""); print}' <<< "$2"; }
 out="$("$ROXY" scenario list)" || fail "scenario list: $out"
-for want in json-503 hls-404; do grep -qx "$want" <<< "$out" || fail "scenario list lacks $want: $out"; done
+for want in json-503 hls-404; do [ "$(source_of "$want" "$out")" = lab ] || fail "scenario list lacks $want from the lab: $out"; done
+case "$out" in *"App Profile: none"*) ;; *) fail "scenario list without a profile does not say so: $out" ;; esac
 echo "ok: scenario list shows the lab's Scenarios"
 
 # scenario set and clear switch the running lab's active Scenario through mitmweb's options API.
@@ -212,6 +217,25 @@ case "$out" in *"json-503"*"lab"*"app-a"*) ;; *) fail "the clash refusal does no
 [ ! -e "$UV_LOG" ] || fail "start with a clashing Scenario name started mitmweb"
 rm "$clash"
 echo "ok: a profile Scenario named like the lab's own fails the start, naming both"
+
+# scenario list shows the profile roxy start would load here, and its Scenarios beside the
+# lab's own, each marked by source.
+touch "$ROXY_CONFIG_DIR/apps/app-a/scenarios/empty-catalog.toml"
+out="$(cd "$repos/app-a/src" && "$ROXY" scenario list)" || fail "scenario list in app-a's repo: $out"
+case "$out" in *"App Profile: app-a"*) ;; *) fail "scenario list in app-a's repo does not name app-a: $out" ;; esac
+[ "$(source_of empty-catalog "$out")" = "App Profile app-a" ] || fail "scenario list lacks app-a's empty-catalog: $out"
+[ "$(source_of json-503 "$out")" = lab ] || fail "scenario list in app-a's repo lacks the lab's json-503: $out"
+out="$(cd "$repos/app-a" && "$ROXY" scenario list --app app-b)" || fail "scenario list --app app-b: $out"
+[ -z "$(source_of empty-catalog "$out")" ] || fail "scenario list --app app-b shows app-a's Scenario: $out"
+echo "ok: scenario list shows the App Profile's Scenarios and the lab's, by source"
+
+# status names the running lab's App Profile, and where its active Scenario came from.
+out="$(FAKE_LAB_UP=1 FAKE_APP=app-a FAKE_SCENARIO=empty-catalog "$ROXY" status)" || fail "status with app-a: $out"
+for want in "App Profile:       app-a" "Scenario:          empty-catalog  (App Profile app-a)"; do
+  case "$out" in *"$want"*) ;; *) fail "status with app-a lacks '$want':
+$out" ;; esac
+done
+echo "ok: status names the App Profile and the active Scenario's source"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

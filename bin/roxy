@@ -13,7 +13,7 @@ usage() {
 usage: roxy <subcommand> [args...]
 The roxy lab from any terminal. roxy <subcommand> --help describes one.
   start      run the lab in the foreground, until Ctrl-C
-  status     whether the lab is up, its Proxy IP, Proxy Bases and active Scenario
+  status     whether the lab is up, its Proxy IP, Proxy Bases, App Profile and Scenario
   scenario   list the Scenarios, or set or clear the active one
   launch     launch the dev channel on a Target Device, with its Proxy Base
   console    open a Target Device's debug console
@@ -32,13 +32,14 @@ EOF
     ;;
     status) cat <<'EOF'
 usage: roxy status
-Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases and the active
-Scenario. Exits 1 when the lab is down.
+Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
+and the active Scenario, with its source. Exits 1 when the lab is down.
 EOF
     ;;
     scenario) cat <<'EOF'
-usage: roxy scenario list | set NAME | clear
-  list      the lab's Scenarios
+usage: roxy scenario list [--app NAME] | set NAME | clear
+  list      the Scenarios of the App Profile roxy start would load here (or NAME's)
+            and the lab's own, each with its source
   set NAME  make NAME the running lab's active Scenario (lab-wide)
   clear     leave the running lab with no active Scenario
 EOF
@@ -73,7 +74,7 @@ EOF
 
 status() {
   [ $# -eq 0 ] || die "$(usage status | head -1)"
-  local options public
+  local options public app scenario
   load_env
   require_env MITMWEB_PASSWORD
   if ! options="$(mitmweb_get options.json 2>/dev/null)"; then
@@ -84,15 +85,37 @@ status() {
   echo "lab: up (mitmweb UI http://127.0.0.1:$LAB_WEB_PORT)"
   print_lan_addresses "$(lan_ip)"
   echo "Public Proxy Base: $public"
-  echo "Scenario:          $(jq -r '.lab_scenario.value // "" | if . == "" then "none" else . end' <<< "$options")"
+  app="$(jq -r '.lab_app.value // ""' <<< "$options")"
+  scenario="$(jq -r '.lab_scenario.value // ""' <<< "$options")"
+  echo "App Profile:       ${app:-none}"
+  if [ -z "$scenario" ]; then
+    echo "Scenario:          none"
+  elif [ -n "$app" ] && [ -f "$(app_scenarios_dir "$app")/$scenario.toml" ]; then
+    echo "Scenario:          $scenario  (App Profile $app)"
+  else
+    echo "Scenario:          $scenario  (lab)"
+  fi
+}
+
+# list_scenarios DIR SOURCE : a line per Scenario in DIR, with its SOURCE.
+list_scenarios() {
+  local f
+  for f in "$1"/*.toml; do
+    [ -f "$f" ] || continue
+    printf '%-28s %s\n' "$(basename "$f" .toml)" "$2"
+  done
 }
 
 scenario() {
-  local f
-  case "${1:-} $#" in
-    "list 1") for f in "$LAB_SCENARIOS_DIR"/*.toml; do basename "$f" .toml; done ;;
-    "set 2") set_scenario "$2" ;;
-    "clear 1") set_scenario "" ;;
+  local app
+  case "${1:-} $# ${2:-}" in
+    "list 1 "|"list 3 --app")
+      app="$(resolve_app "${3:-}")"
+      echo "App Profile: ${app:-none}"
+      [ -z "$app" ] || list_scenarios "$(app_scenarios_dir "$app")" "App Profile $app"
+      list_scenarios "$LAB_SCENARIOS_DIR" lab ;;
+    "set 2 "*) set_scenario "$2" ;;
+    "clear 1 ") set_scenario "" ;;
     *) die "$(usage scenario | head -1)" ;;
   esac
 }
