@@ -16,6 +16,7 @@ judge the request the Origin will actually get.
 """
 
 import re
+from functools import partial
 from pathlib import Path
 from urllib.parse import urlsplit
 
@@ -26,6 +27,7 @@ from mitmproxy.addons.modifyheaders import ModifyHeaders, ModifySpec
 
 from lab import clock
 from lab.manifest_edits import ACTIONS as MANIFEST_EDITS
+from lab.prefixed_url import client_proxy_base
 from lab.throttle import Throttle
 
 
@@ -45,22 +47,66 @@ def table(value, action, keys):
     return [value[k] for k in keys]
 
 
+# Placeholders in a `body` or `header` replacement, filled from the client that made
+# the flow: `{name}`, a name of lowercase letters and underscores. Braces keep them
+# clear of regex replacement syntax (`\1`, `\g<1>`) and of the backslash escapes
+# modify_body and modify_headers read in a replacement. A `{name}` not listed here is refused.
+CLIENT_PLACEHOLDERS = {
+    "proxy_base": lambda proxy_base, separator: proxy_base,
+    "proxy_base_no_scheme": lambda proxy_base, separator: proxy_base.partition("://")[2],
+    "separator": lambda proxy_base, separator: separator,
+}
+_PLACEHOLDER = re.compile(r"\{([a-z_]+)\}")
+
+
+def _braced(names):
+    return ", ".join(f"{{{name}}}" for name in names)
+
+
+class ForClient:
+    """A built-in modify_* addon (modify_body, modify_headers) with its replacement's
+    placeholders filled per flow: a built-in's spec is fixed, with no per-flow context.
+
+    A flow that was not Prefixed (CA Routing) has no Proxy Base to fill in: a
+    replacement with placeholders leaves it alone."""
+
+    def __init__(self, addon_class, subject, replacement):
+        unknown = sorted(set(_PLACEHOLDER.findall(replacement)) - set(CLIENT_PLACEHOLDERS))
+        if unknown:
+            raise ValueError(f"unknown placeholder {_braced(unknown)} (known: {_braced(CLIENT_PLACEHOLDERS)})")
+        self.addon_class, self.subject, self.replacement = addon_class, subject, replacement
+        for hook in ("requestheaders", "request", "responseheaders", "response"):
+            if hasattr(addon_class, hook):  # only the built-in's own hooks, so Scenarios calls only those
+                setattr(self, hook, partial(self.run, hook))
+
+    def run(self, hook, flow):
+        replacement = self.replacement
+        if _PLACEHOLDER.search(replacement):
+            client = client_proxy_base(flow)
+            if client is None:
+                return
+            replacement = _PLACEHOLDER.sub(lambda m: CLIENT_PLACEHOLDERS[m[1]](*client), replacement)
+        getattr(builtin(self.addon_class, ModifySpec(ALL, self.subject, replacement)), hook)(flow)
+
+
 def header_replace(value, scenario_dir):
-    """Built-in modify_headers: replace a header (an empty value removes it).
-    Applies to the request or the response, whichever the filter matches."""
+    """Built-in modify_headers: replace a header (an empty value removes it), with
+    client placeholders in the value. Applies to the request or the response,
+    whichever the filter matches."""
     name, header_value = table(value, "header", ("name", "value"))
-    return builtin(ModifyHeaders, ModifySpec(ALL, name.encode(), header_value))
+    return ForClient(ModifyHeaders, name.encode(), header_value)
 
 
 def body_replace(value, scenario_dir):
-    """Built-in modify_body: regex replace in the request or response body."""
+    """Built-in modify_body: regex replace in the request or response body,
+    with client placeholders in the replacement."""
     pattern, replacement = table(value, "body", ("pattern", "replacement"))
     subject = pattern.encode()  # TOML already has escapes; regex backslashes stay single
     try:
         re.compile(subject)
     except re.error as e:
         raise ValueError(f"body pattern {pattern!r}: {e}") from e
-    return builtin(ModifyBody, ModifySpec(ALL, subject, replacement))
+    return ForClient(ModifyBody, subject, replacement)
 
 
 def map_local(value, scenario_dir):
