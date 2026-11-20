@@ -10,7 +10,7 @@ format has a mitmproxy option, lab_rewrite_<name> (e.g. lab_rewrite_json), that
 lists its content types, structured-syntax suffixes ("+json") and URL extensions.
 FORMATS holds the defaults.
 
-The text format is off unless the loaded App Profile turns it on (lab.app_profile).
+An opt-in format (text) is off unless the loaded App Profile turns it on (lab.app_profile).
 """
 
 from collections.abc import Sequence  # what mitmproxy's --set parser matches list options by
@@ -34,6 +34,7 @@ class BodyFormat(NamedTuple):
     rewrite: Callable[[str, Callable[[str], str]], str]
     content_types: frozenset[str]  # defaults for the format's option, suffixes ("+json") included
     extensions: frozenset[str]  # fallback when the content type is not one of ours
+    opt_in: bool = False  # True: off unless the loaded App Profile turns it on (rewrite_text)
 
     @property
     def option(self):
@@ -66,6 +67,7 @@ FORMATS = (
         rewrite_text,
         frozenset({"text/*", "application/javascript", "application/x-javascript", "application/ecmascript"}),
         frozenset(),
+        opt_in=True,
     ),
 )
 
@@ -114,7 +116,7 @@ def lab_link(flow):
 
 class BodyRewriter:
     def __init__(self, app_profile):
-        self.app_profile = app_profile  # its rewrite_text turns the text format on
+        self.app_profile = app_profile  # its rewrite_text turns the opt-in formats on
         self.by_content_type, self.by_extension = {}, {}
 
     def load(self, loader):
@@ -130,7 +132,7 @@ class BodyRewriter:
 
     def configure(self, updated):
         if "lab_app" in updated or any(body_format.option in updated for body_format in FORMATS):
-            formats = [f for f in FORMATS if f.name != "text" or self.app_profile.rewrite_text]
+            formats = [f for f in FORMATS if not f.opt_in or self.app_profile.rewrite_text]
             self.by_content_type, self.by_extension = _format_tables(formats)
 
     def body_format_for(self, content_type, url):
