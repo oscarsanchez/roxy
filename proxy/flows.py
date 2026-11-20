@@ -14,6 +14,9 @@ from lab.refusal import refusal_reason
 from lab.scenarios import applied_rules
 from lab.throttle import paced_seconds
 
+# A roxy launch run id starts with the launch time in Unix seconds: new_run_id in scripts/lib.sh.
+RUN_ID_TIME_DIGITS = 10
+
 
 def size(message):
     return None if message is None or message.raw_content is None else len(message.raw_content)
@@ -44,10 +47,10 @@ def summary(flow):
 
 
 def since(value):
-    """A roxy launch run id (the launch time in Unix seconds, then random digits), or an
-    ISO 8601 time (local time without an offset). Returns Unix seconds."""
+    """A roxy launch run id, or an ISO 8601 time (local time without an offset).
+    Returns Unix seconds."""
     if value.isdigit():
-        return int(value[:10])
+        return int(value[:RUN_ID_TIME_DIGITS])
     try:
         return datetime.fromisoformat(value).timestamp()
     except ValueError:

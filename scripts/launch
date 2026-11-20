@@ -32,7 +32,7 @@ shift
 for param in "$@"; do
   case "$param" in ?*=*) ;; *) die "launch params are key=value, not '$param'. $usage" ;; esac
 done
-run_id="$(date +%s)$RANDOM"
+run_id="$(new_run_id)"
 params=("$@" "run=$run_id")
 lab_lock devices  # the scenario is lab-wide, so one lock covers every Target Device
 

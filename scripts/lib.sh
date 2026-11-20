@@ -186,6 +186,10 @@ set_scenario() {
   echo "scenario=${1:-none}"
 }
 
+# new_run_id : a fresh roxy launch run id: the launch time in Unix seconds (10 digits), then
+# random digits. proxy/flows.py reads the launch time back (RUN_ID_TIME_DIGITS, --since RUN).
+new_run_id() { echo "$(date +%s)$RANDOM"; }
+
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {
   command -v jq >/dev/null || die "jq is required (brew install jq)"
