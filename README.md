@@ -32,7 +32,7 @@ mitmweb runs in mitmproxy's `reverse` mode. Its UI listens on `127.0.0.1` only, 
 3. **Guards**: refuse anything but an allowed client and a public Origin address, and on the Public Endpoint an allowlisted Origin host (see [Guards](#guards)).
 4. **Request header cleanup**: `Host` is the Origin's, `Referer` and `Origin` are decoded back, tunnel headers are stripped.
 5. **Response header and body rewriting**: URLs in headers and in HLS, DASH, VAST/XML and JSON bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests come back through the lab.
-6. **Scenarios**: the active Scenario's Manipulation rules, last, so they see the response as the client gets it.
+6. **Scenarios**: the active Scenario's Manipulation rules, last, so they see the response as the client gets it. The one exception, `map_remote`, swaps the Origin right after Origin decoding, before the guards.
 
 While the lab runs, any device on your LAN subnets can relay through it to any public host, the same as with Charles.
 
@@ -135,7 +135,7 @@ status = 503                                    # status override (the Origin's 
 
 `header` and `body` act on the request and the response, like their mitmproxy built-ins: add `~q` or `~s` to the filter to pick one.
 
-`map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other (allowlist, private addresses). Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
+`map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other: a private address is refused, and through the tunnel so is a host off the allowlist. Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
 
 Manifest edits change manifests only (`filter = "~all"` is fine) and run after Prefixed URL rewriting, so the manifest still routes through the lab:
 
