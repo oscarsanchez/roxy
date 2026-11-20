@@ -185,6 +185,14 @@ if err="$(flows_json --since yesterday 2>&1)"; then fail "flows --json took --si
 case "$err" in *"--since"*) ;; *) fail "flows --json --since yesterday said: $err" ;; esac
 echo "ok: flows --json --since takes a run id or a time"
 
+# --limit N keeps the last N flows, after --since.
+out="$(flows_json --limit 2)" || fail "flows --json --limit 2: $out"
+[ "$(times "$out")" = '["10:01","10:02"]' ] || fail "flows --json --limit 2 gave $(times "$out")"
+out="$(flows_json --since 2025-11-20T10:00:00Z --limit 1)" || fail "flows --json --since --limit: $out"
+[ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:00 --limit 1 gave $(times "$out")"
+flows_json --limit 0 >/dev/null 2>&1 && fail "flows --json took --limit 0"
+echo "ok: flows --json --limit keeps the last N flows"
+
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
 home="$TMP/home"

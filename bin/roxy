@@ -104,7 +104,7 @@ flows() {
     case "$1" in
       --json) json=true; shift ;;
       --filter) [ $# -ge 2 ] || die "$(usage flows | head -1)"; filter="$2"; shift 2 ;;
-      --since) [ $# -ge 2 ] || die "$(usage flows | head -1)"; shape_args+=("$1" "$2"); shift 2 ;;
+      --since|--limit) [ $# -ge 2 ] || die "$(usage flows | head -1)"; shape_args+=("$1" "$2"); shift 2 ;;
       *) die "$(usage flows | head -1)" ;;
     esac
   done
