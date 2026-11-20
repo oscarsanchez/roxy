@@ -1,10 +1,14 @@
 #!/usr/bin/env bash
-# Launch the dev Lab App on a named Target Device over ECP, running one case.
-# Usage: scripts/launch [--scenario NAME] <device-name> <case> [proxy-base]
-#   proxy-base defaults to the LAN Proxy Base. A Cloud Device needs the public
-#   Proxy Base that scripts/start-lab --tunnel prints; launch adds the device's
-#   slug (devices.json) to it, https://<tunnel-host>/<secret>/<slug>, so the lab
-#   can tell Cloud Devices apart.
+# Launch the dev channel on a named Target Device over ECP, with launch params. It never
+# builds or sideloads.
+# Usage: scripts/launch [--scenario NAME] [--proxy-base URL] <device-name> [key=value...]
+#   e.g. scripts/launch "Living Room" case=json_get   (case: the Lab Apps' test case)
+#   Sends proxyBase, then the key=value params, then a fresh run id as run.
+#   proxyBase goes by kind of Target Device: the LAN Proxy Base for a Physical Device;
+#   for a Cloud Device, the running tunnel's public Proxy Base (scripts/start-lab
+#   --tunnel) plus the device's slug (devices.json), https://<tunnel-host>/<secret>/<slug>,
+#   so the lab can tell Cloud Devices apart.
+#   --proxy-base URL sends URL instead; a Cloud Device's slug is still added.
 #   --scenario sets the lab's active scenario (proxy/scenarios/NAME.toml) through
 #   mitmweb's API first; it applies lab-wide. --scenario '' clears it. Without
 #   the flag the active scenario is left as it is.
@@ -12,55 +16,55 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-usage="usage: scripts/launch [--scenario NAME] <device-name> <case> [proxy-base]"
+usage="usage: scripts/launch [--scenario NAME] [--proxy-base URL] <device-name> [key=value...]"
 scenario_given=false
-if [ "${1:-}" = "--scenario" ]; then
-  [ $# -ge 2 ] || die "$usage"
-  scenario_given=true
-  scenario="$2"
-  shift 2
-fi
-[ $# -ge 2 ] && [ $# -le 3 ] || die "$usage"
+proxy_base=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --scenario) [ $# -ge 2 ] || die "$usage"; scenario_given=true; scenario="$2"; shift 2 ;;
+    --proxy-base) [ $# -ge 2 ] || die "$usage"; proxy_base="$2"; shift 2 ;;
+    *) break ;;
+  esac
+done
+[ $# -ge 1 ] || die "$usage"
 device="$1"
-case_name="$2"
+shift
+for param in "$@"; do
+  case "$param" in ?*=*) ;; *) die "launch params are key=value, not '$param'. $usage" ;; esac
+done
 run_id="$(date +%s)$RANDOM"
+params=("$@" "run=$run_id")
 lab_lock devices  # the scenario is lab-wide, so one lock covers every Target Device
 
-# exit_app and launch_dev: ECP on the Target Device, with the case's launch params.
+# exit_app and launch_dev: ECP on the Target Device, with proxyBase and the params.
 ip="$(device_field "$device" ip)"
 rce_name="$(rce_device_name "$device")"
 if [ -n "$ip" ]; then  # Physical Device: ECP on the LAN
-  proxy_base="${3:-$(lan_proxy_base)}"
+  proxy_base="${proxy_base:-$(lan_proxy_base)}"
+  query="proxyBase=$(uri_encode "$proxy_base")"
+  for param in "${params[@]}"; do
+    query="$query&$(uri_encode "${param%%=*}")=$(uri_encode "${param#*=}")"
+  done
   ecp_post() { curl -sS --fail -o /dev/null -X POST -d '' "http://$ip:8060/$1"; }
   exit_app() { ecp_post exit-app/dev; }
-  launch_dev() {
-    ecp_post "launch/dev?proxyBase=$(uri_encode "$proxy_base")&case=$(uri_encode "$case_name")&run=$run_id"
-  }
+  launch_dev() { ecp_post "launch/dev?$query"; }
 elif [ -n "$rce_name" ]; then  # Cloud Device: ECP through the rce CLI, which encodes the params
-  [ $# -eq 3 ] || die "a Cloud Device needs the public Proxy Base (printed by scripts/start-lab --tunnel)"
+  if [ -z "$proxy_base" ]; then
+    load_env
+    proxy_base="$(public_proxy_base)" \
+      || die "a Cloud Device needs the public Proxy Base: start the lab with its tunnel (roxy start --tunnel), or pass --proxy-base"
+  fi
   slug="$(device_field "$device" slug)"
-  proxy_base="${3%/}${slug:+/$slug}"
+  proxy_base="${proxy_base%/}${slug:+/$slug}"
+  rce_params=(--param "proxyBase=$proxy_base")
+  for param in "${params[@]}"; do rce_params+=(--param "$param"); done
   exit_app() { rce ecp "$rce_name" exit-app/dev --method POST >/dev/null; }
-  launch_dev() {
-    rce launch "$rce_name" --param "proxyBase=$proxy_base" --param "case=$case_name" --param "run=$run_id" >/dev/null
-  }
+  launch_dev() { rce launch "$rce_name" "${rce_params[@]}" >/dev/null; }
 else
   die "device '$device' has no launch route: set ip (Physical Device) or rce_device_name (Cloud Device) in $DEVICES_FILE"
 fi
 
-if $scenario_given; then
-  load_env
-  require_env MITMWEB_PASSWORD
-  # Non-GET mitmweb API calls need a matching XSRF cookie and header (any value).
-  answer="$(curl -sS -X PUT "http://127.0.0.1:$LAB_WEB_PORT/options" \
-    -H "Authorization: Bearer $MITMWEB_PASSWORD" \
-    -H "Cookie: _mitmproxy_xsrf=lab" -H "X-XSRFToken: lab" \
-    -H "Content-Type: application/json" \
-    -d "$(jq -n --arg s "$scenario" '{lab_scenario: $s}')" \
-    -w '\n%{http_code}')" || die "could not reach mitmweb on port $LAB_WEB_PORT (is scripts/start-lab running?)"
-  [ "${answer##*$'\n'}" = 200 ] || die "mitmweb refused scenario '$scenario': ${answer%$'\n'*}"
-  echo "scenario=${scenario:-none}"
-fi
+if $scenario_given; then set_scenario "$scenario"; fi
 
 exit_app || true  # fresh process for every run
 launch_dev || die "ECP launch on $device failed"

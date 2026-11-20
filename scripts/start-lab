@@ -15,8 +15,6 @@
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-TUNNEL_METRICS="127.0.0.1:20241"  # cloudflared's local metrics server: readiness and the quick tunnel hostname
-
 usage="usage: scripts/start-lab [--tunnel] [--ca-routing] [--replay SESSION]"
 tunnel=false
 export LAB_CA_ROUTING=false  # read by scripts/run-mitmweb
@@ -48,7 +46,7 @@ quick_tunnel_host() {
   local i
   for i in $(seq 30); do
     if curl -fsS -o /dev/null "http://$TUNNEL_METRICS/ready" 2>/dev/null; then
-      curl -fsS "http://$TUNNEL_METRICS/quicktunnel" | jq -er '.hostname | select(. != "")'
+      tunnel_host
       return
     fi
     sleep 1
@@ -57,9 +55,10 @@ quick_tunnel_host() {
 }
 
 echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in $SECRETS_FILE)"
-echo "LAN Proxy Base:    $(lan_proxy_base)"
+ip="$(lan_ip)" || true  # lan_ip names the problem; the lab still starts
+print_lan_addresses "$ip"
 if [ "$LAB_CA_ROUTING" = true ]; then
-  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $(lan_ip); point lab Origins here in DNS (README, CA Routing)"
+  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $ip; point lab Origins here in DNS (README, CA Routing)"
 fi
 
 # mitmweb and the tunnel stop together, whichever way the lab stops.

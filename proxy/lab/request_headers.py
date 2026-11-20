@@ -26,4 +26,4 @@ class RequestHeaderCleanup:
             del headers[name]
         for name in ("referer", "origin"):
             if parsed := parse_prefixed_url(headers.get(name, "")):
-                headers[name] = parsed[1]
+                headers[name] = parsed.origin_url

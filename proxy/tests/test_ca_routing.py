@@ -107,7 +107,6 @@ def test_ca_routing_is_for_physical_devices_only_so_a_tunnel_request_must_still_
 @pytest.mark.parametrize(
     ("flow_args", "dns_answers", "reason"),
     [
-        ({"host_header": "example.com", "sni": "example.com"}, {}, "origin-host"),
         ({"peer": ("203.0.113.7", 51000)}, {}, "client-ip"),
         # The Mac's own DNS also points the Origin at the lab: forwarding would loop.
         ({}, {ORIGIN_HOST: ["192.0.2.10"]}, "origin-address"),
@@ -122,6 +121,14 @@ def test_every_guard_still_applies_to_a_ca_routed_request(dns, flow_args, dns_an
     assert forwarded is None
     assert flow.response.status_code == 403
     assert flow.response.headers["X-Lab-Blocked"] == reason
+
+
+def test_a_ca_routed_request_reaches_a_public_origin_not_on_the_allowlist():
+    flow = ca_routed_flow("/json", host_header="not-allowlisted.example", sni="not-allowlisted.example")
+
+    forwarded = run(flow)
+
+    assert forwarded.url == "https://not-allowlisted.example/json"
 
 
 def test_a_redirect_location_is_left_as_an_origin_url():
