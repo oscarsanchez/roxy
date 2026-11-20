@@ -141,7 +141,8 @@ name = "json fails"
 filter = "~d httpbin.org & ~u /json"
 status = 503                                    # status override (the Origin's body is kept)
 # latency = 2.5                                 # seconds, before the request reaches the Origin
-# throttle = { kbps = 400 }                     # the response reaches the client at no more than 400 kbps
+# throttle = { kbps = 400 }                     # what the rule matches reaches each Target Device at no more than 400 kbps together
+# throttle = { kbps = 400, per = "request" }    # each matching response on its own at no more than 400 kbps
 # drop = true                                   # close the connection, no answer, Origin not contacted
 # header = { name = "Cache-Control", value = "no-store" }   # replace; "" removes (mitmproxy modify_headers)
 # body = { pattern = "regex", replacement = "text" }        # regex replace (mitmproxy modify_body)
@@ -168,7 +169,12 @@ body = { pattern = 'mediaHost="', replacement = 'mediaHost="{proxy_base_no_schem
 
 A placeholder is `{name}`, lowercase letters and underscores: braces stay clear of regex replacement syntax (`\1`, `\g<1>`). Any other `{name}` in a replacement is refused when the Scenario loads (a broken edit keeps the last good rules), so a literal `{word}` cannot be written there. A flow that was not Prefixed (CA Routing) has no Proxy Base: a rule with placeholders leaves it alone.
 
-`throttle` caps each matching flow on its own (no shared link), like Charles's Throttle without the presets: the response starts at once and arrives slowly, so a player sees a slow download, not a late one, and ABR can step down. It paces the response after every other rule and the lab's own rewriting, and takes a positive `kbps`. HTTP/1 only: a flow whose client speaks HTTP/2 shares its connection with other flows, so it is sent unthrottled and the mitmweb event log says so. Add a `latency` rule with the same filter for a slow, high-latency link. On a Cloud Device the paced bytes go through the quick tunnel: keep such runs short.
+`throttle` paces responses to the client: a response starts at once and arrives slowly, so a player sees a slow download, not a late one, and ABR can step down. It paces after every other rule and the lab's own rewriting, and takes a positive `kbps`, in one of two modes:
+
+- `{ kbps = N }`, shared: everything the rule matches for one Target Device shares N kbps, like one slow link. Concurrent responses split it fairly, so a player's parallel range requests add up to N, not k × N, and a response alone gets all of N. Each Target Device has its own N, and so does each rule. A Physical Device is told apart by its IP; a Cloud Device, which reaches the lab through cloudflared like every other, by the device slug in its Proxy Base (else its client IP from the tunnel, so Cloud Devices without a slug behind one RCE egress IP share N).
+- `{ kbps = N, per = "request" }`: each matching response gets N on its own.
+
+When two `throttle` rules match one flow, the lower cap wins. Unlike Charles's Throttle: it caps downloads only (the request goes up at full speed); latency is a separate `latency` rule, added once per request, not per packet; and the cap is steady, with no packet loss or fluctuation, and no presets. HTTP/1 only: a flow whose client speaks HTTP/2 shares its connection with other flows, so it is sent unthrottled and the mitmweb event log says so. Add a `latency` rule with the same filter for a slow, high-latency link. On a Cloud Device the paced bytes go through the quick tunnel: keep such runs short.
 
 `map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other: a private address is refused, and through the tunnel so is a host off the allowlist. Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
 

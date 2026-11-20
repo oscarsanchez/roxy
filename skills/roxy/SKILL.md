@@ -34,6 +34,7 @@ filter = "~d api.example.com & ~u /catalog"     # mitmproxy filter expression: ~
 status = 503
 ```
 
+- `throttle = { kbps = N }` caps everything the rule matches for one Target Device at N kbps together (parallel range requests share N); `throttle = { kbps = N, per = "request" }` caps each response on its own. Downloads only, latency per request (a `latency` rule), no packet loss or fluctuation, unlike Charles's Throttle; HTTP/1 only.
 - Filters see the Origin URL. `status` replaces the status of the Origin's response (the Origin is still contacted); `drop` closes the connection without contacting it.
 - Each rule takes exactly one action: `status`, `latency`, `throttle`, `drop`, `header`, `body`, `map_local` (a mock: `map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`), `map_remote`, or a manifest edit. Syntax and behaviour of each: README, 5. Scenarios. Every matching rule applies, in file order.
 - Activate: `roxy scenario set <scenario> [<scenario>...]` (replaces the active ones), `roxy scenario add <scenario>`, or `roxy launch --scenario <scenario> ...` (repeatable). Several can be active: their rules apply in that order, then file order. It applies from the next request on, with no lab restart. Editing an active file reloads it on the next request; a broken edit is logged and that Scenario's last good rules stay, so confirm in the flows.
