@@ -85,3 +85,53 @@ def test_a_url_already_prefixed_for_this_client_is_not_prefixed_again(app_profil
     assert client_body("text/html", body, separator, lab_app="example-app") == (
         f'<a href="{LAN_PROXY_BASE}{separator}https://example.org/a">'
     )
+
+
+@pytest.mark.parametrize(
+    "after",
+    [".", ",", ";", ":", "!", "?", ")", "]", "}", "&quot;", "&#39;", "&gt;", ").", "&quot;,", "?)"],
+)
+@pytest.mark.parametrize("separator", ["/", "/;"])
+def test_punctuation_or_an_entity_after_a_url_stays_outside_its_prefixed_url(app_profile, after, separator):
+    app_profile("example-app", rewrite_text=True)
+    body = f"(see https://example.org/a/b?c=1{after} next)"
+
+    assert client_body("text/html", body, separator, lab_app="example-app") == (
+        f"(see {LAN_PROXY_BASE}{separator}https://example.org/a/b?c=1{after} next)"
+    )
+
+
+@pytest.mark.parametrize("separator", ["/", "/;"])
+def test_a_parenthesis_ends_a_url_so_each_css_background_url_is_prefixed(app_profile, separator):
+    app_profile("example-app", rewrite_text=True)
+    body = "background: url(https://cdn.example.com/a.png),url(https://cdn.example.com/b.png);"
+
+    lab = f"{LAN_PROXY_BASE}{separator}"
+    assert client_body("text/css", body, separator, lab_app="example-app") == (
+        f"background: url({lab}https://cdn.example.com/a.png),url({lab}https://cdn.example.com/b.png);"
+    )
+
+
+@pytest.mark.parametrize("separator", ["/", "/;"])
+def test_a_closing_bracket_the_url_opens_stays_inside_it(app_profile, separator):
+    app_profile("example-app", rewrite_text=True)
+    body = "[https://example.org/a[0]]. {https://example.org/b{1}}"
+
+    lab = f"{LAN_PROXY_BASE}{separator}"
+    assert client_body("text/plain", body, separator, lab_app="example-app") == (
+        f"[{lab}https://example.org/a[0]]. {{{lab}https://example.org/b{{1}}}}"
+    )
+
+
+@pytest.mark.parametrize("entity", ["&quot;", "&#39;", "&#34;", "&gt;", "&lt;"])
+@pytest.mark.parametrize("separator", ["/", "/;"])
+def test_an_entity_ends_a_url_so_the_url_after_it_is_prefixed_too(app_profile, entity, separator):
+    """JSON in an HTML attribute: its quotes are entities, with no space between URLs."""
+    app_profile("example-app", rewrite_text=True)
+    body = f"<div data-urls='[{entity}https://cdn.example.com/a.js{entity},{entity}https://cdn.example.com/b.js{entity}]'>"
+
+    lab = f"{LAN_PROXY_BASE}{separator}"
+    assert client_body("text/html", body, separator, lab_app="example-app") == (
+        f"<div data-urls='[{entity}{lab}https://cdn.example.com/a.js{entity},"
+        f"{entity}{lab}https://cdn.example.com/b.js{entity}]'>"
+    )
