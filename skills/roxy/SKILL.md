@@ -7,7 +7,7 @@ description: Use for a Roku app's network traffic through the roxy lab (mitmprox
 
 roxy is a mitmproxy lab on the user's Mac. A Roku app that sends its Outbound Traffic through it can be read request by request (`roxy flows --json`) and manipulated by Scenarios: an Origin fails, slows down or answers from a mock. Every flag: `roxy <subcommand> --help`. Full reference: [README.md](README.md). Wiring an app: [Prefix Routing guide](prefix-routing.md), [CA Routing guide](ca-routing.md).
 
-`roxy` comes from the user's roxy checkout, whose `./install.sh` links it into `~/.local/bin`; without it, ask the user to run that. Paths the guides name (`kit/`, `scripts/deploy`) are in that checkout: `realpath "$(command -v roxy)"` prints `<checkout>/bin/roxy`.
+`roxy` comes from the user's roxy checkout, whose `./install.sh` links it into `~/.local/bin`; without it, ask the user to run that. Paths the guides name (such as `kit/`) are in that checkout: `realpath "$(command -v roxy)"` prints `<checkout>/bin/roxy`.
 
 Words: a **Target Device** is the Roku running the app, a Physical Device (on the LAN) or a Cloud Device (Roku Cloud Emulator, billed per Run: the `rce` skill). An **Origin** is the real server a request is for. The **Proxy Base** is the lab address the app puts in front of each Origin URL, making a **Prefixed URL**. An **App Profile** keeps one app's Scenarios and mocks in the user's roxy settings, outside every repo.
 
@@ -19,7 +19,7 @@ Words: a **Target Device** is the Roku running the app, a Physical Device (on th
    - `roxy start` refusing over a missing setting (`secrets.env`, `devices.json`, `lan_subnets`) names the file; those are the user's to fill in, in the settings root (`~/.config/roxy/`, or `$ROXY_CONFIG_DIR`).
 
    Done when `roxy status` prints `lab: up` and `App Profile: <this app's profile>`.
-2. **App routed.** Only requests sent to a Prefixed URL reach the lab. Find how this app does it: a Charles hook (a debug proxy setting in a sideloaded build, on port 8888; the user types the `Proxy IP` from `roxy status` into the app), the kit (`RoxyUrl` or `prefixedUrl` in the source, built with `bs_const=roxy_kit=true` or `ROXY_KIT=1`), or neither, and then the Prefix Routing guide wires one in. roxy never builds or sideloads: the app's own build does, or `scripts/deploy "<device>" <app folder>` from the checkout.
+2. **App routed.** Only requests sent to a Prefixed URL reach the lab. Find how this app does it: a Charles hook (a debug proxy setting in a sideloaded build, on port 8888; the user types the `Proxy IP` from `roxy status` into the app), the kit (`RoxyUrl` or `prefixedUrl` in the source, built with `bs_const=roxy_kit=true` or `ROXY_KIT=1`), or neither, and then the Prefix Routing guide wires one in. roxy never builds or sideloads an app: build and sideload it with the app's own tooling, as its repo does, then launch it with roxy.
 3. **Launch.** `roxy launch [--scenario NAME] "<device>" [key=value...]`, with a device name from `devices.json` in the settings root. It relaunches the sideloaded dev channel with the `proxyBase` launch param (the kit reads it; a Charles hook ignores it) and prints `run=<id>`: keep the id, for either kind of app.
 4. **Read the flows.** `roxy flows --json --since <run id>`. Done when every request you expected is in the output, or its absence is explained (Reading flows).
 
