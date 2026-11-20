@@ -11,6 +11,8 @@ import ipaddress
 
 from mitmproxy import ctx
 
+from lab.prefixed_url import client_proxy_base, device_slug
+
 
 def ip_address(text):
     """An IP address, IPv4-mapped IPv6 unmapped, scope id dropped. Raises ValueError."""
@@ -37,3 +39,17 @@ def client_scheme(flow):
     if through_tunnel(flow) and (forwarded := flow.request.headers.get("X-Forwarded-Proto")):
         return forwarded
     return "https" if flow.client_conn.tls else "http"
+
+
+def target_device(flow):
+    """Which Target Device sent the flow, to tell devices apart (lab.device_labels names them).
+
+    A Physical Device is its IP: it opens a connection per parallel request, each from
+    its own port. Every Cloud Device reaches the lab through cloudflared, so all share
+    its peer: one is the device slug in its Proxy Base, else its tunnel client IP
+    (Cloud Devices without a slug behind one RCE egress IP are one device here)."""
+    if not through_tunnel(flow):
+        return ip_address(flow.client_conn.peername[0])
+    client = client_proxy_base(flow)
+    slug = client and device_slug(client.proxy_base)
+    return ("slug", slug) if slug else ("tunnel client", tunnel_client_ip(flow))

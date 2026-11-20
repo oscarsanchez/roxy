@@ -7,13 +7,18 @@ from mitmproxy import http
 from mitmproxy.exceptions import OptionsError
 from mitmproxy.test import tutils
 
-from chain import Lab, lab_flow
+from chain import SECRET, TUNNEL_OPTIONS, Lab, lab_flow, tunnel_flow
 
 SEGMENT_BYTES = 500_000  # 500 KB
 
 
-def segment_get():
-    return lab_flow("/https://test-streams.mux.dev/video/720p/segment-1.ts")
+DEVICE = "192.0.2.54"
+OTHER_DEVICE = "192.0.2.55"
+
+
+def segment_get(device=DEVICE, port=51000):
+    """A segment request from a Physical Device, on the connection from `port`."""
+    return lab_flow("/https://test-streams.mux.dev/video/720p/segment-1.ts", peer=(device, port))
 
 
 def origin_segment(size=SEGMENT_BYTES):
@@ -79,6 +84,79 @@ throttle = { kbps = 800 }
 
     assert waited == pytest.approx(0.2)
     assert received[-1][0] == pytest.approx(5, abs=0.1)  # 500 KB at 100 KB a second
+
+
+def test_concurrent_responses_to_one_device_share_the_cap_fairly(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    first, second = segment_get(port=51000), segment_get(port=51001)
+
+    with Lab(**options) as lab:
+        lab.run_together((first, origin_segment()), (second, origin_segment()))
+        received = lab.received(first), lab.received(second)
+
+    for seconds in (1, 5, 10):  # 400 kbps is 50 KB a second, for both together
+        assert sum(received_by(r, seconds) for r in received) <= 50_000 * seconds + 5_000
+    for r in received:  # each about half
+        assert received_by(r, 10) == pytest.approx(250_000, rel=0.05)
+        assert r[-1][0] == pytest.approx(20, abs=0.2)
+
+
+def test_a_response_alone_on_the_shared_cap_gets_all_of_it(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    short, long = segment_get(port=51000), segment_get(port=51001)
+
+    with Lab(**options) as lab:
+        lab.run_together((short, origin_segment(250_000)), (long, origin_segment()))
+        received = lab.received(short), lab.received(long)
+
+    # Both at 25 KB a second until the short one is done at 10 s, then the long one's
+    # last 250 KB at 50 KB a second.
+    assert received[0][-1][0] == pytest.approx(10, abs=0.2)
+    assert received[1][-1][0] == pytest.approx(15, abs=0.2)
+
+
+def test_each_device_gets_its_own_cap(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    flows = segment_get(DEVICE), segment_get(OTHER_DEVICE)
+
+    with Lab(**options) as lab:
+        lab.run_together(*((flow, origin_segment()) for flow in flows))
+        received = [lab.received(flow) for flow in flows]
+
+    for r in received:  # each 500 KB at 50 KB a second
+        assert r[-1][0] == pytest.approx(10, abs=0.2)
+
+
+def test_cloud_devices_behind_the_tunnel_each_get_their_own_cap(scenarios):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    path = "/{secret}/{slug}/https://test-streams.mux.dev/video/720p/segment-1.ts"
+    # Both reach the lab through cloudflared, from one RCE egress IP: only the slug tells them apart.
+    flows = [tunnel_flow(path.format(secret=SECRET, slug=slug)) for slug in ("living-room", "bedroom")]
+
+    with Lab(**options, **TUNNEL_OPTIONS) as lab:
+        lab.run_together(*((flow, origin_segment()) for flow in flows))
+        received = [lab.received(flow) for flow in flows]
+
+    for r in received:
+        assert r[-1][0] == pytest.approx(10, abs=0.2)
+
+
+def test_each_throttle_rule_has_its_own_cap_for_a_device(scenarios):
+    options = scenarios("slow-media", SLOW_SEGMENTS.format(kbps=400) + '''
+[[rule]]
+name = "slow audio"
+filter = "~u /audio/"
+throttle = { kbps = 400 }
+''')
+    video = segment_get(port=51000)
+    audio = lab_flow("/https://test-streams.mux.dev/audio/segment-1.aac", peer=(DEVICE, 51001))
+
+    with Lab(**options) as lab:
+        lab.run_together((video, origin_segment()), (audio, origin_segment()))
+        received = [lab.received(flow) for flow in (video, audio)]
+
+    for r in received:
+        assert r[-1][0] == pytest.approx(10, abs=0.2)
 
 
 @pytest.mark.parametrize("active", ["slow,slower", "slower,slow"])

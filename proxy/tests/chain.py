@@ -197,10 +197,22 @@ class Lab:
         hangs up. `lab_stops_at`: seconds after the response starts at which mitmweb
         stops, cancelling the tasks still sending it, as asyncio does on the way out.
         """
+        return self._run_in_lab(self._run(flow, origin_response, client_hangs_up_at, lab_stops_at))
+
+    def run_together(self, *exchanges):
+        """Run several (flow, origin_response) exchanges at once, as `run` does one: concurrent
+        requests, each on its own client connection, their responses sent over the same time.
+        Returns each forwarded request, in order."""
+        return self._run_in_lab(self._run_all(exchanges))
+
+    async def _run_all(self, exchanges):
+        return await asyncio.gather(*(self._run(flow, response, None, None) for flow, response in exchanges))
+
+    def _run_in_lab(self, run):
+        """Run the coroutine `run` on the lab's event loop, with the test's clock and client writers."""
         real = clock.current, throttle.client_writer
         clock.current, throttle.client_writer = self.clock, self._client_writer
         try:
-            run = self._run(flow, origin_response, client_hangs_up_at, lab_stops_at)
             return self._context.master.event_loop.run_until_complete(run)
         finally:
             clock.current, throttle.client_writer = real
