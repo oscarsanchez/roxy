@@ -131,6 +131,8 @@ roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then lau
 
 Each prints the active Scenarios after the change (`scenario=json-503,image-404`); an unknown name is refused and leaves them as they were. Or edit `lab_scenario` in mitmweb's Options: the active names in order, comma-separated. Editing an active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
 
+In mitmweb, a flow a rule acted on is marked 🧪 (unless the lab refused it: ⛔) and its comment lists the rules after the device label, `Living Room | json-503/httpbin json fails`; filter `~comment json-503/` for one Scenario's flows.
+
 Each rule has a `name`, a mitmproxy `filter` expression and exactly one action. Every matching rule applies, in file order. Flows the lab refused itself are never touched.
 
 ```toml
@@ -245,7 +247,7 @@ A bare path the `path` regex matches (searched in the path, not the query) goes 
 
 ### Guards
 
-The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed` (unless the App Profile's [fallback Origin](#app-profiles) takes it); through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
+The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked ⛔ in mitmweb. A non-Prefixed request gets 400 `not-prefixed` (unless the App Profile's [fallback Origin](#app-profiles) takes it); through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
 
 - A LAN client must be on one of your `lan_subnets`, and may reach any public Origin: the allowlist guards the Public Endpoint only.
 - Relay exposure: while the lab runs, any device on your LAN subnets can use it as an HTTP relay to any public host, the same as with Charles. Only private, loopback, link-local and unique-local Origins stay out of reach.

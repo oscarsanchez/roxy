@@ -200,7 +200,7 @@ status = 503
 
     assert from_origin.response.status_code == 503  # later rules still apply
     assert from_rule.response.status_code == 503
-    assert not from_origin.marked and not from_rule.marked
+    assert from_origin.marked == from_rule.marked == ":test_tube:"  # the rules' marker, not a refusal's
 
 
 FAIL_JSON = '''
@@ -369,6 +369,44 @@ def test_a_broken_edit_to_one_active_scenario_leaves_the_others_alone(scenarios)
 
     assert (edited.response.status_code, title(edited)) == (418, "Edited Slide Show")
     assert added.response.status_code == 418
+
+
+def test_mitmweb_shows_the_rules_that_acted_after_the_device_label_and_marks_the_flow(scenarios):
+    options = scenarios("fail-json", FAIL_JSON.format(status=418))
+    scenarios("to-lab", RETITLE.format(old="Sample Slide Show", new="Lab Slide Show"))
+    acted_on, left_alone = json_get(), lab_flow("/https://httpbin.org/image")
+
+    with Lab(**{**options, "lab_scenario": "fail-json,to-lab"}) as lab:
+        lab.run(acted_on, origin_json())
+        lab.run(left_alone, origin_json())
+
+    assert (acted_on.comment, acted_on.marked) == ("Living Room | fail-json/json fails, to-lab/retitle", ":test_tube:")
+    assert (left_alone.comment, left_alone.marked) == ("Living Room", "")
+
+
+def test_a_flow_without_a_device_label_shows_just_the_rules(scenarios):
+    options = scenarios("fail-json", FAIL_JSON.format(status=418))
+    flow = lab_flow("/https://httpbin.org/json", peer=("192.0.2.99", 51000))  # a LAN client, not in devices.json
+
+    run_chain(flow, origin_json(), **options)
+
+    assert (flow.comment, flow.marked) == ("fail-json/json fails", ":test_tube:")
+
+
+def test_a_refusal_keeps_its_marker_and_shows_the_origin_swap_that_led_to_it(scenarios, dns):
+    dns["router.example"] = ["192.0.2.200"]  # a private address
+    options = scenarios("to-router", '''
+[[rule]]
+name = "swap"
+filter = "~d httpbin.org"
+map_remote = "http://router.example"
+''')
+    flow = json_get()
+
+    run_chain(flow, origin_json(), **options)
+
+    assert flow.response.headers["x-lab-blocked"] == "origin-address"
+    assert (flow.comment, flow.marked) == ("Living Room | to-router/swap", ":no_entry:")
 
 
 @pytest.mark.parametrize("refused", ["fail-json,no-such-scenario", "fail-json,to-lab,fail-json"])

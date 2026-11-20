@@ -19,7 +19,7 @@ from urllib.request import Request, urlopen
 from mitmproxy import http, io
 
 from lab.refusal import refusal_reason
-from lab.scenarios import applied_rules, scenario_names, scenario_value
+from lab.scenarios import applied_rules, comment_before_rules, scenario_names, scenario_value
 from lab.throttle import paced_seconds
 
 RUN_ID_TIME_DIGITS = 10  # a run id starts with the launch time in Unix seconds
@@ -148,7 +148,7 @@ def _summary(flow):
     return {
         "id": flow.id,
         "time": datetime.fromtimestamp(flow.timestamp_created, UTC).isoformat(timespec="milliseconds").replace("+00:00", "Z"),
-        "device": flow.comment or None,  # the lab's device label
+        "device": comment_before_rules(flow) or None,  # the lab's device label
         "method": flow.request.method,
         "url": flow.request.url,  # the Origin URL: the Origin decoder points the request at it
         "status": response and response.status_code,

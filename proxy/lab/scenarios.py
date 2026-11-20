@@ -39,6 +39,23 @@ def applied_rules(flow):
     return flow.metadata.get("lab_scenario_rules", [])
 
 
+def show_applied_rules(flow):
+    """Show in mitmweb the Scenario rules that acted on this flow: after its comment (the
+    device label), as `<device> | <scenario>/<rule>, ...`, and a marker unless it has one
+    (a refusal keeps its own)."""
+    applied = applied_rules(flow)
+    if not applied:
+        return
+    flow.metadata.setdefault("lab_comment_before_rules", flow.comment)
+    flow.comment = " | ".join(filter(None, [comment_before_rules(flow), ", ".join(applied)]))
+    flow.marked = flow.marked or ":test_tube:"
+
+
+def comment_before_rules(flow):
+    """The flow's comment without the rules show_applied_rules added: its device label."""
+    return flow.metadata.get("lab_comment_before_rules", flow.comment)
+
+
 def scenario_names(value):
     """The active Scenarios' names, in order, from a `lab_scenario` value."""
     return [name.strip() for name in value.split(",") if name.strip()]
@@ -160,8 +177,12 @@ class Scenarios:
         await self._dispatch("response", flow)
 
     async def _dispatch(self, hook, flow):
-        if refused(flow):  # a guard's answer must stay visible
-            return
+        if not refused(flow):  # a guard's answer must stay visible
+            await self._apply(hook, flow)
+        if hook != "before_guards":  # by now the device labels have named the flow
+            show_applied_rules(flow)
+
+    async def _apply(self, hook, flow):
         for scenario in self.active:
             for rule in scenario.rules:
                 handler = getattr(rule.action, hook, None)
