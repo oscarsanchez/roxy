@@ -10,9 +10,14 @@ callable runs on the event loop, so it cannot wait without stalling every flow
 until the response is final, at the `response` hook, then takes over the client
 connection's writer: mitmproxy's writes queue there, and a task sends them on
 at the paced rate before handing the writer back.
+
+HTTP/1 only. An HTTP/2 (or HTTP/3) connection carries many flows at once, so
+taking its writer over would pace every other flow on it too: such a flow is
+sent unthrottled, and the event log says so.
 """
 
 import asyncio
+import logging
 import math
 import time
 
@@ -37,6 +42,12 @@ class Throttle:
         self.bytes_per_second = kbps * 1000 / 8
 
     def response(self, flow):
+        if not flow.request.http_version.startswith("HTTP/1"):
+            logging.warning(
+                f"{flow.request.url} not throttled: its client speaks {flow.request.http_version}, "
+                "and throttle paces HTTP/1 connections only"
+            )
+            return
         writer = client_writer(flow)
         if writer is not None:
             PacedWriter.take_over(writer, self.bytes_per_second)

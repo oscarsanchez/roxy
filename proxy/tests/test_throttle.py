@@ -152,3 +152,18 @@ def test_a_lab_stopping_mid_response_still_closes_the_client_connection(scenario
     assert received_by(received, 3.05) < SEGMENT_BYTES
     assert ended[-1][0] == "close"
     assert ended[-1][1] == pytest.approx(3, abs=0.1)
+
+
+def test_an_http2_flow_is_not_throttled_and_the_log_says_why(scenarios, caplog):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+    flow = segment_get()
+    flow.request.http_version = "HTTP/2.0"
+
+    with Lab(**options) as lab:
+        lab.run(flow, origin_segment())
+        received = lab.received(flow)
+
+    assert received_by(received, 0) > SEGMENT_BYTES
+    skipped = [r for r in caplog.records if "not throttled" in r.getMessage()]
+    assert len(skipped) == 1
+    assert "HTTP/2.0" in skipped[0].getMessage() and "HTTP/1" in skipped[0].getMessage()

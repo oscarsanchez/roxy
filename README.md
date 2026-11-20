@@ -145,7 +145,7 @@ status = 503                                    # status override (the Origin's 
 
 `header` and `body` act on the request and the response, like their mitmproxy built-ins: add `~q` or `~s` to the filter to pick one.
 
-`throttle` caps each matching flow on its own (no shared link), like Charles's Throttle without the presets: the response starts at once and arrives slowly, so a player sees a slow download, not a late one, and ABR can step down. It paces the response after every other rule and the lab's own rewriting, and takes a positive `kbps`. Add a `latency` rule with the same filter for a slow, high-latency link. On a Cloud Device the paced bytes go through the quick tunnel: keep such runs short.
+`throttle` caps each matching flow on its own (no shared link), like Charles's Throttle without the presets: the response starts at once and arrives slowly, so a player sees a slow download, not a late one, and ABR can step down. It paces the response after every other rule and the lab's own rewriting, and takes a positive `kbps`. HTTP/1 only: a flow whose client speaks HTTP/2 shares its connection with other flows, so it is sent unthrottled and the mitmweb event log says so. Add a `latency` rule with the same filter for a slow, high-latency link. On a Cloud Device the paced bytes go through the quick tunnel: keep such runs short.
 
 `map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other: a private address is refused, and through the tunnel so is a host off the allowlist. Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
 
