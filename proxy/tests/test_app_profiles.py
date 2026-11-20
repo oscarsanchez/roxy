@@ -1,7 +1,6 @@
 """App Profiles: one Product App's Public Endpoint allowlist, Scenarios and mocks, kept in
 the user's settings root (apps/<name>/) and loaded for a session with `lab_app`."""
 
-import json
 import re
 import subprocess
 
@@ -18,22 +17,6 @@ from lab.app_profiles import (
     ScenarioInBoth,
     UnknownAppProfile,
 )
-
-
-@pytest.fixture
-def app_profile(settings):
-    """Write an App Profile into the temp settings root, as `roxy app new` lays it out;
-    returns its folder."""
-
-    def write(name, origin_allowlist=()):
-        folder = settings / "apps" / name
-        (folder / "scenarios").mkdir(parents=True)
-        (folder / "profile.json").write_text(
-            json.dumps({"repo": "/repos/example", "origin_allowlist": list(origin_allowlist)})
-        )
-        return folder
-
-    return write
 
 
 def test_the_loaded_profiles_allowlist_admits_its_host_through_the_public_endpoint(app_profile):

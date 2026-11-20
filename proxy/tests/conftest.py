@@ -1,3 +1,4 @@
+import json
 import shutil
 import socket
 from pathlib import Path
@@ -46,5 +47,21 @@ def scenarios(tmp_path):
     def write(name, toml):
         (tmp_path / f"{name}.toml").write_text(toml)
         return {"lab_scenarios_dir": str(tmp_path), "lab_scenario": name}
+
+    return write
+
+
+@pytest.fixture
+def app_profile(settings):
+    """Write an App Profile into the temp settings root, as `roxy app new` lays it out;
+    returns its folder. `fields` are further profile.json keys."""
+
+    def write(name, origin_allowlist=(), **fields):
+        folder = settings / "apps" / name
+        (folder / "scenarios").mkdir(parents=True)
+        (folder / "profile.json").write_text(
+            json.dumps({"repo": "/repos/example", "origin_allowlist": list(origin_allowlist), **fields})
+        )
+        return folder
 
     return write
