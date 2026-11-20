@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One RAF ad break. RAF must run in a Task thread in a SceneGraph app. -->
+<component name="AdTask" extends="Task">
+  <interface>
+    <field id="adUrl" type="string"/>
+    <!-- the node the ad UI is parented to -->
+    <field id="view" type="node"/>
+    <!-- {outcome, ads, impressions, completes, errors, media}: media is the first creative URL -->
+    <field id="result" type="assocarray"/>
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/AdTask.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/Certificates.brs"/>
+</component>

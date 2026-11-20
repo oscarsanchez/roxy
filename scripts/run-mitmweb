@@ -1,0 +1,73 @@
+#!/usr/bin/env bash
+# Run mitmweb with the lab addon chain. The one place its flags live: shared by
+# scripts/start-lab (macOS, through uv) and compose.yaml (Docker).
+# Usage: scripts/run-mitmweb MITMWEB-COMMAND...   e.g. scripts/run-mitmweb uv run mitmweb
+# Env: MITMWEB_PASSWORD; LAB_SECRET (Public Endpoint, optional);
+#   LAB_LOCAL_HOST: where the UI and the tunnel listener bind, 127.0.0.1 by default.
+#   A container sets 0.0.0.0, and Compose keeps them local instead (UI published
+#   on localhost only, tunnel listener not published at all).
+#   LAB_CA_ROUTING=true: also listen on the CA Routing ports (LAB_CA_ROUTING_PORTS) for
+#   Origin URLs that DNS sends here, and take their Origin from Host/SNI.
+#   LAB_LAN_SUBNETS: client subnets (CIDR, space-separated) allowed on the LAN listener,
+#   instead of lan_subnets in proxy/config/guards.json. compose.yaml sets it.
+#   LAB_REPLAY: a saved session (relative to the repo, or absolute) to answer from
+#   with server replay instead of the Origins. Offline: a request it did not record gets
+#   an empty 404 from the lab and never reaches its Origin.
+# Every session is saved to captures/<start time>.mitm.
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+
+require_env MITMWEB_PASSWORD
+local_host="${LAB_LOCAL_HOST:-127.0.0.1}"
+
+# CA Routing: the same `reverse` mode. mitmproxy terminates TLS itself when a client
+# starts with a ClientHello, signing a certificate for its SNI with the lab's CA.
+ca_routing_args=()
+if [ "${LAB_CA_ROUTING:-}" = true ]; then
+  for port in $LAB_CA_ROUTING_PORTS; do
+    ca_routing_args+=(--mode "reverse:http://127.0.0.1:9@$port")
+  done
+  ca_routing_args+=(--set lab_ca_routing=true)
+fi
+
+lan_subnet_args=()
+for subnet in ${LAB_LAN_SUBNETS:-}; do
+  lan_subnet_args+=(--set "lab_lan_subnets=$subnet")
+done
+
+# A fixed name: a strftime pattern in save_stream_file would start a new file every second.
+session="$REPO_ROOT/captures/$(date +%Y%m%d-%H%M%S).mitm"
+echo "Saving session to: $session"
+replay_opts=()
+if [ -n "${LAB_REPLAY:-}" ]; then
+  replay="$(cd "$REPO_ROOT" && realpath "$LAB_REPLAY")" || die "no saved session at $LAB_REPLAY"
+  [ -f "$replay" ] || die "no saved session at $LAB_REPLAY"
+  echo "Replaying:         $replay"
+  # reuse: the Lab App may run a case more than once. extra=404: unrecorded requests stay
+  # offline (404, not kill, so a guard's refusal still shows: KeepRefusals).
+  replay_opts=(--set server_replay="$replay" --set server_replay_reuse=true --set server_replay_extra=404)
+fi
+
+cd "$REPO_ROOT/proxy"
+# mitmproxy's `reverse` mode to a dummy target: the Origin decoder points each request at its Origin.
+# keep_host_header lets it see the client's Proxy Base; lazy never dials the dummy target.
+# Two listeners: the LAN listener for Physical Devices, and the tunnel listener that
+# only cloudflared dials, which is how the lab tells tunnel requests apart.
+exec "$@" \
+  --mode "reverse:http://127.0.0.1:9@$LAB_PORT" \
+  --mode "reverse:http://127.0.0.1:9@$local_host:$LAB_TUNNEL_PORT" \
+  ${ca_routing_args[@]+"${ca_routing_args[@]}"} \
+  ${lan_subnet_args[@]+"${lan_subnet_args[@]}"} \
+  --web-host "$local_host" --web-port "$LAB_WEB_PORT" \
+  --set web_password="$MITMWEB_PASSWORD" \
+  --set web_open_browser=false \
+  --set keep_host_header=true \
+  --set connection_strategy=lazy \
+  --set lab_secret="${LAB_SECRET:-}" \
+  --set lab_tunnel_port="$LAB_TUNNEL_PORT" \
+  --set save_stream_file="$session" \
+  --set web_columns=tls --set web_columns=icon --set web_columns=path --set web_columns=method \
+  --set web_columns=status --set web_columns=size --set web_columns=time \
+  --set web_columns=comment \
+  ${replay_opts[@]+"${replay_opts[@]}"} \
+  -s entry.py

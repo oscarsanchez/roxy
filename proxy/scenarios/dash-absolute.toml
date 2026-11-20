@@ -1,0 +1,9 @@
+# The DASH case's manifest, served locally with an absolute BaseURL. No public clear
+# DASH stream uses absolute URLs, so this is how the device exercises the DASH rewriter:
+# every segment must still come through the lab.
+# scripts/launch --scenario dash-absolute "Living Room" dash
+
+[[rule]]
+name = "bbb manifest with an absolute BaseURL"
+filter = "~d dash.akamaized.net & ~u /akamai/bbb_30fps/bbb_30fps\\.mpd"
+map_local = "dash-absolute/bbb_30fps.mpd"

@@ -1,0 +1,44 @@
+#!/usr/bin/env bash
+# Every mechanical check, no devices or network: the pre-commit hook (.githooks) runs it.
+# Usage: scripts/check
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+cd "$REPO_ROOT"
+
+step() { echo "== $*"; }
+
+step "proxy tests (Seam A)"
+(cd proxy && uv run --quiet pytest -q)
+
+step "grid tests"
+(cd grid && uv run --quiet pytest -q)
+
+step "shell syntax"
+for f in scripts/* scripts/tests/* .githooks/*; do
+  if [ -f "$f" ] && head -1 "$f" | grep -q bash; then bash -n "$f"; fi
+done
+bash -n scripts/lib.sh
+
+step "lab lock"
+scripts/tests/lab-lock.sh >/dev/null
+
+step "Cloud Device scripts (fake rce)"
+scripts/tests/rce-scripts.sh >/dev/null
+
+step "compose config"
+if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
+  MITMWEB_PASSWORD="${MITMWEB_PASSWORD:-check}" docker compose config -q  # no .env needed to parse
+else
+  echo "skipped: no docker compose CLI"
+fi
+
+step "glossary"
+(cd proxy && uv run --quiet python ../scripts/check-glossary)
+
+step "test imports"
+# Proxy tests reach the lab through tests/chain.py (the full addon chain), never a lab module.
+if grep -nE '^[[:space:]]*(from|import)[[:space:]]+lab([.[:space:]]|$)' proxy/tests/test_*.py; then
+  die "proxy tests import lab modules (above); go through tests/chain.py instead"
+fi
+
+echo "all checks passed"

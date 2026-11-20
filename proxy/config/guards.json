@@ -1,0 +1,39 @@
+{
+  "lan_subnets": ["192.0.2.0/24"],
+  "rce_egress_ips": [
+    "44.239.29.169",
+    "34.209.122.192",
+    "54.202.182.128",
+    "100.21.142.143",
+    "34.210.16.174",
+    "34.215.23.153",
+    "35.160.218.63",
+    "35.81.125.176",
+    "54.188.9.148"
+  ],
+  "origin_allowlist": [
+    "httpbin.org",
+    "jsonplaceholder.typicode.com",
+    "postman-echo.com",
+    "dummyjson.com",
+    "cdn.dummyjson.com",
+    "picsum.photos",
+    "fastly.picsum.photos",
+    "placehold.co",
+
+    "devstreaming-cdn.apple.com",
+    "test-streams.mux.dev",
+    ".mux.com",
+    "dash.akamaized.net",
+    "storage.googleapis.com",
+    "proxy.uat.widevine.com",
+    "cwip-shaka-proxy.appspot.com",
+
+    "pubads.g.doubleclick.net",
+    "securepubads.g.doubleclick.net",
+    "pagead2.googlesyndication.com",
+    ".gvt1.com",
+    "imasdk.googleapis.com",
+    "devtools.web.roku.com"
+  ]
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VAST xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vast.xsd" version="3.0">
+ <Ad id="5926829006">
+  <Wrapper>
+   <AdSystem>GDFP</AdSystem>
+   <VASTAdTagURI><![CDATA[https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/utility_samples&sz=640x480&output=vast&env=vp&impl=s&correlator=1076014185]]></VASTAdTagURI>
+   <Error><![CDATA[https://pagead2.googlesyndication.com/pagead/interaction/?ai=B3qx&label=videoplayfailed[ERRORCODE]]]></Error>
+   <Impression><![CDATA[https://pagead2.googlesyndication.com/pcs/view?xai=AKAOjss&sig=Cg0A&uach_m=%5BUACH%5D&adurl=]]></Impression>
+   <Creatives>
+    <Creative id="138381594974" sequence="1">
+     <Linear>
+      <TrackingEvents>
+       <Tracking event="start"><![CDATA[https://pagead2.googlesyndication.com/pagead/interaction/?ai=B3qx&label=part2viewed&ad_mt=%5BAD_MT%5D]]></Tracking>
+      </TrackingEvents>
+     </Linear>
+    </Creative>
+   </Creatives>
+  </Wrapper>
+ </Ad>
+</VAST>

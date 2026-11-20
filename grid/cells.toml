@@ -1,0 +1,82 @@
+# Grid cells for scripts/grid. A cell is Lab App flavour x Target Device kind x traffic class.
+# Each traffic class names the Lab App case to launch, the Manipulation scenario
+# (proxy/scenarios/<name>.toml) that must change its result line, the Origin hosts the
+# lab must see when no scenario is active (fnmatch patterns), and the result-line fields
+# that mean the Lab App succeeded without a scenario.
+# Optional per class: known_limits = { "<flavour>.<physical|cloud|ca-routing>" = "reason" }
+# turns a failing cell into known-limit with that reason (ca-routing: a Physical Device in
+# CA Routing, scripts/grid --ca-routing).
+
+run_timeout_s = 60  # per launch; the playback cases report within 30 s
+settle_s = 3        # after the result line, so in-flight flows reach mitmweb
+
+# Projected Cloud Device time and cost, printed before the grid runner touches RCE.
+rce_start_s = 120  # a Run the grid starts: billed from the request, takes input after about 80 s
+rce_deploy_s = 60
+rce_usd_per_device_hour = 0.20  # list price that rk quotes
+
+# Result-line fields that only Prefix Routing can satisfy (is the URL a Prefixed URL?).
+# A CA Routing cell leaves them out of ok: its Lab App calls Origin URLs directly.
+prefix_routing_fields = ["prefixed", "media"]
+
+[flavours]  # Lab App directory for scripts/deploy
+classic = "apps/classic"
+rsg = "apps/rsg"
+
+[devices]  # Target Device per kind (names from proxy/config/devices.json)
+physical = "Living Room"
+cloud = "Cloud Device"
+ca-routing = "Travel Stick"  # the Physical Device on the GL.iNet Wi-Fi (docs/ca-routing.md)
+
+[classes.json]
+case = "json_get"
+scenario = "json-503"
+expect_hosts = ["httpbin.org"]
+ok = { status = "200" }
+
+[classes.json_post]
+case = "json_post"
+scenario = "json-post-edit"  # edits the request body: the echoed fp changes, sentfp does not
+expect_hosts = ["httpbin.org"]
+ok = { status = "200" }
+
+[classes.image]
+case = "image"
+scenario = "image-404"
+expect_hosts = ["dummyjson.com", "cdn.dummyjson.com"]
+ok = { status = "200", prefixed = "yes", poster = "ready" }
+known_limits = { "rsg.ca-routing" = "the RSG 2.0 SDK cannot set certificates on Poster, so it does not trust the lab's CA" }
+
+[classes.hls]
+case = "hls"
+scenario = "hls-404"
+# The variant playlists and segments are on hosts named only inside the playlists:
+# they reach the lab only through the body rewriter.
+expect_hosts = ["stream.mux.com", "manifest-*.mux.com", "chunk-*.mux.com"]
+ok = { state = "playing" }
+
+[classes.dash]
+case = "dash"
+scenario = "dash-404"
+expect_hosts = ["dash.akamaized.net"]
+ok = { state = "playing" }
+
+[classes.widevine]
+case = "widevine"
+scenario = "widevine-license-fail"
+expect_hosts = ["storage.googleapis.com", "proxy.uat.widevine.com"]
+# license is not in ok: Roku OS 16 on a Roku 3 reports 2 on success, not the HTTP status (ticket 11).
+ok = { state = "playing" }
+
+[classes.raf]
+case = "raf"
+scenario = "raf-ad-tag-drop"
+# The wrapped tag, media and beacons are named only inside the VAST bodies:
+# they reach the lab only through the body rewriter (Prefix Routing) or DNS (CA Routing).
+# The beacon host varies with Google's response (pagead2.googlesyndication.com on
+# 2026-11-16, securepubads.g.doubleclick.net on 2026-11-17), so it is not expected here;
+# a beacon that bypasses the lab still shows as a console leak.
+expect_hosts = ["pubads.g.doubleclick.net", "*.gvt1.com"]
+ok = { outcome = "completed", media = "lab" }
+# classic CA Routing: RAF trusts the lab CA (AdTask.brs); its ad hosts are in the DNS rewrites.
+known_limits = { "rsg.ca-routing" = "the SDK's Ads task gives no access to RAF's certificate settings, so RAF does not trust the lab's CA" }

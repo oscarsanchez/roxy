@@ -1,0 +1,5 @@
+#!/usr/bin/env bash
+# Enable once per clone: git config core.hooksPath .githooks
+# Runs scripts/check; prints its output only when a check fails.
+out="$("$(git rev-parse --show-toplevel)/scripts/check" 2>&1)" || { echo "$out"; exit 1; }
+echo "scripts/check: all checks passed"

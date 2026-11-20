@@ -1,0 +1,8 @@
+# The Widevine case's license request is denied (403; the Origin body is kept).
+# The manifest and segments are untouched, so only the license step fails.
+# scripts/launch --scenario widevine-license-fail "Living Room" widevine
+
+[[rule]]
+name = "widevine license denied"
+filter = "~d proxy.uat.widevine.com & ~u /proxy"
+status = 403

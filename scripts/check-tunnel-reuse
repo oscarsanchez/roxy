@@ -1,0 +1,92 @@
+#!/usr/bin/env bash
+# Live check: the tunnel listener answers every request when cloudflared reuses its connection.
+# Usage: scripts/check-tunnel-reuse
+#   Sends Prefixed URL requests to one Origin over one keep-alive connection to the tunnel
+#   listener, as cloudflared does: with LAB_SECRET, and an RCE egress IP in CF-Connecting-IP.
+#   It reconnects only when the lab closes the connection; a fixed lab closes it after every
+#   response. Fails if any request is not a 200 from the Origin, or takes over 10 s.
+#   The regression it guards: pinned Origin connections are never reused, and mitmproxy
+#   keeps at most 5 open per address per client connection, so on a reused connection the
+#   6th request to the same Origin waited forever (the Cloud Device widevine row in
+#   docs/evaluation.md).
+#   Uses the running lab, or starts one for the check (scripts/start-lab, no tunnel).
+#   Needs internet (storage.googleapis.com); no Cloud Device, cloudflared or RCE.
+#   Not part of scripts/check, which stays offline.
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+
+load_env
+require_env LAB_SECRET
+
+tunnel_listener_up() { nc -z 127.0.0.1 "$LAB_TUNNEL_PORT" 2>/dev/null; }
+
+# stop_lab PID : stop a lab this script started, and wait until its listener is gone.
+stop_lab() {
+  kill "$1" 2>/dev/null || true
+  wait "$1" 2>/dev/null || true
+  for _ in $(seq 20); do tunnel_listener_up || return 0; sleep 0.5; done
+}
+
+if tunnel_listener_up; then
+  echo "using the running lab"
+else
+  mkdir -p "$REPO_ROOT/out"
+  lab_log="$REPO_ROOT/out/check-tunnel-reuse-lab.log"
+  echo "starting the lab for the check (log: $lab_log)"
+  "$REPO_ROOT/scripts/start-lab" >"$lab_log" 2>&1 &
+  lab_pid=$!
+  on_exit "stop_lab $lab_pid"
+  trap 'exit 130' INT
+  trap 'exit 143' TERM
+  for _ in $(seq 120); do
+    tunnel_listener_up && break
+    kill -0 "$lab_pid" 2>/dev/null || die "the lab did not start (see $lab_log)"
+    sleep 0.5
+  done
+  tunnel_listener_up || die "the tunnel listener did not come up in 60 s (see $lab_log)"
+fi
+
+export LAB_TUNNEL_PORT
+cd "$REPO_ROOT/proxy"
+uv run --quiet python - <<'PY'
+import http.client
+import json
+import os
+import sys
+import time
+from pathlib import Path
+from urllib.parse import urlsplit
+
+from lab.prefixed_url import build_prefixed_url
+
+ORIGIN_URL = "https://storage.googleapis.com/wvmedia/cenc/h264/tears/tears_sd.mpd"  # the widevine case's manifest
+REQUESTS = 8  # more than mitmproxy's 5 open Origin connections per client connection
+TIMEOUT_S = 10
+
+port = int(os.environ["LAB_TUNNEL_PORT"])
+egress_ip = json.loads(Path("config/guards.json").read_text())["rce_egress_ips"][0]
+prefixed = urlsplit(build_prefixed_url(f"http://127.0.0.1:{port}/{os.environ['LAB_SECRET']}", ORIGIN_URL))
+headers = {"CF-Connecting-IP": egress_ip, "X-Forwarded-Proto": "https"}  # what cloudflared adds
+
+print(f"{REQUESTS} requests for {ORIGIN_URL} through the tunnel listener (127.0.0.1:{port})")
+connection = http.client.HTTPConnection(prefixed.hostname, prefixed.port, timeout=TIMEOUT_S)
+connections = 0
+for n in range(1, REQUESTS + 1):
+    if connection.sock is None:  # http.client reconnects only after the lab closed the connection
+        connections += 1
+    start = time.monotonic()
+    try:
+        connection.request("GET", prefixed.path, headers=headers)
+        response = connection.getresponse()
+        response.read()
+    except TimeoutError:
+        sys.exit(f"FAIL: request {n} got no answer within {TIMEOUT_S} s (connection {connections})")
+    elapsed = time.monotonic() - start
+    if response.status != 200:
+        blocked = response.headers.get("X-Lab-Blocked")
+        sys.exit(f"FAIL: request {n} got {response.status}" + (f", refused by the lab: {blocked}" if blocked else ""))
+    if elapsed > TIMEOUT_S:
+        sys.exit(f"FAIL: request {n} took {elapsed:.1f} s, over {TIMEOUT_S} s (connection {connections})")
+    print(f"  request {n}: 200 in {elapsed:.1f} s (connection {connections})")
+print(f"OK: {REQUESTS} requests answered over {connections} connection(s)")
+PY

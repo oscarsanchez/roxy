@@ -1,0 +1,16 @@
+[project]
+name = "roku-mitm-lab-grid"
+version = "0.1.0"
+description = "Grid runner for the Roku MITM lab: fills one grid cell on a Target Device"
+requires-python = ">=3.12"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

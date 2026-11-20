@@ -1,0 +1,8 @@
+# Every HLS master keeps only its lowest-bandwidth variant (each DASH AdaptationSet its lowest Representation)
+# Manifest edits only touch manifests, so the filter can be broad.
+# scripts/launch --scenario hls-lowest-variant "Living Room" hls
+
+[[rule]]
+name = "HLS: only the lowest variant"
+filter = "~all"
+drop_variants = { all_but = "lowest" }

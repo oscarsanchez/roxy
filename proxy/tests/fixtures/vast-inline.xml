@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VAST xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:noNamespaceSchemaLocation="vast.xsd" version="3.0">
+ <Ad id="5925573263">
+  <InLine>
+   <AdSystem>GDFP</AdSystem>
+   <AdTitle>External - Single Inline Linear</AdTitle>
+   <Description><![CDATA[External - Single Inline Linear ad]]></Description>
+   <Error><![CDATA[https://pagead2.googlesyndication.com/pagead/interaction/?ai=B3qx&label=videoplayfailed[ERRORCODE]]]></Error>
+   <Impression><![CDATA[https://pagead2.googlesyndication.com/pcs/view?xai=AKAO&sig=Cg0A&uach_m=%5BUACH%5D&adurl=]]></Impression>
+   <Creatives>
+    <Creative id="138381721867" AdID="H0Hrk8zCNZI" sequence="1">
+     <Linear>
+      <Duration>00:00:10</Duration>
+      <TrackingEvents>
+       <Tracking event="start"><![CDATA[https://pagead2.googlesyndication.com/pagead/interaction/?ai=B3qx&label=part2viewed&ad_mt=%5BAD_MT%5D]]></Tracking>
+       <Tracking event="firstQuartile"><![CDATA[https://pagead2.googlesyndication.com/pagead/interaction/?ai=B3qx&label=videoplaytime25&ad_mt=%5BAD_MT%5D]]></Tracking>
+       <Tracking event="complete">
+        https://pagead2.googlesyndication.com/pagead/interaction/?ai=B3qx&amp;label=videoplaytime100
+       </Tracking>
+      </TrackingEvents>
+      <VideoClicks>
+       <ClickThrough id="GDFP"><![CDATA[https://pagead2.googlesyndication.com/pcs/click?xai=AKAO&sig=Cg0A&adurl=https://developers.google.com/interactive-media-ads]]></ClickThrough>
+      </VideoClicks>
+      <MediaFiles>
+       <MediaFile id="GDFP" delivery="progressive" width="640" height="360" type="video/mp4" bitrate="140" scalable="true" maintainAspectRatio="true">
+        <![CDATA[https://redirector.gvt1.com/api/manifest/progressive/0f6b6bc4a2d5f4c0/18?id=0f6b&itag=18&source=dclk_video_ads]]>
+       </MediaFile>
+       <MediaFile id="GDFP" delivery="streaming" width="256" height="144" type="application/x-mpegURL" minBitrate="96" maxBitrate="494" scalable="true" maintainAspectRatio="true"><![CDATA[https://redirector.gvt1.com/api/manifest/hls_variant/id/0f6b/itag/0/source/dclk_video_ads/playlist.m3u8]]></MediaFile>
+      </MediaFiles>
+     </Linear>
+    </Creative>
+    <Creative id="138381056765" sequence="1">
+     <CompanionAds>
+      <Companion id="138381056765" width="300" height="250">
+       <StaticResource creativeType="image/png"><![CDATA[https://pagead2.googlesyndication.com/pagead/imgad?id=CICAgKCrlICQ5AEQrAIY-gEyCJ7Zm8wHhzuy]]></StaticResource>
+       <CompanionClickThrough><![CDATA[https://pagead2.googlesyndication.com/pcs/click?xai=AKAO&adurl=]]></CompanionClickThrough>
+      </Companion>
+     </CompanionAds>
+    </Creative>
+   </Creatives>
+   <Extensions><Extension type="esp"><EspLibrary LibraryName="uidapi.com" LibraryUrl=""/></Extension></Extensions>
+  </InLine>
+ </Ad>
+</VAST>

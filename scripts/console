@@ -1,0 +1,12 @@
+#!/usr/bin/env bash
+# Record a Physical Device's BrightScript console (port 8085) to out/console/, from the
+# moment it connects, and print the file, the result line and any crash marker.
+# Usage: scripts/console <device-name> [--launch CASE [--scenario NAME]] [--seconds N]
+#   e.g. scripts/console "Travel Stick" --launch raf
+#   --launch runs scripts/launch after connecting and stops at that run's result line.
+#   The device allows one console client; this holds it while it records.
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+lab_lock devices  # its launch inherits it
+cd "$REPO_ROOT/grid"
+uv run --quiet python -u console.py "$@"

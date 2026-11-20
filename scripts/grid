@@ -1,0 +1,17 @@
+#!/usr/bin/env bash
+# Fill one grid cell (Lab App flavour x Target Device kind x traffic class) through the
+# running lab and print pass, fail or known-limit with a reason, as an evaluation row.
+# Usage: scripts/grid <classic|rsg> <physical|cloud> <traffic-class> [--proxy-base URL] [--ca-routing]
+#   e.g. scripts/grid classic physical json
+#   --ca-routing: the cell in CA Routing on the GL.iNet's Physical Device (docs/ca-routing.md);
+#   needs scripts/start-lab --ca-routing.
+#   Needs scripts/start-lab running (with --tunnel for a Cloud Device, whose public Proxy
+#   Base goes in --proxy-base). Cells, scenarios and expected hosts: grid/cells.toml.
+#   A Cloud Device cell prints its projected RCE time and cost and asks before touching RCE;
+#   it starts the Cloud Device (rce) if it has no Run, and stops it after the cell if it did.
+#   Exit status: 0 pass or known-limit, 1 fail.
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+lab_lock devices  # held across the cell; its deploy and launches inherit it
+cd "$REPO_ROOT/grid"
+uv run --quiet python -u run_cell.py "$@"  # -u: keep its lines in order with deploy's

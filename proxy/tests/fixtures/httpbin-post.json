@@ -1,0 +1,21 @@
+{
+  "args": {},
+  "headers": {
+    "Accept": "*/*",
+    "Content-Length": "36",
+    "Content-Type": "application/json",
+    "Host": "httpbin.org",
+    "User-Agent": "Roku/DVP-16.0 (16.0.4.853-04)"
+  },
+  "method": "POST",
+  "origin": "203.0.113.7",
+  "url": "https://httpbin.org/post",
+  "data": "{\"case\":\"json_post\",\"n\":1,\"ok\":true}",
+  "files": {},
+  "form": {},
+  "json": {
+    "case": "json_post",
+    "n": 1,
+    "ok": true
+  }
+}

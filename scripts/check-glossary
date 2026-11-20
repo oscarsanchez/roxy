@@ -1,0 +1,70 @@
+#!/usr/bin/env python3
+"""Fail on any term GLOSSARY.md lists under _Avoid_, in tracked code and docs.
+
+Usage: scripts/check-glossary   (run by scripts/check)
+Matching is case-insensitive, whole words, plurals included. Not flagged:
+- glossary terms themselves (`prefix` inside "Prefix Routing");
+- an "(unqualified)" avoid term: only a qualified use is right, and grep cannot tell;
+- a match touching a `/`: a path such as `captures/`, not prose;
+- phrases in scripts/glossary-allow.txt, one per line with the reason;
+- a line carrying the marker glossary-ok (third-party names and the like).
+"""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+REPO = Path(__file__).resolve().parent.parent
+ALLOW_FILE = REPO / "scripts" / "glossary-allow.txt"
+MARKER = "glossary-ok"
+SKIP = re.compile(  # the glossary and this lint name the terms; specs, fixtures and lockfiles are not ours to word
+    r"^(GLOSSARY\.md|scripts/check-glossary|scripts/glossary-allow\.txt|\.scratch/|proxy/tests/fixtures/)|(\.lock|-lock\.yaml)$"
+)
+
+
+def phrase(text: str) -> str:
+    """A phrase as a regex: whole words, any space or hyphen between them, plural allowed."""
+    words = r"[\s-]+".join(re.escape(w) for w in text.split())
+    return rf"(?<![\w/]){words}(?:s|es)?(?![\w/])"
+
+
+def glossary() -> tuple[list[str], list[str]]:
+    text = (REPO / "GLOSSARY.md").read_text()
+    terms = re.findall(r"^\*\*(.+?)\*\*:", text, re.M)
+    avoid = [
+        t.strip()
+        for line in re.findall(r"^_Avoid_:(.*)$", text, re.M)
+        for t in line.split(",")
+        if "(unqualified)" not in t
+    ]
+    return terms, avoid
+
+
+def main() -> int:
+    terms, avoid = glossary()
+    allowed = [line.split("#")[0].strip() for line in ALLOW_FILE.read_text().splitlines()]
+    longest_first = sorted(terms + [a for a in allowed if a], key=len, reverse=True)
+    exempt = re.compile("|".join(phrase(p) for p in longest_first), re.I)
+    banned = re.compile("|".join(phrase(a) for a in avoid), re.I)
+    files = subprocess.run(["git", "ls-files"], cwd=REPO, check=True, stdout=subprocess.PIPE, text=True).stdout
+    hits = []
+    for name in files.splitlines():
+        path = REPO / name
+        if SKIP.search(name) or not path.is_file():
+            continue
+        data = path.read_bytes()
+        if b"\0" in data:  # binary
+            continue
+        for n, line in enumerate(data.decode("utf-8", "replace").splitlines(), 1):
+            if MARKER in line:
+                continue
+            for match in banned.finditer(exempt.sub(" ", line)):
+                hits.append(f"{name}:{n}: '{match.group(0)}' (GLOSSARY.md _Avoid_)")
+    for hit in hits:
+        print(hit, file=sys.stderr)
+    return 1 if hits else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

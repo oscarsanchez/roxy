@@ -1,0 +1,7 @@
+# The image case's poster image answers 404 (the catalog JSON is untouched).
+# scripts/launch --scenario image-404 "Living Room" image
+
+[[rule]]
+name = "catalog thumbnail missing"
+filter = "~d cdn.dummyjson.com"
+status = 404

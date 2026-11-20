@@ -1,0 +1,4 @@
+# Phrases scripts/check-glossary never flags, one per line: phrase  # why it is right here.
+Roku  # the vendor (Roku OS, Roku's docs); the lint cannot tell it from "the Roku" meaning a Target Device
+client  # the proxy sense (LAN client, client IP, client response) is the lab's own; the Lab App is never called one
+Roku Cloud Emulator  # the product's name (Cloud Device is ours)

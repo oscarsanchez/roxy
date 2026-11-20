@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="LabScene" extends="Scene">
+  <interface>
+    <field id="proxyBase" type="string" onChange="onProxyBase"/>
+    <field id="runId" type="string"/>
+    <field id="case" type="string" onChange="onCase"/>
+  </interface>
+  <script type="text/brightscript" uri="pkg:/components/Certificates.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/PrefixedUrl.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/Fingerprint.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/Cases.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/LabScene.brs"/>
+  <children>
+    <Rectangle color="0x101820FF" width="1280" height="720"/>
+    <Label text="Roku MITM Lab (classic)" translation="[80,50]"/>
+    <Label id="proxyBaseLabel" translation="[80,100]"/>
+    <LabelList id="menu" translation="[80,170]" itemSize="[600,48]"/>
+    <Label id="resultLabel" translation="[80,600]" width="1120" wrap="true"/>
+  </children>
+</component>

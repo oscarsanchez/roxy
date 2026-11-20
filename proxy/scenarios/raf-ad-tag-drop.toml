@@ -1,0 +1,8 @@
+# The RAF case's ad tag requests are dropped (no answer), so RAF gets no ads.
+# A status override is not enough: RAF read a 503's VAST body and followed its wrapper.
+# scripts/launch --scenario raf-ad-tag-drop "Living Room" raf
+
+[[rule]]
+name = "ad server unreachable"
+filter = "~d pubads.g.doubleclick.net & ~u /gampad/ads"
+drop = true

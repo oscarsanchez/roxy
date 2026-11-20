@@ -1,0 +1,42 @@
+# The lab under Docker Compose: the same addon chain, config, scenarios and
+# mitmweb flags (scripts/run-mitmweb) as scripts/start-lab, mounted from the repo.
+# Secrets come from .env, which Compose reads from this directory.
+#   docker compose up                    # LAN listener only (Physical Devices)
+#   docker compose --profile tunnel up   # plus the quick tunnel (Cloud Devices)
+# Ports match scripts/lib.sh: 8080 LAN listener, 8081 UI, 8082 tunnel listener.
+# CA Routing (phase 2) is not wired here; it runs with scripts/start-lab --ca-routing.
+# Under Compose it would need LAB_CA_ROUTING=true, ports 443 and 80 published, and a
+# persistent mitmproxy confdir volume (/home/mitmproxy/.mitmproxy): the container
+# makes a new CA each time otherwise, and the CA Routing build ships that CA.
+name: roku-mitm-lab
+
+services:
+  mitmweb:
+    image: mitmproxy/mitmproxy:12.3.1  # the version pinned in proxy/pyproject.toml
+    user: mitmproxy
+    entrypoint: ["/lab/scripts/run-mitmweb", "mitmweb"]
+    environment:
+      MITMWEB_PASSWORD: ${MITMWEB_PASSWORD:?missing secret in .env}
+      LAB_SECRET: ${LAB_SECRET:-}  # empty: every tunnel request is refused
+      LAB_REPLAY: ${LAB_REPLAY:-}  # replay mode: a saved session, e.g. captures/<start time>.mitm
+      LAB_LOCAL_HOST: 0.0.0.0      # the ports below keep the UI and tunnel listener local
+      # The LAN subnet (proxy/config/guards.json) plus Docker Desktop's host address: on macOS
+      # every published-port client arrives from 192.168.65.1 (README, Docker Compose).
+      LAB_LAN_SUBNETS: ${LAB_LAN_SUBNETS:-192.0.2.0/24 192.168.65.1/32}
+      PYTHONUNBUFFERED: "1"        # mitmweb's log shows in `docker compose logs` as it happens
+    ports:
+      - "8080:8080"            # LAN listener, for Physical Devices
+      - "127.0.0.1:8081:8081"  # mitmweb UI, localhost only
+      # 8082, the tunnel listener, is not published: only cloudflared reaches it.
+    volumes:
+      - ./proxy:/lab/proxy:ro
+      - ./scripts:/lab/scripts:ro
+      - ./captures:/lab/captures  # every session is saved here; must be writable by the image's uid 1000
+
+  cloudflared:
+    image: cloudflare/cloudflared:2026.11.0
+    profiles: [tunnel]
+    command: tunnel --no-autoupdate --metrics 0.0.0.0:20241 --url http://mitmweb:8082
+    ports:
+      - "127.0.0.1:20241:20241"  # metrics: /ready and /quicktunnel (the tunnel's hostname)
+    depends_on: [mitmweb]

@@ -1,0 +1,17 @@
+[project]
+name = "roku-mitm-lab-proxy"
+version = "0.1.0"
+description = "mitmproxy addons for the Roku MITM lab"
+requires-python = ">=3.12"
+dependencies = ["mitmproxy==12.3.1"]
+
+[dependency-groups]
+dev = ["pytest"]
+
+[tool.uv]
+package = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
+filterwarnings = ["ignore::DeprecationWarning:ldap3.*"]  # a mitmproxy dependency's own imports
