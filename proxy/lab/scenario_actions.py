@@ -1,6 +1,8 @@
 """Scenario actions: what a matching scenario rule does to a flow.
 
 ACTIONS maps a rule's action key to a factory `(value, scenario_dir) -> action`.
+Every factory takes `scenario_dir`, used or not, so the registry keeps one call
+shape (map_local resolves its file against it).
 An action has any of the mitmproxy hook methods `requestheaders`, `request`,
 `responseheaders`, `response` (sync or async), or the lab's own
 `before_guards`; the Scenarios addon calls them only for flows that match the
