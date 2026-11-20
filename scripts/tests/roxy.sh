@@ -43,6 +43,8 @@ case "$url" in
     printf '{"lab_scenario": {"value": "%s"}}\n' "${FAKE_SCENARIO:-}" ;;
   */options) [ "${FAKE_LAB_UP:-}" = 1 ] || down
     case " $* " in *" -w "*) printf '\n200' ;; esac ;;
+  */flows/dump*) [ "${FAKE_LAB_UP:-}" = 1 ] || down
+    cat "$FAKE_FLOWS_DUMP" ;;
   */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || down
     printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
 esac
@@ -58,7 +60,7 @@ chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH"
 
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
-for args in "" start status scenario launch console; do
+for args in "" start status scenario launch flows console; do
   # shellcheck disable=SC2086
   out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
   case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
@@ -145,6 +147,26 @@ echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
 "$ROXY" console "Cloud Device" >/dev/null || fail "console on a Cloud Device exited non-zero"
 [ "$(tail -1 "$RCE_LOG")" = "$(printf '%q ' console player)" ] || fail "console on a Cloud Device ran: $(cat "$RCE_LOG")"
 echo "ok: console on a Cloud Device goes through rce console"
+
+# flows --json with the lab down: a clear error and a non-zero exit.
+if err="$("$ROXY" flows --json 2>&1)"; then fail "flows --json exited 0 with the lab down: $err"; fi
+case "$err" in *"lab is down"*"roxy start"*) ;; *) fail "flows --json with the lab down said: $err" ;; esac
+echo "ok: flows --json says when the lab is down"
+
+# flows --json with the lab up: mitmweb's flow dump, recorded by the full lab chain
+# (proxy/tests/flows_dump.py describes its three flows), in the README's shape.
+export FAKE_FLOWS_DUMP="$TMP/flows.mitm"
+(cd "$REPO/proxy" && PYTHONPATH=. uv run --quiet python tests/flows_dump.py "$FAKE_FLOWS_DUMP")
+flows_json() { FAKE_LAB_UP=1 "$ROXY" flows --json "$@"; }
+out="$(flows_json)" || fail "flows --json with the lab up: $out"
+[ "$(jq 'type == "array" and length == 3 and all(.id | type == "string")' <<< "$out")" = true ] \
+  || fail "flows --json is not an array of 3 flows with ids: $out"
+want='{"time":"2025-11-20T10:00:00.000Z","device":"Living Room","method":"POST","url":"https://httpbin.org/post","status":200,"request_bytes":8,"response_bytes":12,"duration_ms":250,"refusal":null,"scenario_rules":[]}'
+[ "$(jq -c '.[0] | del(.id)' <<< "$out")" = "$want" ] || fail "flows --json gave the first flow as
+$(jq -c '.[0]' <<< "$out")
+not
+$want"
+echo "ok: flows --json prints each flow in the documented shape"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

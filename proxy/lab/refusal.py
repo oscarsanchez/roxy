@@ -18,6 +18,11 @@ def refused(flow):
     return "lab_refusal" in flow.metadata
 
 
+def refusal_reason(flow):
+    """The reason the lab refused this flow with, None if it did not."""
+    return flow.metadata["lab_refusal"][1] if refused(flow) else None
+
+
 class KeepRefusals:
     """A refused request stays refused. mitmproxy's server replay runs after the
     lab chain and answers in the request hook, over a refusal; put it back

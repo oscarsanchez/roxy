@@ -31,6 +31,11 @@ class Rule:
         self.action = action
 
 
+def applied_rules(flow):
+    """The names of the Scenario rules that acted on this flow, in the order they first did."""
+    return flow.metadata.get("lab_scenario_rules", [])
+
+
 def load_scenario(path):
     """Parse a scenario file into its rules. Raises ValueError or OSError."""
     with open(path, "rb") as f:
