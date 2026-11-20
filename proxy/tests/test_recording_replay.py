@@ -12,6 +12,7 @@ from chain import Lab, SECRET, TUNNEL_HOST, TUNNEL_PORT, lab_flow, tunnel_flow
 
 
 REPLAY_MODE = {"server_replay_reuse": True, "server_replay_extra": "404"}  # as start-lab --replay sets it
+OUTSIDE_LAN = ("203.0.113.7", 51000)
 
 
 def uuid_response(uuid):
@@ -58,12 +59,12 @@ def test_in_replay_mode_a_request_the_guards_refuse_stays_refused(tmp_path):
     session = tmp_path / "session.mitm"
     record(session, (lab_flow("/https://httpbin.org/uuid"), uuid_response("recorded")))
 
-    with Lab(server_replay=[str(session)], lab_origin_allowlist=[], **REPLAY_MODE) as lab:
-        flow = lab_flow("/https://httpbin.org/uuid")
+    with Lab(server_replay=[str(session)], **REPLAY_MODE) as lab:
+        flow = lab_flow("/https://httpbin.org/uuid", peer=OUTSIDE_LAN)
         lab.run(flow, uuid_response("changed"))
 
     assert flow.response.status_code == 403
-    assert flow.response.headers["X-Lab-Blocked"] == "origin-host"
+    assert flow.response.headers["X-Lab-Blocked"] == "client-ip"
     assert not flow.is_replay
 
 
@@ -84,8 +85,8 @@ def test_in_replay_mode_an_unrecorded_request_the_guards_refuse_stays_refused(tm
     record(session, (lab_flow("/https://httpbin.org/uuid"), uuid_response("recorded")))
 
     with Lab(server_replay=[str(session)], **REPLAY_MODE) as lab:
-        flow = lab_flow("/https://evil.example/json")
+        flow = lab_flow("/https://httpbin.org/json", peer=OUTSIDE_LAN)
         lab.run(flow, uuid_response("live"))
 
     assert flow.response.status_code == 403
-    assert flow.response.headers["X-Lab-Blocked"] == "origin-host"
+    assert flow.response.headers["X-Lab-Blocked"] == "client-ip"
