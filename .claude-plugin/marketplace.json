@@ -1,7 +1,7 @@
 {
   "name": "roxy",
   "owner": {
-    "name": "roxy"
+    "name": "Oscar Sanchez"
   },
   "description": "The roxy plugin: a mitmproxy lab for Roku apps.",
   "plugins": [
