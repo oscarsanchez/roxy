@@ -1,0 +1,13 @@
+{
+  "name": "roxy",
+  "version": "0.1.0",
+  "description": "The roxy skill: Claude sees and changes a Roku app's traffic through the roxy lab (mitmproxy). Needs roxy installed from its checkout (install.sh). macOS.",
+  "keywords": [
+    "roku",
+    "mitmproxy",
+    "proxy"
+  ],
+  "skills": [
+    "./skills/roxy"
+  ]
+}

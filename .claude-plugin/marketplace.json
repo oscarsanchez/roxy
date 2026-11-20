@@ -1,0 +1,14 @@
+{
+  "name": "roxy",
+  "owner": {
+    "name": "roxy"
+  },
+  "description": "The roxy plugin: a mitmproxy lab for Roku apps.",
+  "plugins": [
+    {
+      "name": "roxy",
+      "source": "./",
+      "description": "The roxy skill for the roxy lab. macOS; needs roxy installed from its checkout."
+    }
+  ]
+}
