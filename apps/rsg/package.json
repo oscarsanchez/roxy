@@ -1,5 +1,5 @@
 {
-    "name": "roku-mitm-lab-rsg",
+    "name": "roxy-lab-app-rsg",
     "version": "1.0.0",
     "private": true,
     "description": "RSG 2.0 Lab App for the roxy lab",

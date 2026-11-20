@@ -1,6 +1,6 @@
 # The JSON POST case's request body is edited before it reaches the Origin, so the
 # body httpbin echoes back (the result line's fp) changes; sentfp stays as sent.
-# scripts/launch --scenario json-post-edit "Living Room" json_post
+# roxy launch --scenario json-post-edit "Living Room" case=json_post
 
 [[rule]]
 name = "json post sends ok=false"

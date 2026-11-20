@@ -1,5 +1,5 @@
 # The HLS case's master playlist answers 404, so playback fails.
-# scripts/launch --scenario hls-404 "Living Room" hls
+# roxy launch --scenario hls-404 "Living Room" case=hls
 
 [[rule]]
 name = "mux master playlist missing"

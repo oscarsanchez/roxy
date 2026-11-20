@@ -1,5 +1,5 @@
 # The JSON GET case's Origin answers 503 (its body is kept).
-# scripts/launch --scenario json-503 "Living Room" json_get
+# roxy launch --scenario json-503 "Living Room" case=json_get
 
 [[rule]]
 name = "httpbin json fails"

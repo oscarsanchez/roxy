@@ -1,5 +1,5 @@
 # The DASH case's manifest answers 404, so playback fails.
-# scripts/launch --scenario dash-404 "Living Room" dash
+# roxy launch --scenario dash-404 "Living Room" case=dash
 
 [[rule]]
 name = "bbb manifest missing"

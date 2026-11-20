@@ -266,7 +266,7 @@ def main(argv: list[str]) -> int:
     parser.add_argument("traffic_class", choices=sorted(config["classes"]))
     parser.add_argument("--proxy-base", help="Proxy Base to launch with (a Cloud Device needs the public one)")
     parser.add_argument("--ca-routing", action="store_true",
-                        help="CA Routing on the GL.iNet (Physical Devices only, README, CA Routing)")
+                        help="CA Routing, on the Physical Device behind the CA Routing router (README, CA Routing)")
     args = parser.parse_args(argv)
     signal.signal(signal.SIGTERM, signal.default_int_handler)  # a kill stops the Run as Ctrl-C does
 

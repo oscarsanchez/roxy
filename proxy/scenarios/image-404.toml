@@ -1,5 +1,5 @@
 # The image case's poster image answers 404 (the catalog JSON is untouched).
-# scripts/launch --scenario image-404 "Living Room" image
+# roxy launch --scenario image-404 "Living Room" case=image
 
 [[rule]]
 name = "catalog thumbnail missing"
