@@ -52,9 +52,9 @@ Charles needs an imported Rewrite set for these; the lab does them for every req
 - **Recovering the Origin.** It takes the Origin URL from the path, after `/` or `/;`, and sends the Origin a normal request: `Host` is the Origin's, and `Referer` and `Origin` headers that carry a Prefixed URL are decoded back.
 - **Keeping the separator.** Every URL it sends back uses the separator the request arrived with, so the app's own "already prefixed?" check keeps working.
 - **Response headers.** `Location` (redirects and 201), `Content-Location`, `Link` and `Refresh` become Prefixed URLs.
-- **Cookies.** `Set-Cookie` loses its `Domain` and is scoped by path to the Prefixed URL. A cookie path cannot hold `;`, so a Charles-style cookie is scoped to the Proxy Base (`Path=/`).
+- **Cookies.** `Set-Cookie` loses its `Domain` and is scoped by path to the Prefixed URL. A cookie path cannot hold `;`, so a Charles-style cookie is scoped to the Proxy Base (`Path=/`). With `/;`, then, every Origin behind the Proxy Base shares one cookie scope: a cookie one Origin sets is sent to the others too.
 - **Bodies.** URLs in HLS playlists (variant, segment, key and map URIs), DASH manifests (`BaseURL`, `Location`, segment templates), VAST and other XML (media files, tracking, wrappers) and JSON (absolute URL values) become Prefixed URLs. Relative URLs stay as they are: they already resolve through the Prefixed URL.
-- **No double Proxy Base.** A URL that already carries this client's Proxy Base, in either form, is not given another one.
+- **No double Proxy Base.** A URL that already carries this client's Proxy Base, in either form, is never given another one: it comes back with the separator the request used.
 
 ## What the lab never sees
 
