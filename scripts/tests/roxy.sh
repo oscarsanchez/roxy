@@ -41,6 +41,9 @@ echo "$url" >> "$CURL_LOG.urls"
 case "$url" in
   */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || { echo "curl: (7) Failed to connect" >&2; exit 7; }
     printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
+  # A device whose ECP is "limited" refuses exit-app (and keypresses) but still launches.
+  *:8060/exit-app/*) [ -z "${FAKE_ECP_LIMITED:-}" ] \
+    || { echo "curl: (22) The requested URL returned error: 403" >&2; exit 22; } ;;
 esac
 EOF
 cat > "$TMP/bin/rce" <<'EOF'
@@ -179,6 +182,15 @@ $want
 curl asked for:
 $(cat "$CURL_LOG.urls")"
 echo "ok: launch sends the LAN Proxy Base to a Physical Device"
+
+# A device with ECP set to limited refuses exit-app: launch still launches, without curl's noise.
+: > "$CURL_LOG.urls"
+out="$(FAKE_ECP_LIMITED=1 "$ROXY" launch "Living Room" case=json_get 2>&1)" \
+  || fail "launch on a device with limited ECP: $out"
+grep -q '^run=' <<< "$out" || fail "launch on a device with limited ECP printed no run id: $out"
+grep -q '/launch/dev?' "$CURL_LOG.urls" || fail "launch on a device with limited ECP did not launch"
+case "$out" in *"curl:"*) fail "launch printed curl's refused exit-app: $out" ;; esac
+echo "ok: launch on a device with limited ECP launches quietly"
 
 # launch on a Cloud Device: through rce, with the running tunnel's public Proxy Base plus the slug.
 : > "$RCE_LOG"

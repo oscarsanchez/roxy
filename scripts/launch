@@ -46,7 +46,7 @@ if [ -n "$ip" ]; then  # Physical Device: ECP on the LAN
     query="$query&$(uri_encode "${param%%=*}")=$(uri_encode "${param#*=}")"
   done
   ecp_post() { curl -sS --fail -o /dev/null -X POST -d '' "http://$ip:8060/$1"; }
-  exit_app() { ecp_post exit-app/dev; }
+  exit_app() { ecp_post exit-app/dev 2>/dev/null; }  # ECP set to limited refuses it (403); launch/dev still works
   launch_dev() { ecp_post "launch/dev?$query"; }
 elif [ -n "$rce_name" ]; then  # Cloud Device: ECP through the rce CLI, which encodes the params
   if [ -z "$proxy_base" ]; then
