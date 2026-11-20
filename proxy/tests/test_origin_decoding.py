@@ -15,6 +15,17 @@ def test_prefixed_url_is_forwarded_to_its_origin_url():
     assert flow.response.status_code == 200
 
 
+@pytest.mark.parametrize("separator", ["/", "/;"])
+def test_both_separators_forward_to_the_origin_and_come_back_in_the_same_form(separator):
+    """The lab's own form and the Charles-style form (ADR-0002) round-trip."""
+    flow = lab_flow(f"{separator}https://httpbin.org/redirect/1")
+
+    forwarded = run_chain(flow, redirect_to("https://httpbin.org/json"))
+
+    assert forwarded.url == "https://httpbin.org/redirect/1"
+    assert flow.response.headers["location"] == f"http://192.0.2.10:8080{separator}https://httpbin.org/json"
+
+
 def test_origin_scheme_port_path_and_query_are_kept_byte_for_byte():
     flow = lab_flow("/http://httpbin.org:8443/a//b%2Fc/json?x=1&y=%2F&z=")
 

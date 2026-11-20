@@ -1,7 +1,8 @@
-"""The single source of truth for the Prefixed URL format (ADR-0001).
+"""The single source of truth for the Prefixed URL format (ADR-0001, ADR-0002).
 
-    <proxy-base>/<origin-url>
+    <proxy-base><separator><origin-url>
     proxy-base = scheme://host[:port][/secret-segment[/device-slug]]
+    separator  = "/" (the lab's own form) | "/;" (the Charles-style form)
 
 The secret segment and device slug are for the Public Endpoint (Cloud Devices).
 
@@ -14,8 +15,8 @@ from typing import NamedTuple
 from urllib.parse import urlsplit
 
 _PREFIXED = re.compile(
-    r"^(?P<proxy_base>https?://[^/?#]+(?:/(?!https?:)[^/?#]+){0,2})"
-    r"(?P<separator>/)(?P<scheme>https?):/{1,2}"  # tolerate a client-collapsed "https:/host"
+    r"^(?P<proxy_base>https?://[^/?#]+(?:/(?!;?https?:)[^/?#]+){0,2})"
+    r"(?P<separator>/;?)(?P<scheme>https?):/{1,2}"  # tolerate a client-collapsed "https:/host"
     r"(?P<rest>[^/?#]+.*)$"
 )
 
