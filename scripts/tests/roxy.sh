@@ -175,6 +175,16 @@ echo "ok: flows --json prints each flow in the documented shape"
   || fail "flows --json gave the flow json-503 touched as $(jq -c '.[2]' <<< "$out")"
 echo "ok: flows --json names a flow's refusal reason and the Scenario rules applied"
 
+# --since takes a roxy launch run id (launch time in seconds, then random digits) or a time.
+times() { jq -c 'map(.time[11:16])' <<< "$1"; }
+out="$(flows_json --since 176363286012345)" || fail "flows --json --since RUN: $out"
+[ "$(times "$out")" = '["10:01","10:02"]' ] || fail "flows --json --since a 10:01 run gave $(times "$out")"
+out="$(flows_json --since 2025-11-20T10:02:00Z)" || fail "flows --json --since TIME: $out"
+[ "$(times "$out")" = '["10:02"]' ] || fail "flows --json --since 10:02 gave $(times "$out")"
+if err="$(flows_json --since yesterday 2>&1)"; then fail "flows --json took --since yesterday"; fi
+case "$err" in *"--since"*) ;; *) fail "flows --json --since yesterday said: $err" ;; esac
+echo "ok: flows --json --since takes a run id or a time"
+
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
 home="$TMP/home"

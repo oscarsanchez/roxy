@@ -99,11 +99,12 @@ scenario() {
 # flows --json [options] : the running lab's flows in the documented JSON shape, from
 # mitmweb's flow dump (the one flows endpoint that takes a filter expression).
 flows() {
-  local json=false filter="" dump
+  local json=false filter="" dump shape_args=()
   while [ $# -gt 0 ]; do
     case "$1" in
       --json) json=true; shift ;;
       --filter) [ $# -ge 2 ] || die "$(usage flows | head -1)"; filter="$2"; shift 2 ;;
+      --since) [ $# -ge 2 ] || die "$(usage flows | head -1)"; shape_args+=("$1" "$2"); shift 2 ;;
       *) die "$(usage flows | head -1)" ;;
     esac
   done
@@ -114,7 +115,7 @@ flows() {
   on_exit "rm -f $(printf %q "$dump")"
   mitmweb_get "flows/dump${filter:+?filter=$(uri_encode "$filter")}" > "$dump" 2>/dev/null \
     || die "the lab is down: no mitmweb answers on http://127.0.0.1:$LAB_WEB_PORT (roxy start)"
-  (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py) < "$dump"
+  (cd "$REPO_ROOT/proxy" && uv run --quiet python flows.py ${shape_args[@]+"${shape_args[@]}"}) < "$dump"
 }
 
 # console DEVICE [options] : a Cloud Device's console through rce, a Physical Device's

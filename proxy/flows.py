@@ -1,8 +1,9 @@
 """roxy flows --json: a mitmweb flow dump (stdin) as the JSON shape the README documents
 (Flows for agents), one object per flow, oldest first.
-Usage (from proxy/): uv run python flows.py < DUMP
+Usage (from proxy/): uv run python flows.py [--since RUN|TIME] < DUMP
 """
 
+import argparse
 import json
 import sys
 from datetime import UTC, datetime
@@ -34,8 +35,25 @@ def summary(flow):
     }
 
 
+def since(value):
+    """A roxy launch run id (the launch time in Unix seconds, then random digits), or an
+    ISO 8601 time (local time without an offset). Returns Unix seconds."""
+    if value.isdigit():
+        return int(value[:10])
+    try:
+        return datetime.fromisoformat(value).timestamp()
+    except ValueError:
+        raise argparse.ArgumentTypeError(f"not a run id or a time like 2026-11-20T10:00:00Z: {value!r}")
+
+
 def main():
-    flows = [f for f in io.FlowReader(sys.stdin.buffer).stream() if isinstance(f, http.HTTPFlow)]
+    parser = argparse.ArgumentParser(prog="roxy flows")
+    parser.add_argument("--since", type=since, default=0)
+    args = parser.parse_args()
+    flows = [
+        f for f in io.FlowReader(sys.stdin.buffer).stream()
+        if isinstance(f, http.HTTPFlow) and f.timestamp_created >= args.since
+    ]
     print("[" + ",\n".join(json.dumps(summary(f)) for f in flows) + "]")
 
 
