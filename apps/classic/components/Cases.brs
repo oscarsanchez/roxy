@@ -74,7 +74,7 @@ sub onCatalogResult(event as Object)
   end if
   uri = catalog.products[0].thumbnail
   m.imagePrefixed = "no"
-  if IsPrefixed(m.top.proxyBase, uri) then m.imagePrefixed = "yes"
+  if IsPrefixed(m.top.proxyBase, m.top.separator, uri) then m.imagePrefixed = "yes"
 
   if m.poster <> invalid then m.top.removeChild(m.poster)
   m.poster = m.top.createChild("Poster")
@@ -107,7 +107,7 @@ end sub
 ' body "" is a GET, otherwise a JSON POST. onResult names the sub that gets the result.
 sub HttpRequest(originUrl as String, body as String, onResult as String)
   m.httpTask = CreateObject("roSGNode", "HttpTask")
-  m.httpTask.url = PrefixedUrl(m.top.proxyBase, originUrl)
+  m.httpTask.url = PrefixedUrl(m.top.proxyBase, m.top.separator, originUrl)
   m.httpTask.body = body
   m.httpTask.observeField("result", onResult)
   m.httpTask.control = "RUN"
@@ -125,12 +125,12 @@ end sub
 sub PlayVideo(originUrl as String, streamFormat as String, licenseUrl = "" as String)
   if m.video <> invalid then m.top.removeChild(m.video)
   content = CreateObject("roSGNode", "ContentNode")
-  content.url = PrefixedUrl(m.top.proxyBase, originUrl)
+  content.url = PrefixedUrl(m.top.proxyBase, m.top.separator, originUrl)
   content.streamFormat = streamFormat
   certificates = LabCertificatesFile() ' Video nodes do not use the scene's HTTP agent
   content.update({HttpCertificatesFile: certificates, DrmHttpCertificatesFile: certificates}, true)
   m.drm = licenseUrl <> ""
-  if m.drm then content.drmParams = {keySystem: "widevine", licenseServerURL: PrefixedUrl(m.top.proxyBase, licenseUrl)}
+  if m.drm then content.drmParams = {keySystem: "widevine", licenseServerURL: PrefixedUrl(m.top.proxyBase, m.top.separator, licenseUrl)}
   m.video = m.top.createChild("Video")
   m.video.translation = [700, 170]
   m.video.width = 500
@@ -199,7 +199,7 @@ end function
 
 sub PlayAd(adTagUrl as String)
   m.adTask = CreateObject("roSGNode", "AdTask")
-  m.adTask.adUrl = PrefixedUrl(m.top.proxyBase, adTagUrl)
+  m.adTask.adUrl = PrefixedUrl(m.top.proxyBase, m.top.separator, adTagUrl)
   m.adTask.view = m.top
   m.adTask.observeField("result", "onAdResult")
   m.adTask.control = "RUN"
@@ -211,7 +211,7 @@ sub onAdResult(event as Object)
   media = "none"
   if r.media <> ""
     media = "direct"
-    if IsPrefixed(m.top.proxyBase, r.media) then media = "lab"
+    if IsPrefixed(m.top.proxyBase, m.top.separator, r.media) then media = "lab"
   end if
   ReportResult(m.activeCase, [["outcome", r.outcome], ["ads", r.ads.ToStr()], ["impressions", r.impressions.ToStr()], ["completes", r.completes.ToStr()], ["errors", r.errors.ToStr()], ["media", media]])
 end sub

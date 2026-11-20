@@ -2,6 +2,7 @@
 <component name="LabScene" extends="Scene">
   <interface>
     <field id="proxyBase" type="string" onChange="onProxyBase"/>
+    <field id="separator" type="string" value="/" onChange="onProxyBase"/>
     <field id="runId" type="string"/>
     <field id="case" type="string" onChange="onCase"/>
   </interface>

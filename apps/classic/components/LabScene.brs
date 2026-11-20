@@ -16,7 +16,7 @@ sub init()
 end sub
 
 sub onProxyBase()
-  label = "Proxy Base: " + m.top.proxyBase
+  label = "Proxy Base: " + m.top.proxyBase + ", separator " + m.top.separator
   if CaRouting() then label = "CA Routing build: Origin URLs, no Proxy Base"
   m.top.findNode("proxyBaseLabel").text = label
 end sub

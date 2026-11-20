@@ -1,5 +1,6 @@
-' Launch args (ECP): proxyBase, case, run. Without proxyBase, the build-time default
-' from the manifest (lab_proxy_base, stamped by scripts/deploy) is used.
+' Launch args (ECP): proxyBase, separator, case, run. Without proxyBase, the build-time
+' default from the manifest (lab_proxy_base, stamped by scripts/deploy) is used.
+' separator=/; builds Charles-style Prefixed URLs; anything else, the lab's own "/".
 sub Main(args as Dynamic)
   screen = CreateObject("roSGScreen")
   port = CreateObject("roMessagePort")
@@ -9,6 +10,7 @@ sub Main(args as Dynamic)
   proxyBase = LaunchArg(args, "proxyBase")
   if proxyBase = "" then proxyBase = CreateObject("roAppInfo").GetValue("lab_proxy_base")
   scene.proxyBase = proxyBase
+  if LaunchArg(args, "separator") = "/;" then scene.separator = "/;"
   scene.runId = LaunchArg(args, "run")
   screen.show()
   scene.case = LaunchArg(args, "case") ' set last: runs the case straight away
