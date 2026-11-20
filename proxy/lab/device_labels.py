@@ -31,7 +31,7 @@ class DeviceLabels:
     def requestheaders(self, flow):
         if not through_tunnel(flow):
             flow.comment = self.physical_devices.get(ip_address(flow.client_conn.peername[0]), "")
-        elif (client := client_proxy_base(flow)) and (name := self.cloud_devices.get(device_slug(client[0]))):
+        elif (client := client_proxy_base(flow)) and (name := self.cloud_devices.get(device_slug(client.proxy_base))):
             flow.comment = name
         elif tunnel_client_ip(flow) in self.guards.rce_egress_ips:
             flow.comment = "Cloud Device"

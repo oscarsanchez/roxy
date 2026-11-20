@@ -85,6 +85,31 @@ def test_a_ca_routed_flow_has_no_proxy_base_so_a_rule_with_placeholders_leaves_i
     assert flow.response.text == '<config mediaHost="cdn.example.com/media"/>'
 
 
+def test_a_rule_without_placeholders_applies_to_every_flow_prefixed_or_not(scenarios):
+    options = scenarios("fixed", '''
+[[rule]]
+name = "fixed cdn"
+filter = "~s & ~d api.example.com"
+body = { pattern = 'cdn\\.example\\.com', replacement = 'cdn2.example.com' }
+
+[[rule]]
+name = "fixed cdn header"
+filter = "~s & ~d api.example.com"
+header = { name = "X-Cdn", value = "cdn2" }
+''')
+    ca_routed = lab_flow("/config.xml", host_header="api.example.com")
+    ca_routed.client_conn.tls, ca_routed.client_conn.sni = True, "api.example.com"
+    flows = [lab_flow("/https://api.example.com/config.xml"), lab_flow("/;https://api.example.com/config.xml"), ca_routed]
+
+    with Lab(lab_ca_routing=True, **options) as lab:
+        for flow in flows:
+            lab.run(flow, origin_config())
+
+    for flow in flows:
+        assert flow.response.text == '<config mediaHost="cdn2.example.com/media"/>'
+        assert flow.response.headers["x-cdn"] == "cdn2"
+
+
 @pytest.mark.parametrize("action, unknown", [
     ("""body = { pattern = 'mediaHost="', replacement = 'mediaHost="{proxy_host}/' }""", "{proxy_host}"),
     ('header = { name = "X-Cdn-Base", value = "{proxy_base}{sep}" }', "{sep}"),
