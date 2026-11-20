@@ -145,3 +145,30 @@ echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
 "$ROXY" console "Cloud Device" >/dev/null || fail "console on a Cloud Device exited non-zero"
 [ "$(tail -1 "$RCE_LOG")" = "$(printf '%q ' console player)" ] || fail "console on a Cloud Device ran: $(cat "$RCE_LOG")"
 echo "ok: console on a Cloud Device goes through rce console"
+
+# install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
+# seeds the missing settings from the examples. Run again, it keeps every existing setting.
+home="$TMP/home"
+run_install() { env -u ROXY_CONFIG_DIR -u XDG_CONFIG_HOME HOME="$home" "$REPO/install.sh"; }
+link="$home/.local/bin/roxy" settings="$home/.config/roxy"
+out="$(run_install)" || fail "install: $out"
+[ -L "$link" ] && [ "$(realpath "$link")" = "$ROXY" ] || fail "install did not link $link to $ROXY"
+"$link" --help >/dev/null || fail "the linked roxy does not run"
+for file in secrets.env devices.json settings.json; do
+  cmp -s "$REPO/settings.example/$file" "$settings/$file" || fail "install did not seed $file from its example"
+done
+echo '{"Mine": {"ip": "192.0.2.99"}}' > "$settings/devices.json"
+rm "$settings/settings.json"
+out="$(run_install)" || fail "install, run again: $out"
+[ "$(cat "$settings/devices.json")" = '{"Mine": {"ip": "192.0.2.99"}}' ] || fail "install overwrote devices.json"
+cmp -s "$REPO/settings.example/settings.json" "$settings/settings.json" || fail "install did not seed the missing settings.json"
+[ "$(realpath "$link")" = "$ROXY" ] || fail "install, run again, broke the link"
+echo "ok: install is idempotent and keeps existing settings"
+
+# A roxy at the link's place that is not a link is someone else's: install refuses, changing nothing.
+rm "$link"
+echo "someone else's roxy" > "$link"
+if err="$(run_install 2>&1)"; then fail "install replaced a file that is not a link"; fi
+case "$err" in *"$link"*) ;; *) fail "install's refusal does not name $link: $err" ;; esac
+[ "$(cat "$link")" = "someone else's roxy" ] || fail "install changed $link"
+echo "ok: install leaves a roxy that is not its link alone"
