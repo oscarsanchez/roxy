@@ -13,8 +13,8 @@ usage() {
 usage: roxy <subcommand> [args...]
 The roxy lab from any terminal. roxy <subcommand> --help describes one.
   start      run the lab in the foreground, until Ctrl-C
-  status     whether the lab is up, its Proxy IP, Proxy Bases, App Profile and Scenario
-  scenario   list the Scenarios, or set or clear the active one
+  status     whether the lab is up, its Proxy IP, Proxy Bases, App Profile and Scenarios
+  scenario   list the Scenarios, or set, add, remove or clear the active ones
   launch     launch the dev channel on a Target Device, with its Proxy Base
   flows      the running lab's flows as JSON, for agents (read-only)
   console    open a Target Device's debug console
@@ -34,26 +34,31 @@ EOF
     status) cat <<'EOF'
 usage: roxy status
 Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
-and the active Scenario, with its source. Exits 1 when the lab is down.
+and the active Scenarios in order, each with its source. Exits 1 when the lab is down.
 EOF
     ;;
     scenario) cat <<'EOF'
-usage: roxy scenario list [--app NAME] | set NAME | clear
-  list      the Scenarios of the App Profile roxy start would load here (or NAME's)
-            and the lab's own, each once with its source (a name in both: refused)
-  set NAME  make NAME the running lab's active Scenario (lab-wide)
-  clear     leave the running lab with no active Scenario
+usage: roxy scenario list [--app NAME] | set NAME... | add NAME | remove NAME | clear
+Any number of Scenarios can be active, lab-wide: their rules apply in set order, then
+file order. set, add, remove and clear print the active ones after the change.
+  list         the Scenarios of the App Profile roxy start would load here (or NAME's)
+               and the lab's own, each once with its source (a name in both: refused)
+  set NAME...  make NAMEs the running lab's active Scenarios, in that order
+  add NAME     make NAME active too, after the active ones
+  remove NAME  stop NAME's rules, leaving the other active Scenarios
+  clear        leave the running lab with no active Scenario
 EOF
     ;;
     launch) cat <<'EOF'
-usage: roxy launch [--scenario NAME] [--proxy-base URL] <device> [key=value...]
+usage: roxy launch [--scenario NAME]... [--proxy-base URL] <device> [key=value...]
 Launch the dev channel on <device> (a name in devices.json), with proxyBase and your
 launch params. It never builds or sideloads. proxyBase is the LAN Proxy Base for a
 Physical Device, and the running tunnel's public Proxy Base plus the device slug for a
 Cloud Device (roxy start --tunnel). Prints run=<id>, also sent as the run param.
 The Lab Apps read case=<case> and 'separator=/;' (Charles-style Prefixed URLs; quoted,
 as ; ends a shell command); without separator they use the lab's own /.
-  --scenario NAME   set the running lab's active Scenario first ('' clears it)
+  --scenario NAME   set the running lab's active Scenarios first, in the order given
+                    (repeat it for several; '' clears them)
   --proxy-base URL  send URL instead (a Cloud Device's slug is still added)
 EOF
     ;;
@@ -101,7 +106,9 @@ status() {
 scenario() {
   case "${1:-} $# ${2:-}" in
     "list 1 "|"list 3 --app") proxy_cli scenario "$@" ;;
-    "set 2 "*) proxy_cli scenario set -- "$2" ;;
+    "set 1 ") die "$(usage scenario | head -1)" ;;
+    "set "*) shift; proxy_cli scenario set -- "$@" ;;
+    "add 2 "*|"remove 2 "*) proxy_cli scenario "$1" -- "$2" ;;
     "clear 1 ") proxy_cli scenario clear ;;
     *) die "$(usage scenario | head -1)" ;;
   esac

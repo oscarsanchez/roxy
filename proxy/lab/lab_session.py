@@ -1,4 +1,4 @@
-"""The running Lab Session, through mitmweb's API: its state, its active Scenario and its
+"""The running Lab Session, through mitmweb's API: its state, its active Scenarios and its
 flows, for bin/roxy and scripts/launch (through proxy/cli.py).
 
 LabSession talks to mitmweb through a transport: get(path) and put(path, json), each
@@ -19,7 +19,7 @@ from urllib.request import Request, urlopen
 from mitmproxy import http, io
 
 from lab.refusal import refusal_reason
-from lab.scenarios import applied_rules
+from lab.scenarios import applied_rules, scenario_names, scenario_value
 from lab.throttle import paced_seconds
 
 RUN_ID_TIME_DIGITS = 10  # a run id starts with the launch time in Unix seconds
@@ -38,7 +38,8 @@ class WrongPassword(LabSessionError):
 
 
 class ScenarioRefused(LabSessionError):
-    """mitmweb refused to make a Scenario the active one; the message has its reason."""
+    """The active Scenarios could not change as asked (mitmweb refused, or the Scenario to
+    remove is not active); the message has the reason."""
 
 
 class BadFilter(LabSessionError):
@@ -47,7 +48,7 @@ class BadFilter(LabSessionError):
 
 class LabState(NamedTuple):
     app: str | None  # the loaded App Profile
-    scenario: str | None  # the active Scenario
+    scenarios: list  # the active Scenarios' names, in order
 
 
 class HttpTransport:
@@ -84,14 +85,31 @@ class LabSession:
         status, body = self.transport.get("options.json")
         _check_password(status)
         options = json.loads(body)
-        return LabState(options["lab_app"]["value"] or None, options["lab_scenario"]["value"] or None)
+        return LabState(options["lab_app"]["value"] or None, scenario_names(options["lab_scenario"]["value"]))
 
-    def set_scenario(self, name):
-        """Make NAME the active Scenario, lab-wide; '' clears it."""
-        status, body = self.transport.put("options", {"lab_scenario": name})
+    def set_scenarios(self, names):
+        """Make NAMES the active Scenarios, lab-wide, in that order; none (or '') clears them.
+        Returns the active Scenarios."""
+        value = scenario_value(names)
+        status, body = self.transport.put("options", {"lab_scenario": value})
         _check_password(status)
         if status != 200:
-            raise ScenarioRefused(f"mitmweb refused scenario {name!r}: {body.decode(errors='replace')}")
+            raise ScenarioRefused(f"mitmweb refused the Scenarios {value!r}: {body.decode(errors='replace')}")
+        return scenario_names(value)
+
+    def add_scenario(self, name):
+        """Make NAME active too, after the active ones; an active NAME stays where it is.
+        Returns the active Scenarios."""
+        active = self.state().scenarios
+        return active if name in active else self.set_scenarios([*active, name])
+
+    def remove_scenario(self, name):
+        """Stop NAME's rules, leaving the other active Scenarios in their order. Returns the
+        active Scenarios."""
+        active = self.state().scenarios
+        if name not in active:
+            raise ScenarioRefused(f"{name!r} is not active (active: {', '.join(active) or 'none'})")
+        return self.set_scenarios([other for other in active if other != name])
 
     def flows(self, filter=None, since=None, limit=None):
         """The lab's flows, oldest first, each summed up in the shape the README documents

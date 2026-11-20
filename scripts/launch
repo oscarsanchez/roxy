@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Launch the dev channel on a named Target Device over ECP, with launch params. It never
 # builds or sideloads.
-# Usage: scripts/launch [--scenario NAME] [--proxy-base URL] <device-name> [key=value...]
+# Usage: scripts/launch [--scenario NAME]... [--proxy-base URL] <device-name> [key=value...]
 #   e.g. scripts/launch "Living Room" case=json_get   (case: the Lab Apps' test case)
 #   Sends proxyBase, then the key=value params, then a fresh run id as run.
 #   proxyBase goes by kind of Target Device: the LAN Proxy Base for a Physical Device;
@@ -9,19 +9,19 @@
 #   --tunnel) plus the device's slug (devices.json), https://<tunnel-host>/<secret>/<slug>,
 #   so the lab can tell Cloud Devices apart.
 #   --proxy-base URL sends URL instead; a Cloud Device's slug is still added.
-#   --scenario sets the lab's active scenario (proxy/scenarios/NAME.toml) through
-#   mitmweb's API first; it applies lab-wide. --scenario '' clears it. Without
-#   the flag the active scenario is left as it is.
+#   --scenario sets the lab's active Scenarios through mitmweb's API first, in the
+#   order given (repeat it for several); they apply lab-wide. --scenario '' clears
+#   them. Without the flag the active Scenarios are left as they are.
 # Prints the run id the Lab App echoes in its result line.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
-usage="usage: scripts/launch [--scenario NAME] [--proxy-base URL] <device-name> [key=value...]"
-scenario_given=false
+usage="usage: scripts/launch [--scenario NAME]... [--proxy-base URL] <device-name> [key=value...]"
+scenarios=()
 proxy_base=""
 while [ $# -gt 0 ]; do
   case "$1" in
-    --scenario) [ $# -ge 2 ] || die "$usage"; scenario_given=true; scenario="$2"; shift 2 ;;
+    --scenario) [ $# -ge 2 ] || die "$usage"; scenarios+=("$2"); shift 2 ;;
     --proxy-base) [ $# -ge 2 ] || die "$usage"; proxy_base="$2"; shift 2 ;;
     *) break ;;
   esac
@@ -34,7 +34,7 @@ for param in "$@"; do
 done
 run_id="$(proxy_cli run-id)"
 params=("$@" "run=$run_id")
-lab_lock devices  # the scenario is lab-wide, so one lock covers every Target Device
+lab_lock devices  # Scenarios are lab-wide, so one lock covers every Target Device
 
 # exit_app and launch_dev: ECP on the Target Device, with proxyBase and the params.
 ip="$(device_field "$device" ip)"
@@ -66,7 +66,7 @@ else
   die "device '$device' has no launch route: set ip (Physical Device) or rce_device_name (Cloud Device) in $DEVICES_FILE"
 fi
 
-if $scenario_given; then proxy_cli scenario set -- "$scenario"; fi
+if [ ${#scenarios[@]} -gt 0 ]; then proxy_cli scenario set -- "${scenarios[@]}"; fi
 
 exit_app || true  # fresh process for every run
 launch_dev || die "ECP launch on $device failed"

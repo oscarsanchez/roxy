@@ -7,17 +7,21 @@ passes them.
   cli.py app list                        each App Profile and its repo
   cli.py scenario list [--app NAME]      the Scenarios of NAME (else the profile resolve
                                          finds) and the lab's own, each once with its source
-  cli.py scenario set NAME               make NAME the running lab's active Scenario ('' clears it)
+  cli.py scenario set NAME...            make NAMEs the running lab's active Scenarios, in that
+                                         order ('' clears them)
+  cli.py scenario add NAME               make NAME active too, after the active ones
+  cli.py scenario remove NAME            stop NAME, leaving the other active Scenarios
   cli.py scenario clear                  leave the running lab with no active Scenario
   cli.py resolve [--app NAME]            two lines, the App Profile to load and its repo (both
                                          empty for none); fails on a Scenario in both
-  cli.py status                          the lab line, then the App Profile and Scenario lines
+  cli.py status                          the lab line, then the App Profile and Scenarios lines
                                          of roxy status; the lab down: its line, and exit 1
   cli.py flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
                                          the running lab's flows (roxy flows --help)
   cli.py run-id                          a fresh roxy launch run id
 
-A refusal prints `error: ...` and exits 1; with the lab down, a Lab Session command prints
+The scenario commands print the active Scenarios after the change, as
+`scenario=A,B` (`scenario=none` for none). A refusal prints `error: ...` and exits 1; with the lab down, a Lab Session command prints
 the `lab: down (...)` line instead.
 """
 
@@ -30,7 +34,7 @@ from pathlib import Path
 from lab.app_profiles import AppProfileError, AppProfiles, ScenarioInBoth
 from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
-from lab.scenarios import DEFAULT_SCENARIOS_DIR
+from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
 
 REFUSED = "refused: in both (rename the profile's)"
 
@@ -73,8 +77,19 @@ def scenario_list(args):
 
 
 def scenario_set(args):
-    LabSession(mitmweb()).set_scenario(args.name)
-    print(f"scenario={args.name or 'none'}")
+    print_active(LabSession(mitmweb()).set_scenarios(args.names))
+
+
+def scenario_add(args):
+    print_active(LabSession(mitmweb()).add_scenario(args.name))
+
+
+def scenario_remove(args):
+    print_active(LabSession(mitmweb()).remove_scenario(args.name))
+
+
+def print_active(scenarios):
+    print(f"scenario={scenario_value(scenarios) or 'none'}")
 
 
 def resolve(args):
@@ -89,14 +104,15 @@ def resolve(args):
 
 def status(args):
     try:
-        app, scenario = LabSession(mitmweb()).state()
+        app, scenarios = LabSession(mitmweb()).state()
     except LabDown:
         print(lab_down())
         sys.exit(1)
-    source = scenario and app_profiles().source(app, scenario)
+    profiles = app_profiles()
+    listed = [f"{scenario}  ({profiles.source(app, scenario)})" for scenario in scenarios] or ["none"]
     print(f"lab: up (mitmweb UI {mitmweb().url})")
     print(f"App Profile:       {app or 'none'}")
-    print(f"Scenario:          {f'{scenario}  ({source})' if scenario else 'none'}")
+    print("Scenarios:         " + "\n                   ".join(listed))
 
 
 def flows(args):
@@ -134,9 +150,13 @@ def main():
     scenario_list_parser.add_argument("--app")
     scenario_list_parser.set_defaults(run=scenario_list)
     scenario_set_parser = scenario.add_parser("set")
-    scenario_set_parser.add_argument("name")
+    scenario_set_parser.add_argument("names", nargs="+")
     scenario_set_parser.set_defaults(run=scenario_set)
-    scenario.add_parser("clear").set_defaults(run=scenario_set, name="")
+    for command, run in (("add", scenario_add), ("remove", scenario_remove)):
+        scenario_change_parser = scenario.add_parser(command)
+        scenario_change_parser.add_argument("name")
+        scenario_change_parser.set_defaults(run=run)
+    scenario.add_parser("clear").set_defaults(run=scenario_set, names=[])
     resolve_parser = commands.add_parser("resolve")
     resolve_parser.add_argument("--app")
     resolve_parser.set_defaults(run=resolve)

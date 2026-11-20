@@ -108,8 +108,8 @@ until [ -s "$TMP/mitmweb.port" ]; do sleep 0.1; done
 MITMWEB_PORT="$(cat "$TMP/mitmweb.port")"
 export LAB_WEB_PORT="$("$REAL_UV" run --quiet --project "$REPO/proxy" python -c \
   'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
-# lab_up APP SCENARIO COMMAND... : run COMMAND with the fake mitmweb up, App Profile APP
-# loaded and SCENARIO active ('' for none).
+# lab_up APP SCENARIOS COMMAND... : run COMMAND with the fake mitmweb up, App Profile APP
+# loaded and SCENARIOS active (comma-separated, '' for none).
 lab_up() {
   printf '{"lab_app": {"value": "%s"}, "lab_scenario": {"value": "%s"}}' "$1" "$2" > "$FAKE_OPTIONS"
   shift 2
@@ -133,25 +133,26 @@ if out="$("$ROXY" status 2>&1)"; then fail "status exited 0 with the lab down: $
 case "$out" in *"lab: down"*) ;; *) fail "status with the lab down said: $out" ;; esac
 echo "ok: status says when the lab is down"
 
-# status: the lab up (signed in) reports the Proxy IP, the Proxy Bases and the active Scenario.
-out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503 "$ROXY" status)" \
+# status: the lab up (signed in) reports the Proxy IP, the Proxy Bases and the active Scenarios.
+out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503,hls-404 "$ROXY" status)" \
   || fail "status with the lab up exited non-zero: $out"
 want="lab: up (mitmweb UI http://127.0.0.1:$MITMWEB_PORT)
 Proxy IP:          192.0.2.10  (for an app's debug proxy setting)
 LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888  (each takes the / and /; forms)
 Public Proxy Base: https://tunnel.example/test-secret
 App Profile:       none
-Scenario:          json-503  (lab)"
+Scenarios:         json-503  (lab)
+                   hls-404  (lab)"
 [ "$out" = "$want" ] || fail "status with the lab up said:
 $out
 not:
 $want"
 out="$(lab_up "" "" "$ROXY" status)" || fail "status without a tunnel or Scenario exited non-zero: $out"
-for want in "Public Proxy Base: none" "Scenario:          none"; do
+for want in "Public Proxy Base: none" "Scenarios:         none"; do
   case "$out" in *"$want"*) ;; *) fail "status without a tunnel or Scenario lacks '$want':
 $out" ;; esac
 done
-echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenario"
+echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenarios in order"
 
 # scenario list: the lab's own Scenarios, with or without a running lab.
 source_of() { awk -v n="$1" '$1 == n {$1 = ""; sub(/^ +/, ""); print}' <<< "$2"; }
@@ -160,16 +161,30 @@ for want in json-503 hls-404; do [ "$(source_of "$want" "$out")" = lab ] || fail
 case "$out" in *"App Profile: none"*) ;; *) fail "scenario list without a profile does not say so: $out" ;; esac
 echo "ok: scenario list shows the lab's Scenarios"
 
-# scenario set and clear switch the running lab's active Scenario through mitmweb's options API.
+# scenario set, add, remove and clear switch the running lab's active Scenarios through
+# mitmweb's options API, and print them.
 scenario_sent() { jq -c . "$FAKE_OPTIONS.put"; }
 out="$(lab_up "" "" "$ROXY" scenario set json-503)" || fail "scenario set: $out"
 [ "$out" = scenario=json-503 ] || fail "scenario set said: $out"
 [ "$(scenario_sent)" = '{"lab_scenario":"json-503"}' ] || fail "scenario set sent $(scenario_sent)"
+out="$(lab_up "" image-404 "$ROXY" scenario set json-503 hls-404)" || fail "scenario set of two: $out"
+[ "$out" = scenario=json-503,hls-404 ] || fail "scenario set of two said: $out"
+[ "$(scenario_sent)" = '{"lab_scenario":"json-503,hls-404"}' ] || fail "scenario set of two sent $(scenario_sent)"
+out="$(lab_up "" json-503 "$ROXY" scenario add hls-404)" || fail "scenario add: $out"
+[ "$out" = scenario=json-503,hls-404 ] || fail "scenario add said: $out"
+[ "$(scenario_sent)" = '{"lab_scenario":"json-503,hls-404"}' ] || fail "scenario add sent $(scenario_sent)"
+out="$(lab_up "" json-503,hls-404 "$ROXY" scenario remove json-503)" || fail "scenario remove: $out"
+[ "$out" = scenario=hls-404 ] || fail "scenario remove said: $out"
+[ "$(scenario_sent)" = '{"lab_scenario":"hls-404"}' ] || fail "scenario remove sent $(scenario_sent)"
+if err="$(lab_up "" json-503 "$ROXY" scenario remove hls-404 2>&1)"; then fail "scenario remove of an inactive one exited 0"; fi
+case "$err" in "error: 'hls-404' is not active"*) ;; *) fail "scenario remove of an inactive one said: $err" ;; esac
+"$ROXY" scenario set >/dev/null 2>&1 && fail "scenario set with no name exited 0"
 out="$(lab_up "" json-503 "$ROXY" scenario clear)" || fail "scenario clear: $out"
 [ "$(scenario_sent)" = '{"lab_scenario":""}' ] || fail "scenario clear sent $(scenario_sent)"
+[ "$out" = scenario=none ] || fail "scenario clear said: $out"
 if err="$("$ROXY" scenario set json-503 2>&1)"; then fail "scenario set with the lab down exited 0"; fi
 case "$err" in *"lab: down"*"roxy start"*) ;; *) fail "scenario set with the lab down said: $err" ;; esac
-echo "ok: scenario set and clear switch the running lab's Scenario"
+echo "ok: scenario set, add, remove and clear switch the running lab's Scenarios"
 
 # launch on a Physical Device: ECP on the LAN with the LAN Proxy Base and the user's params
 # (separator=/; asks the Lab Apps for Charles-style Prefixed URLs).
@@ -183,6 +198,12 @@ $want
 curl asked for:
 $(cat "$CURL_LOG.urls")"
 echo "ok: launch sends the LAN Proxy Base to a Physical Device"
+
+# launch --scenario, repeated, sets those Scenarios in that order before it launches.
+out="$(lab_up "" "" "$ROXY" launch --scenario json-503 --scenario hls-404 "Living Room" case=json_get)" \
+  || fail "launch with two --scenario: $out"
+[ "$(scenario_sent)" = '{"lab_scenario":"json-503,hls-404"}' ] || fail "launch with two --scenario sent $(scenario_sent)"
+echo "ok: launch sets each --scenario, in order"
 
 # A device with ECP set to limited refuses exit-app: launch still launches, without curl's noise.
 : > "$CURL_LOG.urls"
@@ -269,13 +290,14 @@ case "$out" in "error: "*"json-503"*"lab"*"app-a"*) ;; *) fail "the clash refusa
 rm "$scenarios_a/json-503.toml"
 echo "ok: scenario list shows each Scenario once by source, a clash as refused, and the clash fails the start"
 
-# status names the running lab's App Profile, and where its active Scenario came from.
-out="$(lab_up app-a empty-catalog "$ROXY" status)" || fail "status with app-a: $out"
-for want in "App Profile:       app-a" "Scenario:          empty-catalog  (App Profile app-a)"; do
+# status names the running lab's App Profile, and where each active Scenario came from.
+out="$(lab_up app-a empty-catalog,json-503 "$ROXY" status)" || fail "status with app-a: $out"
+for want in "App Profile:       app-a" "Scenarios:         empty-catalog  (App Profile app-a)
+                   json-503  (lab)"; do
   case "$out" in *"$want"*) ;; *) fail "status with app-a lacks '$want':
 $out" ;; esac
 done
-echo "ok: status names the App Profile and the active Scenario's source"
+echo "ok: status names the App Profile and each active Scenario's source"
 
 # flows --json: the lab down says so; the lab up takes every option and prints a JSON array
 # (here empty: the fake mitmweb has no flows). test_lab_session.py covers the flows themselves.

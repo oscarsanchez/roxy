@@ -116,19 +116,21 @@ class FakeMitmweb:
             return 403, b""
 
 
-def test_the_state_names_the_loaded_app_profile_and_the_active_scenario():
-    lab = FakeMitmweb(lab_app="example-app", lab_scenario="json-503")
+def test_the_state_names_the_loaded_app_profile_and_the_active_scenarios_in_order():
+    lab = FakeMitmweb(lab_app="example-app", lab_scenario="json-503,hls-404")
 
-    assert LabSession(lab).state() == LabState(app="example-app", scenario="json-503")
+    assert LabSession(lab).state() == LabState(app="example-app", scenarios=["json-503", "hls-404"])
 
 
-def test_the_state_of_a_lab_without_either_is_none_for_both():
-    assert LabSession(FakeMitmweb()).state() == LabState(app=None, scenario=None)
+def test_the_state_of_a_lab_without_either_is_none_and_no_scenarios():
+    assert LabSession(FakeMitmweb()).state() == LabState(app=None, scenarios=[])
 
 
 EVERY_OPERATION = {
     "state": lambda session: session.state(),
-    "set_scenario": lambda session: session.set_scenario("json-503"),
+    "set_scenarios": lambda session: session.set_scenarios(["json-503"]),
+    "add_scenario": lambda session: session.add_scenario("json-503"),
+    "remove_scenario": lambda session: session.remove_scenario("json-503"),
     "flows": lambda session: session.flows(),
 }
 
@@ -151,28 +153,76 @@ def test_a_wrong_password_is_named(operation):
         operation(LabSession(lab))
 
 
-def test_setting_a_scenario_makes_it_the_active_one():
-    session = LabSession(FakeMitmweb())
+def test_setting_scenarios_replaces_the_active_set_in_that_order():
+    session = LabSession(FakeMitmweb(lab_scenario="image-404"))
 
-    session.set_scenario("json-503")
+    session.set_scenarios(["json-503", "hls-404"])
 
-    assert session.state().scenario == "json-503"
+    assert session.state().scenarios == ["json-503", "hls-404"]
 
 
-def test_an_empty_name_clears_the_active_scenario():
+def test_setting_one_scenario_sends_just_its_name():
+    lab = FakeMitmweb()
+
+    LabSession(lab).set_scenarios(["json-503"])
+
+    assert lab.puts == [("options", {"lab_scenario": "json-503"})]
+
+
+@pytest.mark.parametrize("names", [[], [""]], ids=["no names", "an empty name"])
+def test_setting_no_scenarios_clears_the_active_set(names):
+    session = LabSession(FakeMitmweb(lab_scenario="json-503,hls-404"))
+
+    session.set_scenarios(names)
+
+    assert session.state().scenarios == []
+
+
+def test_adding_a_scenario_appends_it_to_the_active_set():
     session = LabSession(FakeMitmweb(lab_scenario="json-503"))
 
-    session.set_scenario("")
+    session.add_scenario("hls-404")
 
-    assert session.state().scenario is None
+    assert session.state().scenarios == ["json-503", "hls-404"]
 
 
-def test_a_scenario_the_lab_refuses_is_named_with_the_labs_reason_and_stays_inactive():
+def test_adding_an_active_scenario_leaves_the_set_as_it_is():
+    session = LabSession(FakeMitmweb(lab_scenario="json-503,hls-404"))
+
+    session.add_scenario("json-503")
+
+    assert session.state().scenarios == ["json-503", "hls-404"]
+
+
+def test_removing_a_scenario_drops_only_it():
+    session = LabSession(FakeMitmweb(lab_scenario="json-503,hls-404,image-404"))
+
+    session.remove_scenario("hls-404")
+
+    assert session.state().scenarios == ["json-503", "image-404"]
+
+
+def test_removing_a_scenario_that_is_not_active_is_refused():
+    session = LabSession(FakeMitmweb(lab_scenario="json-503"))
+
+    with pytest.raises(ScenarioRefused, match=r"'hls-404' is not active.*json-503"):
+        session.remove_scenario("hls-404")
+    assert session.state().scenarios == ["json-503"]
+
+
+REFUSED_CHANGES = {
+    "set_scenarios": lambda session: session.set_scenarios(["hls-404", "no-such-scenario"]),
+    "add_scenario": lambda session: session.add_scenario("no-such-scenario"),
+}
+
+
+@pytest.mark.parametrize("change", REFUSED_CHANGES.values(), ids=REFUSED_CHANGES.keys())
+def test_an_unknown_scenario_is_refused_with_the_labs_reason_and_the_set_stays(change):
     session = LabSession(FakeMitmweb(lab_scenario="json-503"))
 
     with pytest.raises(ScenarioRefused, match=r"'no-such-scenario'.*no-such-scenario"):
-        session.set_scenario("no-such-scenario")
-    assert session.state().scenario == "json-503"
+        change(session)
+    assert session.state().scenarios == ["json-503"]
 
 
 def test_flows_are_summed_up_in_the_documented_shape_oldest_first(recorded_flows):
@@ -320,9 +370,9 @@ def mitmweb_port(recorded_flows, localhost):
 def test_over_http_the_session_signs_in_and_passes_mitmwebs_xsrf_check(mitmweb_port):
     session = LabSession(HttpTransport(mitmweb_port, PASSWORD))
 
-    session.set_scenario("json-503")
+    session.set_scenarios(["json-503"])
 
-    assert session.state() == LabState(app=None, scenario="json-503")
+    assert session.state() == LabState(app=None, scenarios=["json-503"])
     assert times(session.flows(filter='~d httpbin.org & ~u "/json"')) == ["10:02"]
 
 
