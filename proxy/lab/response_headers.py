@@ -30,10 +30,15 @@ class ResponseHeaderRewriter:
             """The Prefixed URL for a (possibly relative) URL the Origin sent."""
             return prefixed_for_client(flow, urljoin(flow.request.url, url))
 
+        def cookie_path(path):
+            """The Prefixed URL's path, up to any ";": a cookie path cannot hold one
+            (RFC 6265), so a Charles-style ("/;") cookie is scoped to the Proxy Base."""
+            return urlsplit(prefixed(path)).path.partition(";")[0]
+
         def cookie(value):
             """Host-only on the Proxy Base, and scoped to its Origin by path."""
             value = _COOKIE_DOMAIN.sub("", value)
-            return _replace_url(_COOKIE_PATH, lambda path: urlsplit(prefixed(path)).path, value)
+            return _replace_url(_COOKIE_PATH, cookie_path, value)
 
         for name, pattern in urls.items():
             _rewrite_values(response.headers, name, lambda v: _replace_url(pattern, prefixed, v))
