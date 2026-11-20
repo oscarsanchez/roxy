@@ -51,11 +51,7 @@ if [ -n "$ip" ]; then  # Physical Device: ECP on the LAN
   exit_app() { ecp_post exit-app/dev 2>/dev/null; }
   launch_dev() { ecp_post "launch/dev?$query"; }
 elif [ -n "$rce_name" ]; then  # Cloud Device: ECP through the rce CLI, which encodes the params
-  if [ -z "$proxy_base" ]; then
-    load_env
-    proxy_base="$(public_proxy_base)" \
-      || die "a Cloud Device needs the public Proxy Base: start the lab with its tunnel (roxy start --tunnel), or pass --proxy-base"
-  fi
+  proxy_base="${proxy_base:-$(require_public_proxy_base)}"
   slug="$(device_field "$device" slug)"
   proxy_base="${proxy_base%/}${slug:+/$slug}"
   rce_params=(--param "proxyBase=$proxy_base")

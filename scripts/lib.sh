@@ -179,6 +179,14 @@ public_proxy_base() {
   echo "https://$host/$LAB_SECRET"
 }
 
+# require_public_proxy_base : public_proxy_base, loading secrets.env; fails saying how to
+# start the tunnel when none is up.
+require_public_proxy_base() {
+  load_env
+  public_proxy_base \
+    || die "a Cloud Device needs the public Proxy Base: start the lab with its tunnel (roxy start --tunnel), or pass --proxy-base"
+}
+
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {
   require_jq
