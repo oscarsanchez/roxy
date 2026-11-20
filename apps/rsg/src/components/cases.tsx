@@ -210,17 +210,14 @@ const Widevine: Component<CaseProps> = props => (
     />
 );
 
-// --- Ad case: one RAF ad break (CSAI through @roku-sdk/ads) on a Prefixed ad tag URL ---
-// A VAST wrapper whose VASTAdTagURI leads to an inline ad: the ad tags, the media and the
-// beacons reach the lab only if the body rewriter turns them into Prefixed URLs.
+// --- Ad cases: one RAF ad break (CSAI through @roku-sdk/ads) on a Prefixed ad tag URL ---
+// The ad tags, the media and the beacons reach the lab only if the body rewriter turns them
+// into Prefixed URLs.
 // Result: outcome=<completed|no_ads|exited|error|timeout_<ads state>> ads= impressions=na
 // completes=na errors=na media=<lab|direct|none>. The classic fields are kept, but the SDK's
 // <Ads> task has no tracking callback, so the beacon counts are "na": count them in mitmweb.
 
-const AD_TAG =
-    "https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dredirectlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator=";
-
-const Raf: Component<CaseProps> = props => {
+const AdBreak: Component<CaseProps & { adTag: string }> = props => {
     let adView!: DomNode;
     const [command, setCommand] = createSignal<AdsCommand>("none");
     // RAF logs what it fires: compare with mitmweb to find bypasses. The task applies
@@ -248,7 +245,7 @@ const Raf: Component<CaseProps> = props => {
         <group>
             <rectangle ref={adView} width={1920} height={1080} color="0x00000000" />
             <Ads
-                adUrl={prefixedUrl(props.proxyBase, props.separator, AD_TAG)}
+                adUrl={prefixedUrl(props.proxyBase, props.separator, props.adTag)}
                 adView={adView}
                 debugOutput={debugOutput()}
                 onAdsState={state => {
@@ -278,6 +275,23 @@ const Raf: Component<CaseProps> = props => {
 const firstStreamUrl = (pods: AdPod[]): string | undefined =>
     pods.flatMap(pod => pod.ads ?? []).find(ad => ad.streams?.length)?.streams?.[0]?.url;
 
+// A VAST wrapper whose VASTAdTagURI leads to an inline ad.
+const Raf: Component<CaseProps> = props => (
+    <AdBreak
+        {...props}
+        adTag="https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/single_ad_samples&sz=640x480&cust_params=sample_ct%3Dredirectlinear&ciu_szs=300x250%2C728x90&gdfp_req=1&output=vast&unviewed_position_start=1&env=vp&impl=s&correlator="
+    />
+);
+
+// Google's IMA VMAP pre-roll sample: a VMAP whose AdTagURI leads to the VAST ad that RAF
+// plays as the pre-roll pod.
+const RafVmap: Component<CaseProps> = props => (
+    <AdBreak
+        {...props}
+        adTag="https://pubads.g.doubleclick.net/gampad/ads?iu=/21775744923/external/vmap_ad_samples&sz=640x480&cust_params=sample_ar%3Dpreonly&ciu_szs=300x250%2C728x90&gdfp_req=1&ad_rule=1&output=vmap&unviewed_position_start=1&env=vp&correlator="
+    />
+);
+
 export type LabCase = { label: string; component: Component<CaseProps> };
 
 // The cases (traffic classes) by launch-param name, in menu order: the classic app's ids,
@@ -290,5 +304,6 @@ export const CASES: Record<string, LabCase> = {
     widevine: { label: "Widevine DASH", component: Widevine },
     json_post: { label: "JSON POST", component: JsonPost },
     image: { label: "Image (from catalog JSON)", component: Image },
-    raf: { label: "RAF ad", component: Raf }
+    raf: { label: "RAF ad", component: Raf },
+    raf_vmap: { label: "RAF VMAP ad", component: RafVmap }
 };

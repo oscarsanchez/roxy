@@ -8,7 +8,7 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](
 
 ### Scope
 
-- Every kind of Outbound Traffic: JSON APIs, images, HLS, DASH, Widevine licenses, RAF/VAST ads and their beacons.
+- Every kind of Outbound Traffic: JSON APIs, images, HLS, DASH, Widevine licenses, RAF ads (VAST, VAST wrappers, VMAP) and their beacons.
 - Inspection in mitmweb, and Manipulation: mocked or map-local responses, rewritten headers and bodies, injected faults (status, latency, drops), edited manifests, held-and-edited flows, and recorded sessions replayed.
 - Two disposable Lab Apps (classic BrightScript/SceneGraph and RSG 2.0) exercise every traffic class and serve as the regression grid. Store apps and Roku OS's own traffic are out of scope.
 
@@ -105,13 +105,14 @@ rce console player --until 'LABRESULT json_get' --timeout 60   # roxy console "C
 rce device stop player                                   # billing ends here
 ```
 
-Cases (same ids, labels and Origins in both flavours, also in an on-screen menu): `json_get`, `redirect`, `json_post`, `image`, `hls`, `dash`, `widevine`, `raf`; classic also has `uuid` (new data on each request, to prove replay). Launched without a Proxy Base, the app uses the LAN Proxy Base it was built with.
+Cases (same ids, labels and Origins in both flavours, also in an on-screen menu): `json_get`, `redirect`, `json_post`, `image`, `hls`, `dash`, `widevine`, `raf`, `raf_vmap`; classic also has `uuid` (new data on each request, to prove replay). Launched without a Proxy Base, the app uses the LAN Proxy Base it was built with.
 
 **Result lines** (one per run; the console replays recent history on connect, so match on `run=<id>`):
 
 - Requests: `LABRESULT <case> run=<id> status=<code> bytes=<n> fp=<first 12 hex digits of the sha1>`. `json_post` adds `sentfp=` (equal to `fp` = the body arrived intact). `image` reports `status`, `prefixed=<yes|no>` (the catalog's image URL came back as a Prefixed URL) and `poster=<ready|failed>`.
 - Playback (`hls`, `dash`, `widevine`): `state=<playing|error|finished|timeout_<state>> errorCode=<n> bitrate=<first video segment bps>`. `widevine` adds `license=`: `2` once the license is acquired (Roku OS 16), the license server's HTTP status when it fails, `none` if none was requested. A playback error also prints `LABERROR <case> run=<id> <errorStr>` (diagnostic only).
 - `raf`: one RAF ad break from Google's sample VAST wrapper tag, as a Prefixed URL: `outcome=<completed|no_ads|exited> ads= impressions= completes= errors= media=<lab|direct|none>` (`media`: the first creative is a Prefixed URL). RAF's own `[RAF] fireBeacon(...)` log is on the console. In the RSG app, `impressions`, `completes` and `errors` are `na`: the SDK's `@roku-sdk/ads` task has no tracking callback, so count beacons in mitmweb.
+- `raf_vmap`: the same, from Google's IMA VMAP pre-roll sample tag: RAF follows the VMAP's `AdTagURI` to the VAST ad and plays the pre-roll pod.
 - RSG lines start with `[TS]: ` and carry colour codes; match on `LABRESULT`. A release `rk build` strips `console.*`, so always build with `--debug`. By hand: `cd apps/rsg && LAB_PROXY_BASE=http://<mac-ip>:8080 ./node_modules/.bin/rk build --debug --local`.
 
 ### 5. Scenarios
@@ -125,7 +126,7 @@ roxy scenario clear                                     # none active
 roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then launch ('' clears it)
 ```
 
-Or edit `lab_scenario` in mitmweb's Options. Editing the active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads`; a status override alone is not enough, RAF reads a 503's VAST body).
+Or edit `lab_scenario` in mitmweb's Options. Editing the active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
 
 Each rule has a `name`, a mitmproxy `filter` expression and exactly one action. Every matching rule applies, in file order. Flows the lab refused itself are never touched.
 
@@ -181,7 +182,7 @@ alter_segments = { from = 2, uri = "missing.ts", duration = 1.5 }   # HLS: new U
 ### 6. Grid runner
 
 ```sh
-scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf> [--proxy-base URL] [--ca-routing] [--separator /|/;]
+scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf|raf_vmap> [--proxy-base URL] [--ca-routing] [--separator /|/;]
 scripts/grid classic physical json
 scripts/grid rsg cloud hls --proxy-base "https://<random>.trycloudflare.com/<LAB_SECRET>"
 scripts/grid classic physical json --ca-routing   # CA Routing (see CA Routing)
@@ -194,7 +195,7 @@ It fills one grid cell through the running native lab (`scripts/start-lab`, not 
 
 - **Pass:** the run without a Scenario succeeded, every expected Origin host showed up in that run's flows from the Target Device, the lab refused nothing, and the Scenario changed the result line.
 - **Leaks** can only be inferred, since traffic that bypasses the lab never reaches mitmweb: an expected host is missing although the Lab App reports success, or the console prints an absolute URL that is not a Prefixed URL. A bypassing request to a host outside the expected hosts, one the result does not depend on (a beacon, a prefetch), and Roku OS traffic go unseen.
-- No result line before the timeout: rerun the cell (an RSG launch crash is possible). A `raf` baseline of `no_ads` is a known flake of Google's sample ad server: rerun. If a run errors part-way, its Scenario stays active: clear it with `--scenario ''`.
+- No result line before the timeout: rerun the cell (an RSG launch crash is possible). A `raf` or `raf_vmap` baseline of `no_ads` is a known flake of Google's sample ad server: rerun. If a run errors part-way, its Scenario stays active: clear it with `--scenario ''`.
 
 ### 7. Docker Compose
 
