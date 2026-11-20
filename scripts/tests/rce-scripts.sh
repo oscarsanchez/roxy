@@ -7,8 +7,10 @@ SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(dirname "$SCRIPTS")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-export LAB_LOCK_DIR="$TMP/locks" RCE_LOG="$TMP/rce.log"
+export LAB_LOCK_DIR="$TMP/locks" RCE_LOG="$TMP/rce.log" ROXY_CONFIG_DIR="$TMP/settings"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER
+mkdir -p "$ROXY_CONFIG_DIR"
+cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"  # its devices, never your own
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
@@ -26,8 +28,8 @@ chmod +x "$TMP/bin/rce"
 export PATH="$TMP/bin:$PATH"
 
 device="Cloud Device"
-name="$(jq -r --arg d "$device" '.[$d].rce_device_name' "$REPO/proxy/config/devices.json")"
-slug="$(jq -r --arg d "$device" '.[$d].slug' "$REPO/proxy/config/devices.json")"
+name="$(jq -r --arg d "$device" '.[$d].rce_device_name' "$ROXY_CONFIG_DIR/devices.json")"
+slug="$(jq -r --arg d "$device" '.[$d].slug' "$ROXY_CONFIG_DIR/devices.json")"
 [ -n "$name" ] && [ "$name" != null ] || fail "devices.json: '$device' has no rce_device_name"
 
 # launch: exit-app, then launch/dev with the public Proxy Base plus the slug, through rce.
@@ -55,7 +57,7 @@ case "$err" in *"Device Name '$name'"*) ;; *) fail "launch's refusal does not na
 echo "ok: an unknown Device Name stops launch before any billed call"
 
 # deploy: packages the app and sideloads it with rce, which knows the Cloud Device's dev
-# password: no .env, no shared ROKU_DEV_PASSWORD. A throwaway app keeps out/ of real builds.
+# password: no secrets.env, no shared ROKU_DEV_PASSWORD. A throwaway app keeps out/ of real builds.
 app="$TMP/rce-test-app-$$"
 mkdir -p "$app"
 printf 'title=rce test\n' > "$app/manifest"

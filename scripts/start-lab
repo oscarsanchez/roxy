@@ -6,10 +6,12 @@
 #   lab (Ctrl-C) closes the tunnel too.
 #   --ca-routing also listens on ports 443 and 80 for CA Routing (phase 2,
 #   Physical Devices on the GL.iNet; see docs/ca-routing.md).
-#   --replay SESSION answers requests from a saved session (a captures/*.mitm
-#   file) with mitmproxy's server replay instead of asking the Origin; requests
-#   it did not record get a 404 and never reach their Origin.
-# Every session is saved to captures/<start time>.mitm (by scripts/run-mitmweb).
+#   --replay SESSION answers requests from a saved session (a .mitm file) with
+#   mitmproxy's server replay instead of asking the Origin; requests it did not
+#   record get a 404 and never reach their Origin.
+# Settings and secrets come from the settings root (scripts/lib.sh); a missing one
+# stops the start, named. Every session is saved to the user data directory
+# (CAPTURES_DIR in scripts/lib.sh, by scripts/run-mitmweb).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -34,6 +36,7 @@ fi
 
 load_env
 require_env MITMWEB_PASSWORD
+require_settings
 lab_lock lab  # one lab per user; deploy, launch and grid take the devices lock instead
 if $tunnel; then
   require_env LAB_SECRET
@@ -53,7 +56,7 @@ quick_tunnel_host() {
   return 1
 }
 
-echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in .env)"
+echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in $SECRETS_FILE)"
 echo "LAN Proxy Base:    $(lan_proxy_base)"
 if [ "$LAB_CA_ROUTING" = true ]; then
   echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $(lan_ip); point lab Origins here in DNS (docs/ca-routing.md)"

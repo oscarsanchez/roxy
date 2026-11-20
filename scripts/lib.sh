@@ -1,14 +1,23 @@
 # Shared helpers for the lab scripts. Source it; do not run it.
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-DEVICES_FILE="$REPO_ROOT/proxy/config/devices.json"
+
+# The settings root: the user's secrets, devices and LAN subnets, never in a repo.
+# ROXY_CONFIG_DIR overrides it (tests, experiments). Exported: the proxy reads it too.
+export ROXY_CONFIG_DIR="${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/roxy}"
+SECRETS_FILE="$ROXY_CONFIG_DIR/secrets.env"
+DEVICES_FILE="$ROXY_CONFIG_DIR/devices.json"
+SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
+# Saved sessions: the user data directory, in the folder for sessions without an App Profile.
+CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/no-profile"
+
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_WEB_PORT=8081  # mitmweb UI, localhost only
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
 
-LAB_LOCK_DIR="${LAB_LOCK_DIR:-$HOME/.cache/mitm-lab/locks}"  # per user, shared by every checkout
+LAB_LOCK_DIR="${LAB_LOCK_DIR:-$HOME/.cache/roxy/locks}"  # per user, shared by every checkout
 
 die() { echo "error: $*" >&2; exit 1; }
 
@@ -61,11 +70,16 @@ lock_holder() {
   echo "${owner:+$owner, }pid $(lock_field "$1" pid) since $(lock_field "$1" since): $(lock_field "$1" command)"
 }
 
+# missing_setting_file FILE : fail, naming FILE and its example.
+missing_setting_file() {
+  die "missing setting file $1 (copy settings.example/$(basename "$1") there, then fill it in)"
+}
+
 load_env() {
-  [ -f "$REPO_ROOT/.env" ] || die ".env not found (cp .env.example .env, then fill it in)"
+  [ -f "$SECRETS_FILE" ] || missing_setting_file "$SECRETS_FILE"
   set -a
-  # shellcheck disable=SC1091
-  . "$REPO_ROOT/.env"
+  # shellcheck disable=SC1090
+  . "$SECRETS_FILE"
   set +a
 }
 
@@ -75,7 +89,16 @@ require_env() {
   for name in "$@"; do
     [ -n "${!name:-}" ] || missing="$missing $name"
   done
-  [ -z "$missing" ] || die "missing secrets in .env:$missing"
+  [ -z "$missing" ] || die "missing secrets in $SECRETS_FILE:$missing"
+}
+
+# require_settings : fail fast, naming a missing settings file or setting.
+require_settings() {
+  command -v jq >/dev/null || die "jq is required (brew install jq)"
+  [ -f "$DEVICES_FILE" ] || missing_setting_file "$DEVICES_FILE"
+  [ -f "$SETTINGS_FILE" ] || missing_setting_file "$SETTINGS_FILE"
+  jq -e '.lan_subnets | length > 0' "$SETTINGS_FILE" >/dev/null 2>&1 \
+    || die "missing setting lan_subnets (your LAN's subnets, CIDR) in $SETTINGS_FILE"
 }
 
 # The Mac's address on the default-route interface.
@@ -92,6 +115,7 @@ lan_proxy_base() { echo "http://$(lan_ip):$LAB_PORT"; }
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {
   command -v jq >/dev/null || die "jq is required (brew install jq)"
+  [ -f "$DEVICES_FILE" ] || missing_setting_file "$DEVICES_FILE"
   jq -e --arg n "$1" 'has($n)' "$DEVICES_FILE" >/dev/null \
     || die "unknown device '$1'. Known: $(jq -r 'keys | join(", ")' "$DEVICES_FILE")"
   jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // empty' "$DEVICES_FILE"
@@ -101,13 +125,13 @@ device_field() {
 uri_encode() { jq -rn --arg v "$1" '$v | @uri'; }
 
 # rce_device_name DEVICE-NAME : the rce Device Name of a Cloud Device in devices.json, empty
-# for a Physical Device. The rce CLI (~/projects/roku-rce) does everything RCE for the lab;
+# for a Physical Device. The rce CLI does everything RCE for the lab;
 # `rce device resolve` checks the name locally, for free, before anything is billed.
 rce_device_name() {
   local name
   name="$(device_field "$1" rce_device_name)"
   if [ -n "$name" ]; then
-    command -v rce >/dev/null || die "Cloud Devices need the rce CLI on PATH (~/projects/roku-rce: ./install.sh)"
+    command -v rce >/dev/null || die "Cloud Devices need the rce CLI on PATH (see its README to install it)"
     rce device resolve "$name" >/dev/null \
       || die "rce does not know the Device Name '$name' of '$1': see rce device list"
   fi

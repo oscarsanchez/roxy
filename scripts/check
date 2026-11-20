@@ -1,9 +1,16 @@
 #!/usr/bin/env bash
 # Every mechanical check, no devices or network: the pre-commit hook (.githooks) runs it.
 # Usage: scripts/check
+# It never reads your own settings: the settings root is a temp folder seeded from
+# settings.example/, and the user data directory a temp folder too.
 set -euo pipefail
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+export ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data"
 . "$(dirname "$0")/lib.sh"
 cd "$REPO_ROOT"
+mkdir -p "$ROXY_CONFIG_DIR"
+cp -R settings.example/. "$ROXY_CONFIG_DIR"
 
 step() { echo "== $*"; }
 
@@ -25,9 +32,12 @@ scripts/tests/lab-lock.sh >/dev/null
 step "Cloud Device scripts (fake rce)"
 scripts/tests/rce-scripts.sh >/dev/null
 
+step "settings and saved sessions (fake mitmweb)"
+scripts/tests/settings.sh >/dev/null
+
 step "compose config"
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
-  MITMWEB_PASSWORD="${MITMWEB_PASSWORD:-check}" docker compose config -q  # no .env needed to parse
+  docker compose config -q
 else
   echo "skipped: no docker compose CLI"
 fi

@@ -9,11 +9,11 @@
 #   LAB_CA_ROUTING=true: also listen on the CA Routing ports (LAB_CA_ROUTING_PORTS) for
 #   Origin URLs that DNS sends here, and take their Origin from Host/SNI.
 #   LAB_LAN_SUBNETS: client subnets (CIDR, space-separated) allowed on the LAN listener,
-#   instead of lan_subnets in proxy/config/guards.json. compose.yaml sets it.
-#   LAB_REPLAY: a saved session (relative to the repo, or absolute) to answer from
+#   instead of lan_subnets in the settings root's settings.json. compose.yaml sets it.
+#   LAB_REPLAY: a saved session (relative to $CAPTURES_DIR, or absolute) to answer from
 #   with server replay instead of the Origins. Offline: a request it did not record gets
 #   an empty 404 from the lab and never reaches its Origin.
-# Every session is saved to captures/<start time>.mitm.
+# Every session is saved to $CAPTURES_DIR/<start time>.mitm (scripts/lib.sh).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -36,11 +36,12 @@ for subnet in ${LAB_LAN_SUBNETS:-}; do
 done
 
 # A fixed name: a strftime pattern in save_stream_file would start a new file every second.
-session="$REPO_ROOT/captures/$(date +%Y%m%d-%H%M%S).mitm"
+mkdir -p "$CAPTURES_DIR"
+session="$CAPTURES_DIR/$(date +%Y%m%d-%H%M%S).mitm"
 echo "Saving session to: $session"
 replay_opts=()
 if [ -n "${LAB_REPLAY:-}" ]; then
-  replay="$(cd "$REPO_ROOT" && realpath "$LAB_REPLAY")" || die "no saved session at $LAB_REPLAY"
+  replay="$(cd "$CAPTURES_DIR" && realpath "$LAB_REPLAY")" || die "no saved session at $LAB_REPLAY"
   [ -f "$replay" ] || die "no saved session at $LAB_REPLAY"
   echo "Replaying:         $replay"
   # reuse: the Lab App may run a case more than once. extra=404: unrecorded requests stay
