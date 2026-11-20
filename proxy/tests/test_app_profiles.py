@@ -5,7 +5,7 @@ import json
 
 import pytest
 
-from chain import SECRET, TUNNEL_OPTIONS, assert_refused, run_chain, tunnel_flow, origin_json
+from chain import SECRET, TUNNEL_OPTIONS, assert_refused, lab_flow, origin_json, run_chain, tunnel_flow
 
 
 @pytest.fixture
@@ -39,3 +39,22 @@ def test_without_the_profile_the_public_endpoint_refuses_that_host(app_profile):
     flow = tunnel_flow(f"/{SECRET}/https://api.example-app.example/catalog")
 
     assert_refused(flow, run_chain(flow, origin_json(), **TUNNEL_OPTIONS), "origin-host")
+
+
+def test_a_profile_scenarios_map_local_answers_from_the_profiles_mocks(app_profile):
+    scenarios = app_profile("example-app") / "scenarios"
+    (scenarios / "mocks").mkdir()
+    (scenarios / "mocks" / "catalog.json").write_text('{"items": []}')
+    (scenarios / "empty-catalog.toml").write_text('''
+[[rule]]
+name = "the catalog is empty"
+filter = "~u /json"
+map_local = "mocks/catalog.json"
+''')
+    flow = lab_flow("/https://httpbin.org/json")
+
+    forwarded = run_chain(flow, origin_json(), lab_app="example-app", lab_scenario="empty-catalog")
+
+    assert forwarded is None
+    assert flow.response.status_code == 200
+    assert flow.response.content == b'{"items": []}'

@@ -15,7 +15,7 @@ def addon_chain():
     """Fresh lab addon instances, in hook order."""
     app_profile = AppProfile()
     guards = Guards(app_profile)
-    scenarios = Scenarios()
+    scenarios = Scenarios(app_profile)
     return [
         app_profile,  # first: the others read the loaded profile when they configure
         OriginDecoder(),
