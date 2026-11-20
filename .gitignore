@@ -1,0 +1,15 @@
+# Decisions, specs and tickets stay local (never committed)
+.scratch/
+docs/adr/
+
+# Secrets and personal settings live in ~/.config/roxy/; these are local leftovers
+.env
+.leak-denylist
+
+captures/
+out/
+__pycache__/
+.venv/
+.pytest_cache/
+*.zip
+.DS_Store
