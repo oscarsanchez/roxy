@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# The roxy CLI and its install, as black boxes (Seam C): a temp settings root, a temp
+# HOME, and fakes on PATH for curl (mitmweb's API, cloudflared's metrics, ECP), rce,
+# and the Mac's network commands. No lab, no device, no network, no real settings.
+# Usage: scripts/tests/roxy.sh   (run by scripts/check)
+set -euo pipefail
+REPO="$(cd "$(dirname "$0")/../.." && pwd)"
+ROXY="$REPO/bin/roxy"
+TMP="$(mktemp -d)"
+trap 'rm -rf "$TMP"' EXIT
+export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data"
+unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER MITMWEB_PASSWORD LAB_SECRET
+
+fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# The settings root, seeded from the examples, with a mitmweb password and a tunnel secret.
+mkdir -p "$ROXY_CONFIG_DIR"
+cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"
+sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
+  -e 's/^LAB_SECRET=.*/LAB_SECRET=test-secret/' "$ROXY_CONFIG_DIR/secrets.env"
+
+# Fakes on PATH. curl logs one line of shell-quoted arguments per call and answers for
+# mitmweb's API (FAKE_LAB_UP=1: up, with FAKE_SCENARIO active), cloudflared's metrics
+# (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
+# route and ipconfig give the Mac the LAN IP 192.0.2.10.
+export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log"
+mkdir -p "$TMP/bin"
+cat > "$TMP/bin/curl" <<'EOF'
+#!/usr/bin/env bash
+printf '%q ' "$@" >> "$CURL_LOG"
+echo >> "$CURL_LOG"
+url=""; for a in "$@"; do case "$a" in http://*|https://*) url="$a" ;; esac; done
+down() { echo "curl: (7) Failed to connect" >&2; exit 7; }
+case "$url" in
+  */options.json) [ "${FAKE_LAB_UP:-}" = 1 ] || down
+    printf '{"lab_scenario": {"value": "%s"}}\n' "${FAKE_SCENARIO:-}" ;;
+  */options) [ "${FAKE_LAB_UP:-}" = 1 ] || down
+    case " $* " in *" -w "*) printf '\n200' ;; esac ;;
+  */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || down
+    printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
+esac
+EOF
+cat > "$TMP/bin/rce" <<'EOF'
+#!/usr/bin/env bash
+printf '%q ' "$@" >> "$RCE_LOG"
+echo >> "$RCE_LOG"
+EOF
+printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
+printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
+chmod +x "$TMP/bin/"*
+export PATH="$TMP/bin:$PATH"
+
+# --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
+for args in "" start status scenario launch console; do
+  # shellcheck disable=SC2086
+  out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
+  case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
+done
+"$ROXY" >/dev/null 2>&1 && fail "roxy with no subcommand exited 0"
+if err="$("$ROXY" explode 2>&1)"; then fail "roxy explode exited 0"; fi
+case "$err" in *"unknown subcommand 'explode'"*) ;; *) fail "roxy explode said: $err" ;; esac
+"$ROXY" scenario explode >/dev/null 2>&1 && fail "roxy scenario explode exited 0"
+echo "ok: --help for roxy and every subcommand; unknown subcommands refused"
+
+# status: the lab down says so, and exits 1.
+if out="$("$ROXY" status 2>&1)"; then fail "status exited 0 with the lab down: $out"; fi
+case "$out" in *"lab: down"*) ;; *) fail "status with the lab down said: $out" ;; esac
+echo "ok: status says when the lab is down"
+
+# status: the lab up reports the Proxy IP, the Proxy Bases and the active Scenario.
+out="$(FAKE_LAB_UP=1 FAKE_SCENARIO=json-503 FAKE_TUNNEL_HOST=tunnel.example "$ROXY" status)" \
+  || fail "status with the lab up exited non-zero: $out"
+for want in "lab: up" "Proxy IP:          192.0.2.10" "LAN Proxy Base:    http://192.0.2.10:8080" \
+  "Public Proxy Base: https://tunnel.example/test-secret" "Scenario:          json-503"; do
+  case "$out" in *"$want"*) ;; *) fail "status with the lab up lacks '$want':
+$out" ;; esac
+done
+grep -q 'Authorization:\\ Bearer\\ test-password' "$CURL_LOG" || fail "status did not sign in to mitmweb"
+out="$(FAKE_LAB_UP=1 "$ROXY" status)" || fail "status without a tunnel or Scenario exited non-zero: $out"
+for want in "Public Proxy Base: none" "Scenario:          none"; do
+  case "$out" in *"$want"*) ;; *) fail "status without a tunnel or Scenario lacks '$want':
+$out" ;; esac
+done
+echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenario"

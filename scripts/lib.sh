@@ -16,6 +16,7 @@ LAB_WEB_PORT=8081  # mitmweb UI, localhost only
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
+TUNNEL_METRICS="127.0.0.1:20241"  # cloudflared's local metrics server: readiness and the quick tunnel hostname
 
 LAB_LOCK_DIR="${LAB_LOCK_DIR:-$HOME/.cache/roxy/locks}"  # per user, shared by every checkout
 
@@ -111,6 +112,26 @@ lan_ip() {
 }
 
 lan_proxy_base() { echo "http://$(lan_ip):$LAB_PORT"; }
+
+# tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.
+tunnel_host() {
+  curl -fsS "http://$TUNNEL_METRICS/quicktunnel" 2>/dev/null | jq -er '.hostname | select(. != "")'
+}
+
+# public_proxy_base : the running tunnel's public Proxy Base, without a device slug;
+# fails when no tunnel is up. Needs load_env.
+public_proxy_base() {
+  local host
+  host="$(tunnel_host)" || return 1
+  require_env LAB_SECRET
+  echo "https://$host/$LAB_SECRET"
+}
+
+# mitmweb_get PATH : GET PATH from the running lab's mitmweb API; fails when no lab
+# answers. Needs load_env.
+mitmweb_get() {
+  curl -fsS -H "Authorization: Bearer $MITMWEB_PASSWORD" "http://127.0.0.1:$LAB_WEB_PORT/$1"
+}
 
 # device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
 device_field() {

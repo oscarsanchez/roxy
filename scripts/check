@@ -21,7 +21,7 @@ step "grid tests"
 (cd grid && uv run --quiet pytest -q)
 
 step "shell syntax"
-for f in scripts/* scripts/tests/* .githooks/*; do
+for f in bin/* install.sh scripts/* scripts/tests/* .githooks/*; do
   if [ -f "$f" ] && head -1 "$f" | grep -q bash; then bash -n "$f"; fi
 done
 bash -n scripts/lib.sh
@@ -34,6 +34,9 @@ scripts/tests/rce-scripts.sh >/dev/null
 
 step "settings and saved sessions (fake mitmweb)"
 scripts/tests/settings.sh >/dev/null
+
+step "roxy CLI and install (fake curl and rce)"
+scripts/tests/roxy.sh >/dev/null
 
 step "compose config"
 if command -v docker >/dev/null && docker compose version >/dev/null 2>&1; then
