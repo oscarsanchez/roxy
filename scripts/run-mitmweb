@@ -52,10 +52,11 @@ fi
 cd "$REPO_ROOT/proxy"
 # mitmproxy's `reverse` mode to a dummy target: the Origin decoder points each request at its Origin.
 # keep_host_header lets it see the client's Proxy Base; lazy never dials the dummy target.
-# Two listeners: the LAN listener for Physical Devices, and the tunnel listener that
-# only cloudflared dials, which is how the lab tells tunnel requests apart.
+# Two LAN listeners for Physical Devices (8888 is Charles's port, ADR-0002), and the
+# tunnel listener that only cloudflared dials, which is how the lab tells tunnel requests apart.
 exec "$@" \
   --mode "reverse:http://127.0.0.1:9@$LAB_PORT" \
+  --mode "reverse:http://127.0.0.1:9@$LAB_CHARLES_PORT" \
   --mode "reverse:http://127.0.0.1:9@$local_host:$LAB_TUNNEL_PORT" \
   ${ca_routing_args[@]+"${ca_routing_args[@]}"} \
   ${lan_subnet_args[@]+"${lan_subnet_args[@]}"} \

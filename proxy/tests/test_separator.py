@@ -6,6 +6,7 @@ import json
 
 import pytest
 from mitmproxy import http
+from mitmproxy.proxy.mode_specs import ProxyMode
 from mitmproxy.test import tutils
 
 from chain import LAN_PROXY_BASE, fixture_response, lab_flow, run_chain
@@ -126,6 +127,17 @@ def test_referer_and_origin_in_either_form_reach_the_origin_decoded(name, separa
     forwarded = run_chain(flow, origin_response())
 
     assert forwarded.headers[name] == "https://cdn.example/page?a=1"
+
+
+def test_the_charles_port_listener_runs_the_same_chain():
+    """Client hooks hardcode Charles's port: the lab listens on 8888 as well as 8080."""
+    flow = lab_flow("/;https://httpbin.org/redirect/1", host_header="192.0.2.10:8888")
+    flow.client_conn.proxy_mode = ProxyMode.parse("reverse:http://127.0.0.1:9@8888")
+
+    forwarded = run_chain(flow, origin_response(302, [(b"location", b"/get")]))
+
+    assert forwarded.url == "https://httpbin.org/redirect/1"
+    assert flow.response.headers["location"] == "http://192.0.2.10:8888/;https://httpbin.org/get"
 
 
 @pytest.mark.parametrize("sent", ["/", "/;"])

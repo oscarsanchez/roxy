@@ -57,9 +57,11 @@ quick_tunnel_host() {
 }
 
 echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in $SECRETS_FILE)"
-echo "LAN Proxy Base:    $(lan_proxy_base)"
+ip="$(lan_ip)" || true  # lan_ip names the problem; the lab still starts
+echo "Proxy IP:          $ip  (for an app's debug proxy setting)"
+echo "LAN Proxy Bases:   http://$ip:$LAB_PORT  http://$ip:$LAB_CHARLES_PORT  (each takes the / and /; forms)"
 if [ "$LAB_CA_ROUTING" = true ]; then
-  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $(lan_ip); point lab Origins here in DNS (README, CA Routing)"
+  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $ip; point lab Origins here in DNS (README, CA Routing)"
 fi
 
 # mitmweb and the tunnel stop together, whichever way the lab stops.

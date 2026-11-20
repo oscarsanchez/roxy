@@ -72,3 +72,12 @@ case "$session" in "$XDG_DATA_HOME/roxy/captures/no-profile/"*.mitm) ;; *) fail 
 [ -d "$(dirname "$session")" ] || fail "the saved-session folder $(dirname "$session") does not exist"
 grep -qx 'web_password=test-password' "$UV_LOG" || fail "mitmweb did not get the password from secrets.env"
 echo "ok: a session is saved in the user data directory"
+
+# Both LAN listeners start (8888 is Charles's port, which client hooks hardcode), and the
+# start prints the Proxy IP to type into an app's debug proxy setting and both LAN Proxy Bases.
+grep -qx 'reverse:http://127.0.0.1:9@8080' "$UV_LOG" || fail "mitmweb has no LAN listener on 8080"
+grep -qx 'reverse:http://127.0.0.1:9@8888' "$UV_LOG" || fail "mitmweb has no LAN listener on 8888"
+ip="$(printf '%s\n' "$out" | sed -n 's/^Proxy IP: *\([^ ]*\).*/\1/p')"
+[ -n "$ip" ] || fail "the start does not print the Proxy IP: $out"
+case "$out" in *"http://$ip:8080"*"http://$ip:8888"*) ;; *) fail "the start does not print both LAN Proxy Bases: $out" ;; esac
+echo "ok: both LAN listeners start, and the start prints the Proxy IP and both LAN Proxy Bases"
