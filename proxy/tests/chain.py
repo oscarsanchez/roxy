@@ -1,20 +1,25 @@
 """Seam A harness: run a flow through the full lab addon chain, as mitmweb does.
 
 Tests assert only on what reaches the Origin (the forwarded request) and what
-reaches the client (flow.response). No network: Origin responses are fixtures.
+reaches the client (flow.response, and when its bytes arrived: Lab.received).
+No network: Origin responses are fixtures.
 """
 
+import asyncio
 from pathlib import Path
+from types import SimpleNamespace
 
 from mitmproxy import hooks as lifecycle
 from mitmproxy import connection, http
 from mitmproxy.addons import save, serverplayback
+from mitmproxy.net.http.http1 import assemble_response
 from mitmproxy.proxy.layers import http as hooks
 from mitmproxy.proxy import server_hooks
 from mitmproxy.proxy.mode_specs import ProxyMode
+from mitmproxy.proxy.server import ConnectionIO
 from mitmproxy.test import taddons, tflow, tutils
 
-from lab import addon_chain
+from lab import addon_chain, throttle
 
 LAN_PROXY_BASE_HOST = "192.0.2.10:8080"
 LAN_PROXY_BASE = f"http://{LAN_PROXY_BASE_HOST}"
@@ -97,16 +102,64 @@ def run_chain(flow, origin_response, **options):
         return lab.run(flow, origin_response)
 
 
+class TestClock:
+    """The lab's clock in tests: sleeping moves time on at once, so pacing never really waits."""
+
+    def __init__(self):
+        self.time = 0.0
+
+    def now(self):
+        return self.time
+
+    async def sleep(self, seconds):
+        self.time += max(seconds, 0)
+        await asyncio.sleep(0)
+
+
+class ClientWriter:
+    """The client's end of a connection, as mitmproxy writes to it (an asyncio.StreamWriter):
+    records how many bytes reached the client, and when."""
+
+    def __init__(self, clock):
+        self.clock = clock
+        self.writes = []  # (time, byte count)
+        self.closed = asyncio.Event()
+
+    def write(self, data):
+        self.writes.append((self.clock.now(), len(data)))
+
+    def write_eof(self):
+        self.close()
+
+    def close(self):
+        self.closed.set()
+
+    def is_closing(self):
+        return self.closed.is_set()
+
+
+class Proxyserver:
+    """Stands in for mitmproxy's proxyserver addon: the live client connections, by id."""
+
+    def __init__(self):
+        self.connections = {}
+
+
 class Lab:
     """The full lab addon chain, kept running across flows like mitmweb,
     so options can change between flows (as mitmweb's options PUT does).
 
     mitmweb's server replay and save-to-file built-ins run after it, as in
-    mitmweb (both idle unless their options are set)."""
+    mitmweb (both idle unless their options are set). Time is a TestClock."""
 
     def __init__(self, **options):
+        self.clock = TestClock()
+        self._proxyserver = Proxyserver()
+        self._sent = {}  # flow id -> (when its response started, its ClientWriter)
         # owns its own event loop
-        self._context = taddons.context(*addon_chain(), serverplayback.ServerPlayback(), save.Save())
+        self._context = taddons.context(
+            *addon_chain(), serverplayback.ServerPlayback(), save.Save(), self._proxyserver
+        )
         manager = self._context.master.addons
         for addon in manager.chain:  # as mitmweb's script loader does after load
             manager.invoke_addon_sync(addon, lifecycle.ConfigureHook(self._context.options.keys()))
@@ -138,7 +191,17 @@ class Lab:
         answered the client itself (or killed the flow). flow.response is what
         the client receives.
         """
-        return self._context.master.event_loop.run_until_complete(self._run(flow, origin_response))
+        real_clock, throttle.clock = throttle.clock, self.clock
+        try:
+            return self._context.master.event_loop.run_until_complete(self._run(flow, origin_response))
+        finally:
+            throttle.clock = real_clock
+
+    def received(self, flow):
+        """What reached the client of a flow `run` answered: (seconds since its response
+        started, byte count) for each write, the response head included."""
+        started, client = self._sent[flow.id]
+        return [(when - started, size) for when, size in client.writes]
 
     def connect(self, flow):
         """mitmproxy opens the server connection for a forwarded `flow`, running the
@@ -158,6 +221,26 @@ class Lab:
             await manager.invoke_addon(addon, hook)
 
     async def _run(self, flow, origin_response):
+        client = ClientWriter(self.clock)
+        self._proxyserver.connections[flow.client_conn.id] = SimpleNamespace(
+            transports={flow.client_conn: ConnectionIO(writer=client)}
+        )
+        try:
+            forwarded = await self._exchange(flow, origin_response)
+            if flow.response is not None and not flow.error:
+                await self._send(flow, client)
+            return forwarded
+        finally:
+            del self._proxyserver.connections[flow.client_conn.id]
+
+    async def _send(self, flow, client):
+        """mitmproxy writes the response to the client, then closes the connection."""
+        self._sent[flow.id] = (self.clock.now(), client)
+        client.write(assemble_response(flow.response))
+        client.close()
+        await client.closed.wait()
+
+    async def _exchange(self, flow, origin_response):
         manager = self._context.master.addons
         for hook in (hooks.HttpRequestHeadersHook(flow), hooks.HttpRequestHook(flow)):
             for addon in manager.chain:
