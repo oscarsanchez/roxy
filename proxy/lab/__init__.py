@@ -18,7 +18,7 @@ def addon_chain():
     scenarios = Scenarios(app_profile)
     return [
         app_profile,  # first: the others read the loaded profile when they configure
-        OriginDecoder(),
+        OriginDecoder(app_profile),
         ScenariosBeforeGuards(scenarios),  # Origin swaps (map_remote), judged by the guards
         DeviceLabels(guards),  # before the guards: refused flows are labelled too
         guards,
