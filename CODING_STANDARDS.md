@@ -17,4 +17,4 @@ The judgement calls a reviewer checks. Mechanical rules (tests, shell syntax, Co
 
 ## Tests
 
-- **Proxy tests run at Seam A, through the full chain.** A test builds a flow, runs it through `tests/chain.py`, and asserts on what reaches the Origin or the client, so addons can be split or merged with every test still green. The one exception is App Profiles (`proxy/lab/app_profiles.py`), which the CLI uses too: their tests call `AppProfiles` against a temp settings root and temp git repos.
+- **Proxy tests run at Seam A, through the full chain.** A test builds a flow, runs it through `tests/chain.py`, and asserts on what reaches the Origin or the client, so addons can be split or merged with every test still green. The exceptions are modules the CLI uses too, tested at their own interface: App Profiles (`proxy/lab/app_profiles.py`), whose tests call `AppProfiles` against a temp settings root and temp git repos, and the Lab Session client (`proxy/lab/lab_session.py`), whose tests drive `LabSession` against mitmweb's API in memory.
