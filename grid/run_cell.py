@@ -1,6 +1,6 @@
 """Fill one grid cell on a Target Device through the running lab (Seam B).
 
-Usage: scripts/grid <flavour> <physical|cloud> <traffic-class> [--proxy-base URL] [--ca-routing]
+Usage: scripts/grid <flavour> <physical|cloud> <traffic-class> [--proxy-base URL] [--ca-routing] [--separator /|/;]
 
 Deploys the flavour, then launches its case twice with scripts/launch: first with the
 cell's Manipulation scenario, then with no scenario (so the lab is left with none
@@ -20,7 +20,7 @@ import time
 import tomllib
 import urllib.request
 from contextlib import contextmanager, nullcontext
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from verdict import CRASH_MARKERS, DEVICE_KINDS, Cell, Run, cell_from_config, device_flows, judge, result_line, row, setup
@@ -230,7 +230,7 @@ def launch_once(session: Session, scenario: str) -> Run:
     mark, start = len(console.text), time.time()
     out = subprocess.run(
         [str(SCRIPTS / "launch"), "--scenario", scenario, "--proxy-base", session.proxy_base, device,
-         f"case={cell.case}"],
+         f"case={cell.case}", f"separator={cell.separator}"],
         check=True, stdout=subprocess.PIPE, text=True,
     ).stdout
     run_id = next(line[4:] for line in out.splitlines() if line.startswith("run="))
@@ -267,15 +267,20 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--proxy-base", help="Proxy Base to launch with (a Cloud Device needs the public one)")
     parser.add_argument("--ca-routing", action="store_true",
                         help="CA Routing, on the Physical Device behind the CA Routing router (README, CA Routing)")
+    parser.add_argument("--separator", choices=["/", "/;"], default="/",
+                        help="the Prefixed URL form the Lab App builds: / (the lab's own) or /; (Charles-style)")
     args = parser.parse_args(argv)
     signal.signal(signal.SIGTERM, signal.default_int_handler)  # a kill stops the Run as Ctrl-C does
 
     cloud = args.device_kind == "cloud"
     if cloud and args.ca_routing:
         parser.error("CA Routing is for Physical Devices only")
+    if args.ca_routing and args.separator != "/":
+        parser.error("--separator is for Prefix Routing: a CA Routing build calls Origin URLs directly")
     if cloud and not args.proxy_base:
         parser.error("a Cloud Device needs --proxy-base: the public Proxy Base printed by scripts/start-lab --tunnel")
-    cell = cell_from_config(config, args.flavour, args.device_kind, args.traffic_class, args.ca_routing)
+    cell = replace(cell_from_config(config, args.flavour, args.device_kind, args.traffic_class, args.ca_routing),
+                   separator=args.separator)
     device = lab(f"grid_device {setup(args.device_kind, args.ca_routing)}")
     proxy_base = (args.proxy_base or lab("lan_proxy_base")).rstrip("/")
     device_ip = None if cloud else lab(f"device_field {shlex.quote(device)} ip")
@@ -285,7 +290,7 @@ def main(argv: list[str]) -> int:
     if cloud and not rce_name:
         sys.exit(f"error: {device} has no rce_device_name in devices.json (settings root)")
 
-    routing = "CA Routing build" if cell.ca_routing else f"Proxy Base {proxy_base}"
+    routing = "CA Routing build" if cell.ca_routing else f"Proxy Base {proxy_base}, separator {cell.separator}"
     print(f"cell: {cell.flavour} x {DEVICE_KINDS[cell.device_kind]} x {cell.traffic_class} "
           f"(device {device}, case {cell.case}, scenario {cell.scenario}, {routing})")
     # Everything that can stop the cell is checked before the Target Device is touched.

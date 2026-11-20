@@ -23,6 +23,7 @@ class Cell:
     ok: dict[str, str]
     known_limit: str = ""
     ca_routing: bool = False  # a Physical Device in CA Routing: the Lab App calls Origin URLs directly
+    separator: str = "/"  # the Lab App's Prefixed URL form: "/" (the lab's own) or "/;" (Charles-style)
 
 
 @dataclass
@@ -67,6 +68,7 @@ def cell_from_config(config: dict, flavour: str, device_kind: str, traffic_class
 def row(cell: Cell, verdict: Verdict) -> str:
     """The cell as a row of the evaluation grid (Markdown)."""
     device = DEVICE_KINDS[cell.device_kind] + (" (CA Routing)" if cell.ca_routing else "")
+    device += f" ({cell.separator} form)" if cell.separator != "/" else ""
     cols = [cell.flavour, device, cell.traffic_class, verdict.outcome, verdict.reason]
     return "| " + " | ".join(c.replace("|", "\\|") for c in cols) + " |"
 

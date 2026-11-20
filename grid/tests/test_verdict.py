@@ -229,6 +229,18 @@ def test_a_ca_routing_row_says_so_in_the_device_column():
     assert row(CA_JSON_CELL, v).startswith("| classic | Physical Device (CA Routing) | json | pass |")
 
 
+def test_a_charles_style_row_says_so_in_the_device_column():
+    v = judge(JSON_CELL, BASELINE, MANIPULATED, PROXY_BASE)
+    assert row(replace(JSON_CELL, separator="/;"), v).startswith("| classic | Physical Device (/; form) | json | pass |")
+
+
+def test_a_charles_style_prefixed_url_on_the_console_is_not_a_leak():
+    console = f"GET {PROXY_BASE}/;https://httpbin.org/json\n"
+    cell = replace(JSON_CELL, separator="/;")
+    v = judge(cell, run(BASELINE.result, BASELINE.flows, console), MANIPULATED, PROXY_BASE)
+    assert v.outcome == "pass", v.reason
+
+
 CONFIG = {
     "prefix_routing_fields": ["prefixed"],
     "classes": {
