@@ -1,4 +1,5 @@
 import ipaddress
+import json
 
 import pytest
 
@@ -40,6 +41,15 @@ def test_under_compose_the_lan_subnets_add_docker_desktops_host_address():
         forwarded = lab.run(flow, origin_json())
 
     assert forwarded.url == "https://httpbin.org/json"
+
+
+def test_the_lan_subnets_come_from_the_settings_root(settings):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["198.51.100.0/24"]}))
+    inside = lab_flow("/https://httpbin.org/json", peer=("198.51.100.7", 4000))
+    old_lan = lab_flow("/https://httpbin.org/json")
+
+    assert run_chain(inside, origin_json()) is not None
+    assert_refused(old_lan, run_chain(old_lan, origin_json()), "client-ip")
 
 
 def test_the_lan_subnet_is_set_in_config():

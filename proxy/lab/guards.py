@@ -2,7 +2,8 @@
 
 A request is forwarded only if every guard passes; otherwise the lab answers
 it with a 403 and the failing guard's reason. Defaults come from
-config/guards.json and can be changed live as mitmproxy options.
+config/guards.json and the user's settings (LAN subnets), and can be changed
+live as mitmproxy options.
 """
 
 import asyncio
@@ -15,7 +16,7 @@ from mitmproxy import ctx
 from mitmproxy.exceptions import OptionsError
 
 from lab.clients import ip_address, through_tunnel, tunnel_client_ip
-from lab.config import load_config
+from lab.config import load_config, load_settings
 from lab.prefixed_url import secret_segment
 from lab.refusal import refuse
 
@@ -53,7 +54,7 @@ class Guards:
 
     def load(self, loader):
         loader.add_option(
-            "lab_lan_subnets", Sequence[str], CONFIG["lan_subnets"],
+            "lab_lan_subnets", Sequence[str], load_settings("settings")["lan_subnets"],
             "Client subnets (CIDR) allowed to use the LAN listener.",
         )
         loader.add_option(

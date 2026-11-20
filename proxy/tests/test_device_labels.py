@@ -1,5 +1,7 @@
 """Device labels: every flow in mitmweb names the Target Device that sent it."""
 
+import json
+
 import pytest
 from mitmproxy import flowfilter
 
@@ -19,7 +21,16 @@ def test_a_physical_device_is_named_by_its_client_ip(client_ip, device):
     assert flowfilter.match(f'~comment "{device}"', flow)  # mitmweb's flow filter
 
 
-CLOUD_DEVICE_SLUG = "cloud-device"  # proxy/config/devices.json: "Cloud Device" has this slug
+def test_target_devices_are_named_from_the_devices_registry_in_the_settings_root(settings):
+    (settings / "devices.json").write_text(json.dumps({"Den": {"ip": "192.0.2.77"}}))
+    flow = lab_flow("/https://httpbin.org/json", peer=("192.0.2.77", 51000))
+
+    run_chain(flow, origin_json())
+
+    assert flow.comment == "Den"
+
+
+CLOUD_DEVICE_SLUG = "cloud-device"  # settings.example/devices.json: "Cloud Device" has this slug
 
 
 @pytest.mark.parametrize("client_ip", [RCE_EGRESS_IP, "8.8.8.8"])
