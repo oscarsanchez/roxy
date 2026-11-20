@@ -78,16 +78,20 @@ def test_through_the_public_endpoint_a_swap_to_a_non_allowlisted_host_is_refused
     assert_refused(flow, forwarded, "origin-host")
 
 
-def test_a_manifest_from_the_swapped_host_is_rewritten_with_the_requests_proxy_base(map_remote):
-    flow = lab_flow("/https://stream.mux.com/videos/master.m3u8")
+@pytest.mark.parametrize("separator", ["/", "/;"])
+def test_a_manifest_from_the_swapped_host_is_rewritten_with_the_requests_proxy_base_and_separator(
+    map_remote, separator
+):
+    flow = lab_flow(f"{separator}https://stream.mux.com/videos/master.m3u8")
     swap = map_remote("https://test-streams.mux.dev", filter_expr="~d stream.mux.com")
 
     forwarded = run_chain(flow, fixture_response("hls-master.m3u8", "application/vnd.apple.mpegurl"), **swap)
 
     assert forwarded.url == "https://test-streams.mux.dev/videos/master.m3u8"
     lines = flow.response.text.splitlines()
-    assert f"{LAN_PROXY_BASE}/https://test-streams.mux.dev/videos/gear2/prog_index.m3u8" in lines  # root-relative
+    root_relative = f"{LAN_PROXY_BASE}{separator}https://test-streams.mux.dev/videos/gear2/prog_index.m3u8"
+    assert root_relative in lines
     assert (
-        f"{LAN_PROXY_BASE}/https://manifest.edgemv.mux.com/tok/rendition.m3u8"
+        f"{LAN_PROXY_BASE}{separator}https://manifest.edgemv.mux.com/tok/rendition.m3u8"
         "?cdn=edgemv&expires=1700000000&skid=a1&signature=x%2Fy"
     ) in lines
