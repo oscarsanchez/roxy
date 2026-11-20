@@ -77,3 +77,13 @@ expect_hosts = ["pubads.g.doubleclick.net", "*.gvt1.com"]
 ok = { outcome = "completed", media = "lab" }
 # classic CA Routing: RAF trusts the lab CA (AdTask.brs); its ad hosts are in the DNS rewrites.
 known_limits = { "rsg.ca-routing" = "the SDK's Ads task gives no access to RAF's certificate settings, so RAF does not trust the lab's CA" }
+
+[classes.raf_vmap]
+case = "raf_vmap"
+scenario = "raf-ad-tag-drop"  # the VMAP and the VAST it names are both /gampad/ads on pubads
+# The VAST tag is named only inside the VMAP, the media and beacons only inside the VAST:
+# they reach the lab only through the body rewriter (Prefix Routing) or DNS (CA Routing).
+# Beacon hosts vary with Google's response, as for raf.
+expect_hosts = ["pubads.g.doubleclick.net", "*.gvt1.com"]
+ok = { outcome = "completed", media = "lab" }
+known_limits = { "rsg.ca-routing" = "the SDK's Ads task gives no access to RAF's certificate settings, so RAF does not trust the lab's CA" }

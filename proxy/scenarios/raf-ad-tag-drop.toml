@@ -1,4 +1,5 @@
-# The RAF case's ad tag requests are dropped (no answer), so RAF gets no ads.
+# The RAF cases' ad tag requests (raf's VAST tags, raf_vmap's VMAP and VAST tags) are
+# dropped (no answer), so RAF gets no ads.
 # A status override is not enough: RAF read a 503's VAST body and followed its wrapper.
 # roxy launch --scenario raf-ad-tag-drop "Living Room" case=raf
 
