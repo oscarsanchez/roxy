@@ -264,7 +264,8 @@ def main(argv: list[str]) -> int:
     parser.add_argument("flavour", choices=sorted(config["flavours"]))
     parser.add_argument("device_kind", choices=sorted(DEVICE_KINDS))
     parser.add_argument("traffic_class", choices=sorted(config["classes"]))
-    parser.add_argument("--proxy-base", help="Proxy Base to launch with (a Cloud Device needs the public one)")
+    parser.add_argument("--proxy-base", help="Proxy Base to launch with (default: the LAN one for a Physical Device, "
+                                             "the running tunnel's public one for a Cloud Device)")
     parser.add_argument("--ca-routing", action="store_true",
                         help="CA Routing, on the Physical Device behind the CA Routing router (README, CA Routing)")
     parser.add_argument("--separator", choices=["/", "/;"], default="/",
@@ -277,12 +278,10 @@ def main(argv: list[str]) -> int:
         parser.error("CA Routing is for Physical Devices only")
     if args.ca_routing and args.separator != "/":
         parser.error("--separator is for Prefix Routing: a CA Routing build calls Origin URLs directly")
-    if cloud and not args.proxy_base:
-        parser.error("a Cloud Device needs --proxy-base: the public Proxy Base printed by scripts/start-lab --tunnel")
     cell = replace(cell_from_config(config, args.flavour, args.device_kind, args.traffic_class, args.ca_routing),
                    separator=args.separator)
     device = lab(f"grid_device {setup(args.device_kind, args.ca_routing)}")
-    proxy_base = (args.proxy_base or lab("lan_proxy_base")).rstrip("/")
+    proxy_base = (args.proxy_base or lab("require_public_proxy_base" if cloud else "lan_proxy_base")).rstrip("/")
     device_ip = None if cloud else lab(f"device_field {shlex.quote(device)} ip")
     if not cloud and not device_ip:
         sys.exit(f"error: {device} has no ip in devices.json (settings root)")
