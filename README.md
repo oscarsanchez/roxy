@@ -228,13 +228,21 @@ roxy app list                                            # each profile and its 
 `roxy app new` refuses a name that exists. A profile is the folder `~/.config/roxy/apps/<name>/`:
 
 - `scenarios/<scenario>.toml`: its Scenarios, written like the lab's own, with their mocks next to them (`map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`).
-- `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain). Optional: `"rewrite_text": true` turns the text body format on for this app (Header and body rewriting).
+- `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain). Optional: `"rewrite_text": true` turns the text body format on for this app (Header and body rewriting), and `fallback_origin`, below.
+
+A **fallback Origin** catches requests that reach the lab with no Origin in them: a bare path on the LAN proxy port, such as `/live/…/hls/…/seg.ts`, which a Charles hook leaves behind when the app resolves a root-relative URL against the proxy instead of the CDN. In `profile.json`:
+
+```json
+"fallback_origin": {"path": "^/live/[^/]+/hls/", "origin": "https://cdn.example"}
+```
+
+A bare path the `path` regex matches (searched in the path, not the query) goes to `origin` with its path and query kept, as if it had arrived Prefixed with the client's Proxy Base in the `/;` form: URLs in its response come back as `<Proxy Base>/;<Origin URL>`, while relative ones stay relative and so arrive as bare paths again: write the regex to match those too. Every guard still judges it, so a private Origin is refused `origin-address`. Any other bare path is still refused `not-prefixed`. The Public Endpoint never takes a fallback: a Cloud Device sends Prefixed URLs behind the secret, and a bare path there gets `secret-segment` as before. With CA Routing on, a non-Prefixed request takes its Origin from Host/SNI, never from the fallback. `origin` is `http(s)://host[:port]`; a bad regex or Origin stops the start, naming the profile.
 
 `roxy start` loads at most one: `--app <name>` (an unknown name fails), else the profile whose repo holds the current folder, else none. To switch apps, stop the lab and start it in the other app's folder. A profile Scenario named like one of the lab's own stops the start, naming both; `roxy scenario list` shows that name once, as `refused: in both (rename the profile's)`. Restart the lab after editing `profile.json`; a Scenario file reloads as usual.
 
 ### Guards
 
-The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed`; through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
+The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed` (unless the App Profile's [fallback Origin](#app-profiles) takes it); through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
 
 - A LAN client must be on one of your `lan_subnets`, and may reach any public Origin: the allowlist guards the Public Endpoint only.
 - Relay exposure: while the lab runs, any device on your LAN subnets can use it as an HTTP relay to any public host, the same as with Charles. Only private, loopback, link-local and unique-local Origins stay out of reach.
