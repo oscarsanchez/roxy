@@ -130,9 +130,12 @@ status = 503                                    # status override (the Origin's 
 # header = { name = "Cache-Control", value = "no-store" }   # replace; "" removes (mitmproxy modify_headers)
 # body = { pattern = "regex", replacement = "text" }        # regex replace (mitmproxy modify_body)
 # map_local = "mocks/json.json"                 # answer from a file next to the Scenario (mitmproxy map_local)
+# map_remote = "https://postman-echo.com:443"   # send to another Origin: scheme, host and optional port only
 ```
 
 `header` and `body` act on the request and the response, like their mitmproxy built-ins: add `~q` or `~s` to the filter to pick one.
+
+`map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other (allowlist, private addresses). Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
 
 Manifest edits change manifests only (`filter = "~all"` is fine) and run after Prefixed URL rewriting, so the manifest still routes through the lab:
 
