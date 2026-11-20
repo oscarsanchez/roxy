@@ -159,6 +159,22 @@ throttle = { kbps = 400 }
         assert r[-1][0] == pytest.approx(10, abs=0.2)
 
 
+PER_REQUEST = SLOW_SEGMENTS.replace("{{ kbps = {kbps} }}", '{{ kbps = {kbps}, per = "request" }}')
+
+
+def test_a_per_request_throttle_caps_each_response_on_its_own(scenarios):
+    options = scenarios("slow-segments", PER_REQUEST.format(kbps=400))
+    flows = segment_get(port=51000), segment_get(port=51001)
+
+    with Lab(**options) as lab:
+        lab.run_together(*((flow, origin_segment()) for flow in flows))
+        received = [lab.received(flow) for flow in flows]
+
+    for r in received:  # each 500 KB at 50 KB a second, as if alone
+        assert 0 < received_by(r, 1.0) <= 50_000
+        assert r[-1][0] == pytest.approx(10, abs=0.2)
+
+
 @pytest.mark.parametrize("active", ["slow,slower", "slower,slow"])
 def test_two_active_scenarios_throttling_one_flow_cap_it_at_the_lower_rate(scenarios, active):
     options = scenarios("slow", SLOW_SEGMENTS.format(kbps=800))
@@ -173,7 +189,10 @@ def test_two_active_scenarios_throttling_one_flow_cap_it_at_the_lower_rate(scena
 
 
 BAD_THROTTLES =["0", "-400", '"fast"', "true", "nan", "inf"]
-BAD_TABLES = ["400", "{ rate = 400 }", "{ kbps = 400, burst = 10 }"]
+BAD_TABLES = [
+    "400", "{ rate = 400 }", "{ kbps = 400, burst = 10 }",
+    '{ kbps = 400, per = "device" }', "{ kbps = 400, per = true }", '{ per = "request" }',
+]
 
 
 @pytest.mark.parametrize("kbps", BAD_THROTTLES)
@@ -203,6 +222,20 @@ def test_a_bad_throttle_edit_is_logged_and_the_last_good_rules_stay(scenarios, c
 
     assert received[-1][0] == pytest.approx(10, abs=0.1)
     assert "not reloaded, keeping its last good rules: rule 'slow segments': throttle must be" in caplog.text
+
+
+def test_a_bad_per_edit_is_logged_and_the_last_good_rules_stay(scenarios, caplog):
+    options = scenarios("slow-segments", SLOW_SEGMENTS.format(kbps=400))
+
+    with Lab(**options) as lab:
+        scenarios("slow-segments", SLOW_SEGMENTS.replace("{{ kbps = {kbps} }}", '{ kbps = 400, per = "flow" }'))
+        flows = segment_get(port=51000), segment_get(port=51001)
+        lab.run_together(*((flow, origin_segment()) for flow in flows))
+        received = [lab.received(flow) for flow in flows]
+
+    for r in received:  # still shared: 1 MB at 50 KB a second
+        assert r[-1][0] == pytest.approx(20, abs=0.2)
+    assert "keeping its last good rules: rule 'slow segments': throttle must be" in caplog.text
 
 
 def test_the_end_of_a_throttled_response_reaches_the_client_after_its_last_byte(scenarios):

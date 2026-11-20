@@ -3,8 +3,9 @@
 `throttle = { kbps = N }` sends the responses a rule matches to a Target Device at
 no more than N kilobits per second together: concurrent responses to one device
 share the rule's bucket for that device, each taking the next tick of it in turn
-(a player's parallel requests add up to N, not k x N). A response is paced, not
-delayed: it starts at once and arrives slowly, as over a slow link.
+(a player's parallel requests add up to N, not k x N). `throttle = { kbps = N,
+per = "request" }` gives each response a bucket of its own instead. A response is
+paced, not delayed: it starts at once and arrives slowly, as over a slow link.
 
 mitmproxy has no hook while it sends a body, and a `flow.response.stream`
 callable runs on the event loop, so it cannot wait without stalling every flow
@@ -38,9 +39,13 @@ def paced_seconds(flow):
 
 class Throttle:
     def __init__(self, value, scenario_dir):
-        kbps = value.get("kbps") if isinstance(value, dict) and set(value) == {"kbps"} else None
+        table = isinstance(value, dict) and value.keys() - {"per"} == {"kbps"}
+        kbps = value["kbps"] if table and value.get("per", "request") == "request" else None
         if type(kbps) not in (int, float) or not 0 < kbps < math.inf:
-            raise ValueError(f"throttle must be {{ kbps = N }} with N a positive number, got {value!r}")
+            raise ValueError(
+                f'throttle must be {{ kbps = N }} or {{ kbps = N, per = "request" }} with N a positive number, got {value!r}'
+            )
+        self.per_request = "per" in value
         self.buckets = Buckets(kbps * 1000 / 8)
 
     def response(self, flow):
@@ -52,7 +57,8 @@ class Throttle:
             return
         writer = client_writer(flow)
         if writer is not None:
-            PacedWriter.take_over(writer, self.buckets, target_device(flow), flow)
+            key = flow.id if self.per_request else target_device(flow)
+            PacedWriter.take_over(writer, self.buckets, key, flow)
 
 
 def client_writer(flow):
@@ -67,8 +73,8 @@ def client_writer(flow):
 
 
 class Buckets:
-    """A throttle rule's bandwidth: a bucket of it per key (a Target Device), kept only
-    while a response is paced through it."""
+    """A throttle rule's bandwidth: a bucket of it per key (a Target Device, or a flow
+    for `per = "request"`), kept only while a response is paced through it."""
 
     def __init__(self, bytes_per_second):
         self.bytes_per_second = bytes_per_second
