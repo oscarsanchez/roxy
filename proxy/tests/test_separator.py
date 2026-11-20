@@ -126,3 +126,27 @@ def test_referer_and_origin_in_either_form_reach_the_origin_decoded(name, separa
     forwarded = run_chain(flow, origin_response())
 
     assert forwarded.headers[name] == "https://cdn.example/page?a=1"
+
+
+@pytest.mark.parametrize("sent", ["/", "/;"])
+@SEPARATORS
+def test_a_url_already_prefixed_for_this_client_in_either_form_is_not_prefixed_again(sent, separator):
+    """An Origin can echo a URL the app already prefixed (a tracking URL it was handed)."""
+    flow = lab_flow(f"{separator}https://httpbin.org/anything")
+    body = json.dumps({"url": f"{LAN_PROXY_BASE}{sent}https://cdn.example/a.ts"})
+
+    run_chain(flow, tutils.tresp(headers=http.Headers(content_type="application/json"), content=body.encode()))
+
+    assert json.loads(flow.response.text)["url"] == f"{LAN_PROXY_BASE}{separator}https://cdn.example/a.ts"
+
+
+@pytest.mark.parametrize("recorded", ["/", "/;"])
+@SEPARATORS
+def test_a_replayed_redirect_recorded_in_either_form_is_reprefixed_once_in_the_current_form(recorded, separator):
+    flow = lab_flow(f"{separator}https://httpbin.org/redirect/1")
+    flow.is_replay = "response"
+    location = f"http://rec.example{recorded}https://httpbin.org/get"
+
+    run_chain(flow, origin_response(302, [(b"location", location.encode())]))
+
+    assert flow.response.headers["location"] == f"{LAN_PROXY_BASE}{separator}https://httpbin.org/get"
