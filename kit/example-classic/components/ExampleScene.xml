@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- One JSON request, through the kit. The result shows on screen and on the debug console. -->
+<component name="ExampleScene" extends="Scene">
+  <script type="text/brightscript" uri="pkg:/source/RoxyKit.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/ExampleScene.brs"/>
+  <children>
+    <Rectangle color="0x101820FF" width="1280" height="720"/>
+    <Label text="roxy kit example (classic)" translation="[80,50]"/>
+    <Label id="urlLabel" translation="[80,120]" width="1120" wrap="true"/>
+    <Label id="resultLabel" translation="[80,240]" width="1120" wrap="true"/>
+  </children>
+</component>

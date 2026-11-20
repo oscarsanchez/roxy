@@ -7,6 +7,7 @@
 #   Origin URLs directly and trusts public roots plus the lab's mitmproxy CA: classic
 #   combines Roku's bundle with the CA on the device; RSG 2.0 ships a bundle combined
 #   here (certifi's roots from the proxy venv plus the CA), as HttpsAgent needs a pkg:/ file.
+#   ROXY_KIT=1: build a kit example (kit/example-*) with the kit's build-time constant set.
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -31,6 +32,9 @@ package_app() {
   mkdir -p "$REPO_ROOT/out"
   cp -R "$1" "$stage"
   printf 'lab_proxy_base=%s\n' "$2" >> "$stage/manifest"
+  if [ "${ROXY_KIT:-}" = 1 ]; then  # the kit's build-time constant (kit/example-classic)
+    sed -i.bak 's/roxy_kit=false/roxy_kit=true/' "$stage/manifest" && rm "$stage/manifest.bak"
+  fi
   if $ca_routing; then  # the app combines this CA with Roku's bundle on the device
     mkdir -p "$stage/certs"
     cp "$LAB_CA_CERT" "$stage/certs/lab-ca.crt"
@@ -62,7 +66,7 @@ build_rsg_app() {
   [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 24 ] \
     || die "the RSG 2.0 app needs Node 24+ (brew install node@24)"
   [ -d "$1/node_modules" ] || (cd "$1" && pnpm install --frozen-lockfile >&2) || die "pnpm install failed in $1"
-  (cd "$1" && LAB_PROXY_BASE="$2" LAB_CA_BUNDLE="$ca_bundle" ./node_modules/.bin/rk build --debug --local --archive --out-dir "$out" >&2) \
+  (cd "$1" && LAB_PROXY_BASE="$2" LAB_CA_BUNDLE="$ca_bundle" ROXY_CA_BUNDLE="$ca_bundle" ./node_modules/.bin/rk build --debug --local --archive --out-dir "$out" >&2) \
     || die "rk build failed for $1"
   echo "$out/package/package.bin"
 }

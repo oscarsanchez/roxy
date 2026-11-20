@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<component name="JsonTask" extends="Task">
+  <interface>
+    <field id="url" type="string"/>
+    <!-- {status, length}: the HTTP code (or a negative curl code), the body's length in characters -->
+    <field id="result" type="assocarray"/>
+  </interface>
+  <script type="text/brightscript" uri="pkg:/source/RoxyKit.brs"/>
+  <script type="text/brightscript" uri="pkg:/components/JsonTask.brs"/>
+</component>
