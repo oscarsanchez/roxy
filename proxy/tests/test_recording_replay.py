@@ -8,7 +8,7 @@ those built-ins after the lab chain, as mitmweb does.
 from mitmproxy import http
 from mitmproxy.test import tutils
 
-from chain import Lab, SECRET, TUNNEL_HOST, TUNNEL_PORT, lab_flow, tunnel_flow
+from chain import LAN_PROXY_BASE, Lab, SECRET, TUNNEL_HOST, TUNNEL_PORT, lab_flow, tunnel_flow
 
 
 REPLAY_MODE = {"server_replay_reuse": True, "server_replay_extra": "404"}  # as start-lab --replay sets it
@@ -53,6 +53,18 @@ def test_a_session_recorded_from_one_client_replays_with_the_replaying_clients_p
         lab.run(flow, uuid_response("unused"))
 
     assert flow.response.headers["location"] == f"https://{TUNNEL_HOST}/{SECRET}/https://httpbin.org/json"
+
+
+def test_a_session_recorded_in_one_separator_form_replays_in_the_replaying_requests_form(tmp_path):
+    session = tmp_path / "session.mitm"
+    redirect = tutils.tresp(status_code=302, headers=http.Headers(location="https://httpbin.org/json"), content=b"")
+    record(session, (lab_flow("/https://httpbin.org/redirect/1"), redirect))  # recorded in the lab's own form
+
+    with Lab(server_replay=[str(session)], **REPLAY_MODE) as lab:
+        flow = lab_flow("/;https://httpbin.org/redirect/1")  # replayed in the Charles-style form
+        lab.run(flow, uuid_response("unused"))
+
+    assert flow.response.headers["location"] == f"{LAN_PROXY_BASE}/;https://httpbin.org/json"
 
 
 def test_in_replay_mode_a_request_the_guards_refuse_stays_refused(tmp_path):
