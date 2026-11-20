@@ -8,7 +8,7 @@ URIs that remain are already Prefixed URLs and still route through the lab, and
 a URI an edit puts in goes through the body rewriter's `lab_link` as well.
 
 Only manifests are edited: the format is the one the BodyRewriter chose
-(flow.metadata["body_format"], from its lab_rewrite_<format> options), so a broad
+(body_rewriting.body_format, from its lab_rewrite_<format> options), so a broad
 filter never touches segments or other bodies. drop_variants and drop_renditions
 cover HLS and DASH; the segment edits are HLS only (a DASH SegmentTemplate has
 no per-segment entries to edit).
@@ -17,7 +17,7 @@ no per-segment entries to edit).
 from typing import NamedTuple
 
 from lab import dash, hls
-from lab.body_rewriting import lab_link
+from lab.body_rewriting import body_format, lab_link
 
 
 class ManifestEdit:
@@ -27,7 +27,7 @@ class ManifestEdit:
         self.edits = {"hls": edit_hls, "dash": edit_dash}  # by BodyFormat.name
 
     def response(self, flow):
-        edit = self.edits.get(flow.metadata.get("body_format"))  # as the BodyRewriter chose it
+        edit = self.edits.get(body_format(flow))  # as the BodyRewriter chose it
         if edit is None:
             return
         manifest = flow.response.text

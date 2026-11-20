@@ -78,6 +78,11 @@ def _format_tables():
     return by_content_type, by_extension
 
 
+def body_format(flow):
+    """The name of the format the BodyRewriter chose for `flow`'s response ("hls", ...), or None."""
+    return flow.metadata.get("body_format")
+
+
 def lab_link(flow):
     """How a URL found in `flow`'s response body reaches the lab.
 
@@ -129,12 +134,12 @@ class BodyRewriter:
         return by_type or by_extension
 
     def response(self, flow):
-        body_format = self.body_format_for(flow.response.headers.get("content-type", ""), flow.request.url)
-        if body_format is not None:
-            flow.metadata["body_format"] = body_format.name  # e.g. "hls", for manifest edits
-        if client_proxy_base(flow) is None or body_format is None:
+        chosen = self.body_format_for(flow.response.headers.get("content-type", ""), flow.request.url)
+        if chosen is not None:
+            flow.metadata["body_format"] = chosen.name  # e.g. "hls", for manifest edits: see body_format
+        if client_proxy_base(flow) is None or chosen is None:
             return  # not Prefixed, or binary/unknown content: never decoded, passes byte for byte
         body = flow.response.text  # decoded: compression is mitmproxy's job
-        rewritten = body_format.rewrite(body, lab_link(flow))
+        rewritten = chosen.rewrite(body, lab_link(flow))
         if rewritten != body:
             flow.response.text = rewritten  # re-encoded with the original Content-Encoding
