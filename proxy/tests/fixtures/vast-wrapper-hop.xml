@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VAST version="3.0">
+ <Ad id="wrapper-1">
+  <Wrapper>
+   <AdSystem>Example Ads</AdSystem>
+   <VASTAdTagURI><![CDATA[https://ads.example.net/vast/inline?creative=7&correlator=1700]]></VASTAdTagURI>
+   <Impression><![CDATA[https://beacons.example.net/impression?ad=wrapper-1]]></Impression>
+   <Creatives>
+    <Creative sequence="1">
+     <Linear>
+      <TrackingEvents>
+       <Tracking event="start"><![CDATA[https://beacons.example.net/track?ad=wrapper-1&e=start]]></Tracking>
+       <Tracking event="complete">https://beacons.example.net/track?ad=wrapper-1&amp;e=complete</Tracking>
+      </TrackingEvents>
+     </Linear>
+    </Creative>
+   </Creatives>
+  </Wrapper>
+ </Ad>
+</VAST>

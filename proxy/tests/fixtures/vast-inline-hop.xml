@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<VAST version="3.0">
+ <Ad id="inline-7">
+  <InLine>
+   <AdSystem>Example Ads</AdSystem>
+   <AdTitle>Example inline linear</AdTitle>
+   <Impression><![CDATA[https://beacons.example.org/impression?ad=inline-7]]></Impression>
+   <Creatives>
+    <Creative sequence="1">
+     <Linear>
+      <Duration>00:00:10</Duration>
+      <TrackingEvents>
+       <Tracking event="start"><![CDATA[https://beacons.example.org/track?ad=inline-7&e=start]]></Tracking>
+      </TrackingEvents>
+      <MediaFiles>
+       <MediaFile delivery="progressive" width="640" height="360" type="video/mp4"><![CDATA[https://media.example.org/ads/inline-7/640x360.mp4]]></MediaFile>
+      </MediaFiles>
+     </Linear>
+    </Creative>
+   </Creatives>
+  </InLine>
+ </Ad>
+</VAST>
