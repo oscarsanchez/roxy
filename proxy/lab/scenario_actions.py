@@ -16,6 +16,7 @@ judge the request the Origin will actually get.
 import asyncio
 import re
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from mitmproxy import flowfilter, http
 from mitmproxy.addons.maplocal import MapLocal, MapLocalSpec
@@ -110,6 +111,18 @@ class MapRemote:
     query are kept, and Host follows."""
 
     def __init__(self, target, scenario_dir):
+        if not isinstance(target, str):
+            raise ValueError(f"map_remote must be <scheme>://<host>[:port], got {target!r}")
+        parts = urlsplit(target)
+        try:
+            parts.port  # ValueError when out of range
+        except ValueError as e:
+            raise ValueError(f"map_remote {target!r}: {e}") from e
+        if (
+            parts.scheme not in ("http", "https") or not parts.hostname or "@" in parts.netloc
+            or target != f"{parts.scheme}://{parts.netloc}"  # no path, query or fragment
+        ):
+            raise ValueError(f"map_remote must be <scheme>://<host>[:port], got {target!r}")
         self.target = target
 
     def before_guards(self, flow):

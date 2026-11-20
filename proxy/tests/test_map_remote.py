@@ -1,9 +1,11 @@
 """The map_remote Scenario action: send matching requests to another Origin host."""
 
 import pytest
+from mitmproxy.exceptions import OptionsError
 
 from chain import (
     LAN_PROXY_BASE,
+    Lab,
     SECRET,
     TUNNEL_OPTIONS,
     assert_refused,
@@ -36,6 +38,27 @@ def test_scheme_host_and_port_are_swapped_and_path_query_and_host_header_follow(
     assert forwarded.url == "http://postman-echo.com:8080/anything/json?case=1&n=2"
     assert forwarded.headers["host"] == "postman-echo.com:8080"
     assert flow.response.status_code == 200
+
+
+@pytest.mark.parametrize("target", [
+    "postman-echo.com",  # no scheme
+    "ftp://postman-echo.com",
+    "https://",  # no host
+    "https://postman-echo.com/anything",  # a path: only scheme, host and port swap
+    "https://postman-echo.com?x=1",
+    "https://user@postman-echo.com",
+    "https://postman-echo.com:99999",
+])
+def test_an_invalid_target_is_rejected_and_the_active_scenario_stays(map_remote, tmp_path, target):
+    good = map_remote("https://postman-echo.com")
+    (tmp_path / "broken.toml").write_text(f'[[rule]]\nname = "bad"\nfilter = "~all"\nmap_remote = "{target}"\n')
+
+    with Lab(**good) as lab:
+        with pytest.raises(OptionsError):
+            lab.set_options(lab_scenario="broken")
+        forwarded = lab.run(lab_flow("/https://httpbin.org/json"), origin_json())
+
+    assert forwarded.url == "https://postman-echo.com/json"
 
 
 def test_a_swap_to_a_host_that_resolves_private_is_refused(map_remote, dns):
