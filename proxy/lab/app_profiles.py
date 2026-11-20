@@ -1,8 +1,9 @@
 """App Profiles: what the lab keeps for each Product App, in the user's settings root and
 never in a repo. The one place that knows their layout:
 
-    <settings root>/apps/<name>/profile.json   {"repo": "<git root>", "origin_allowlist": [...],
-                                                "fallback_origin": {"path": "<regex>", "origin": "https://host"}}
+    <settings root>/apps/<name>/profile.json   {"repo": "<git root>", "origin_allowlist": [...]}
+        optional key: "rewrite_text": true turns the text body format on for the app
+        optional key: "fallback_origin": {"path": "<regex>", "origin": "https://host"}
     <settings root>/apps/<name>/scenarios/     its Scenarios, with their mocks next to them
 """
 
@@ -62,7 +63,8 @@ class Profile(NamedTuple):
     origin_allowlist: list
     scenarios_dir: Path
     file: Path  # its profile.json, where the user edits origin_allowlist
-    fallback_origin: FallbackOrigin | None = None  # optional in profile.json
+    rewrite_text: bool  # the text body format is on for this app
+    fallback_origin: FallbackOrigin | None  # None: profile.json names none
 
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -128,15 +130,18 @@ class AppProfiles:
         try:
             doc = json.loads(file.read_text())
             repo, allowlist = Path(doc["repo"]), doc["origin_allowlist"]
+            rewrite_text = doc.get("rewrite_text", False)
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise BadProfile(f"App Profile {name!r} in {file}: {e!r}") from e
         if not isinstance(allowlist, list) or not all(isinstance(host, str) for host in allowlist):
             raise BadProfile(f"App Profile {name!r}: origin_allowlist must be a list of hosts, in {file}")
+        if not isinstance(rewrite_text, bool):
+            raise BadProfile(f"App Profile {name!r}: rewrite_text must be true or false, in {file}")
         try:
             fallback = _fallback_origin(doc.get("fallback_origin"))
         except ValueError as e:
             raise BadProfile(f"App Profile {name!r}: {e}, in {file}") from e
-        return Profile(repo, allowlist, self._folder(name) / "scenarios", file, fallback)
+        return Profile(repo, allowlist, self._folder(name) / "scenarios", file, rewrite_text, fallback)
 
     def scenarios(self, app):
         """Every Scenario App Profile APP (None: no profile) sees, as (name, source): the

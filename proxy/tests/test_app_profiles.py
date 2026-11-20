@@ -177,7 +177,12 @@ def test_resolve_takes_none_outside_every_profiles_repo(profiles, repo, tmp_path
 
 @pytest.mark.parametrize(
     "content",
-    ["{not json", '{"origin_allowlist": []}', '{"repo": "/repos/example", "origin_allowlist": "api.example"}'],
+    [
+        "{not json",
+        '{"origin_allowlist": []}',
+        '{"repo": "/repos/example", "origin_allowlist": "api.example"}',
+        '{"repo": "/repos/example", "origin_allowlist": [], "rewrite_text": "yes"}',
+    ],
 )
 def test_a_bad_profile_json_is_refused_naming_the_profile(profiles, app_profile, content):
     (app_profile("example-app") / "profile.json").write_text(content)

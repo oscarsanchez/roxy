@@ -53,14 +53,14 @@ def scenarios(tmp_path):
 
 @pytest.fixture
 def app_profile(settings):
-    """Write an App Profile into the temp settings root, as `roxy app new` lays it out;
-    returns its folder. `fields` are further profile.json keys."""
+    """Write an App Profile into the temp settings root, as `roxy app new` lays it out,
+    with any further profile.json keys; returns its folder."""
 
-    def write(name, origin_allowlist=(), **fields):
+    def write(name, origin_allowlist=(), **keys):
         folder = settings / "apps" / name
         (folder / "scenarios").mkdir(parents=True)
         (folder / "profile.json").write_text(
-            json.dumps({"repo": "/repos/example", "origin_allowlist": list(origin_allowlist), **fields})
+            json.dumps({"repo": "/repos/example", "origin_allowlist": list(origin_allowlist), **keys})
         )
         return folder
 
