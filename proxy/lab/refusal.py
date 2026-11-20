@@ -9,7 +9,7 @@ def refuse(flow, status, reason):
         status, f"lab refused: {reason}\n", {"X-Lab-Blocked": reason, "Content-Type": "text/plain"}
     )
     flow.marked = ":no_entry:"
-    flow.metadata["lab_refusal"] = [status, reason]
+    flow.metadata["lab_refusal"] = {"status": status, "reason": reason}
 
 
 def refused(flow):
@@ -20,7 +20,7 @@ def refused(flow):
 
 def refusal_reason(flow):
     """The reason the lab refused this flow with, None if it did not."""
-    return flow.metadata["lab_refusal"][1] if refused(flow) else None
+    return flow.metadata["lab_refusal"]["reason"] if refused(flow) else None
 
 
 class KeepRefusals:
@@ -30,5 +30,5 @@ class KeepRefusals:
 
     def responseheaders(self, flow):
         if refused(flow) and flow.is_replay == "response":
-            refuse(flow, *flow.metadata["lab_refusal"])
+            refuse(flow, **flow.metadata["lab_refusal"])
             flow.is_replay = None
