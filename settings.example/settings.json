@@ -1,3 +1,4 @@
 {
-  "lan_subnets": ["192.0.2.0/24"]
+  "lan_subnets": ["192.0.2.0/24"],
+  "grid_devices": {"physical": "Living Room", "cloud": "Cloud Device", "ca-routing": "Travel Stick"}
 }

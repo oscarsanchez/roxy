@@ -121,6 +121,15 @@ device_field() {
   jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // empty' "$DEVICES_FILE"
 }
 
+# grid_device SETUP : the Target Device that scripts/grid fills SETUP cells on (physical,
+# cloud or ca-routing: grid/verdict.py setup), named in settings.json grid_devices.
+grid_device() {
+  command -v jq >/dev/null || die "jq is required (brew install jq)"
+  [ -f "$SETTINGS_FILE" ] || missing_setting_file "$SETTINGS_FILE"
+  jq -er --arg s "$1" '.grid_devices[$s] // empty' "$SETTINGS_FILE" \
+    || die "missing setting grid_devices.$1 (a device name from devices.json) in $SETTINGS_FILE"
+}
+
 # Percent-encode one value completely, for ECP query parameters.
 uri_encode() { jq -rn --arg v "$1" '$v | @uri'; }
 

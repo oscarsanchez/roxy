@@ -24,7 +24,7 @@ GRACE_S = 2   # after the result line, for the lines printed right after it
 
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(prog="scripts/console", description="Record a Physical Device's console.")
-    parser.add_argument("device", help="a device name from proxy/config/devices.json")
+    parser.add_argument("device", help="a device name from devices.json in the settings root")
     parser.add_argument("--launch", metavar="CASE", help="launch this case and stop at its result line")
     parser.add_argument("--scenario", help="with --launch: the lab scenario to set first ('' clears it)")
     parser.add_argument("--seconds", type=float, default=60, help="stop after this long (default 60)")

@@ -33,11 +33,13 @@ LAUNCH_S = 5  # projected time of one scripts/launch call
 
 
 def lab(snippet: str) -> str:
-    """Run a shell snippet with scripts/lib.sh loaded (one source for env, devices, LAN IP)."""
+    """Run a shell snippet with scripts/lib.sh loaded (one source for settings, secrets,
+    devices, LAN IP). Its error, which names what is missing, ends the cell."""
     script = f'set -euo pipefail; . "$1"; {snippet}'
-    return subprocess.run(
-        ["bash", "-c", script, "lab", str(SCRIPTS / "lib.sh")], check=True, stdout=subprocess.PIPE, text=True
-    ).stdout.strip()
+    done = subprocess.run(["bash", "-c", script, "lab", str(SCRIPTS / "lib.sh")], stdout=subprocess.PIPE, text=True)
+    if done.returncode:
+        sys.exit(done.returncode)
+    return done.stdout.strip()
 
 
 def save_log(text: str, *parts: str) -> Path:
@@ -86,7 +88,7 @@ def physical_console(ip: str) -> Console:
 
 
 def rce(*args: str, quiet: bool = False) -> str:
-    """Run the rce CLI (~/projects/roku-rce), which does everything RCE for the lab. Its own
+    """Run the rce CLI, which does everything RCE for the lab. Its own
     messages go to the terminal; quiet=True returns its stdout instead of showing it.
     On Ctrl-C or a kill it lets rce finish before raising KeyboardInterrupt: a Ctrl-C
     reaches rce too, and it stops a Run its start was waiting on. (subprocess.run would
@@ -273,14 +275,14 @@ def main(argv: list[str]) -> int:
     if cloud and not args.proxy_base:
         parser.error("a Cloud Device needs --proxy-base: the public Proxy Base printed by scripts/start-lab --tunnel")
     cell = cell_from_config(config, args.flavour, args.device_kind, args.traffic_class, args.ca_routing)
-    device = config["devices"][setup(args.device_kind, args.ca_routing)]
+    device = lab(f"grid_device {setup(args.device_kind, args.ca_routing)}")
     proxy_base = (args.proxy_base or lab("lan_proxy_base")).rstrip("/")
     device_ip = None if cloud else lab(f"device_field {shlex.quote(device)} ip")
     if not cloud and not device_ip:
-        sys.exit(f"error: {device} has no ip in proxy/config/devices.json")
+        sys.exit(f"error: {device} has no ip in devices.json (settings root)")
     rce_name = lab(f"rce_device_name {shlex.quote(device)}") if cloud else None  # local, free
     if cloud and not rce_name:
-        sys.exit(f"error: {device} has no rce_device_name in proxy/config/devices.json")
+        sys.exit(f"error: {device} has no rce_device_name in devices.json (settings root)")
 
     routing = "CA Routing build" if cell.ca_routing else f"Proxy Base {proxy_base}"
     print(f"cell: {cell.flavour} x {DEVICE_KINDS[cell.device_kind]} x {cell.traffic_class} "

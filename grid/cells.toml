@@ -1,4 +1,6 @@
 # Grid cells for scripts/grid. A cell is Lab App flavour x Target Device kind x traffic class.
+# The Target Device per kind is the user's setting: grid_devices in the settings root's
+# settings.json (scripts/lib.sh grid_device).
 # Each traffic class names the Lab App case to launch, the Manipulation scenario
 # (proxy/scenarios/<name>.toml) that must change its result line, the Origin hosts the
 # lab must see when no scenario is active (fnmatch patterns), and the result-line fields
@@ -22,11 +24,6 @@ prefix_routing_fields = ["prefixed", "media"]
 [flavours]  # Lab App directory for scripts/deploy
 classic = "apps/classic"
 rsg = "apps/rsg"
-
-[devices]  # Target Device per kind (names from proxy/config/devices.json)
-physical = "Living Room"
-cloud = "Cloud Device"
-ca-routing = "Travel Stick"  # the Physical Device on the GL.iNet Wi-Fi (docs/ca-routing.md)
 
 [classes.json]
 case = "json_get"
