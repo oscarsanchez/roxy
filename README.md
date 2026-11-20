@@ -14,11 +14,11 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](
 
 ### Routing
 
-**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`. The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
+**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`, or `<Proxy Base>/;<Origin URL>` as a Charles-enabled build does (port 8888). How to wire an app: [Prefix Routing guide](docs/prefix-routing.md). The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
 
 | Target Device | Proxy Base |
 |---|---|
-| Physical Device | `http://<mac-lan-ip>:8080`. Give the Mac a DHCP reservation so it stays stable. |
+| Physical Device | `http://<mac-lan-ip>:8080`, or `:8888` (Charles's port). Give the Mac a DHCP reservation so it stays stable. |
 | Cloud Device | `https://<tunnel-host>/<secret>/<device-slug>`: the Public Endpoint (a Cloudflare quick tunnel), the secret segment, and the slug that names the Cloud Device (`scripts/launch` adds it). |
 
 **CA Routing** (Physical Devices only): DNS on the router points Origins at the Mac, and a CA Routing build of the app calls Origin URLs directly while trusting the lab's CA on every agent. See [CA Routing](#ca-routing-physical-devices-only).
@@ -69,7 +69,7 @@ git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check
 ### 3. Start the lab
 
 ```sh
-scripts/start-lab                    # mitmweb UI http://127.0.0.1:8081; prints the LAN Proxy Base
+scripts/start-lab                    # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
 scripts/start-lab --tunnel           # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
 scripts/start-lab --replay <session>.mitm   # answer from a saved session (see Recording and replay)
 scripts/start-lab --ca-routing       # also listens on 443/80 (see CA Routing)
@@ -166,7 +166,7 @@ It fills one grid cell through the running native lab (`scripts/start-lab`, not 
 The same addons, config, Scenarios and mitmweb flags (`scripts/run-mitmweb`), mounted from the repo; no Python or cloudflared to install. Settings and secrets come from the same settings root (mounted read-only; `ROXY_CONFIG_DIR` works here too), and sessions are saved in the same user data directory.
 
 ```sh
-docker compose up                       # LAN listener on :8080, mitmweb UI on http://127.0.0.1:8081
+docker compose up                       # LAN listeners on :8080 and :8888, mitmweb UI on http://127.0.0.1:8081
 docker compose --profile tunnel up      # plus the quick tunnel, for Cloud Devices
 curl -s 127.0.0.1:20241/quicktunnel     # the tunnel's hostname: public Proxy Base https://<hostname>/<LAB_SECRET>
 docker compose --profile tunnel down    # stops both, closing the Public Endpoint
@@ -193,7 +193,7 @@ The lab forwards a request only if the client is allowed, the Origin host is on 
 
 ### Header and body rewriting
 
-URLs in response headers (Location, Content-Location, Link, Refresh) and bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests (segments, images, ads) come back through the lab. Set-Cookie is scoped to the Prefixed path, and its `Domain` is dropped. The body rewriter is chosen by content type, falling back to the URL extension; anything else passes byte for byte.
+URLs in response headers (Location, Content-Location, Link, Refresh) and bodies become Prefixed URLs with the client's Proxy Base and the separator (`/` or `/;`) the request used, so follow-up requests (segments, images, ads) come back through the lab. A URL already carrying the client's Proxy Base is left as it is. Set-Cookie is scoped to the Prefixed path (to the Proxy Base for `/;`: a cookie path cannot hold `;`), and its `Domain` is dropped. The body rewriter is chosen by content type, falling back to the URL extension; anything else passes byte for byte.
 
 - Each format has an option `lab_rewrite_<format>` (`hls`, `dash`, `json`, `xml`) listing its content types and `.ext` extensions. Change it in mitmweb's Options or with `--set`; an empty list turns the format off.
 - HLS: URI lines and `URI=` attributes (`EXT-X-KEY`, `EXT-X-MAP`, `EXT-X-MEDIA`, `EXT-X-I-FRAME-STREAM-INF`).
