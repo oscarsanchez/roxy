@@ -198,6 +198,12 @@ case "$out" in *"unknown App Profile 'nope'"*) ;; *) fail "start --app nope said
 [ ! -e "$UV_LOG" ] || fail "start --app nope started mitmweb"
 echo "ok: start loads the App Profile named, else the current repo's, else none; an unknown name fails"
 
+# The session is saved in the user data directory, under the loaded App Profile's name.
+start_in "$repos/app-a" >/dev/null || fail "start in app-a's repo"
+saved="$(ls "$XDG_DATA_HOME/roxy/captures/app-a/"*.mitm 2>/dev/null)" || true
+[ -n "$saved" ] || fail "start with app-a saved no session under captures/app-a: $(find "$XDG_DATA_HOME" -name '*.mitm')"
+echo "ok: a session is saved under the App Profile's name"
+
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
 home="$TMP/home"

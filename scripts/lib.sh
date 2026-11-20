@@ -11,8 +11,9 @@ SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
 # App Profiles: APPS_DIR/<name>/profile.json ({"repo", "origin_allowlist"}) and
 # APPS_DIR/<name>/scenarios/ (its Scenarios and their mocks). proxy/lab/app_profile.py loads one.
 APPS_DIR="$ROXY_CONFIG_DIR/apps"
-# Saved sessions: the user data directory, in the folder for sessions without an App Profile.
-CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/no-profile"
+# Saved sessions: the user data directory, in the loaded App Profile's folder (LAB_APP, which
+# scripts/start-lab exports), or the one for sessions without a profile.
+CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-profile}"
 
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
