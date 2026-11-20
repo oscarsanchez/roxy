@@ -7,7 +7,6 @@ No network: Origin responses are fixtures.
 
 import asyncio
 from pathlib import Path
-from types import SimpleNamespace
 
 from mitmproxy import hooks as lifecycle
 from mitmproxy import connection, http
@@ -16,10 +15,9 @@ from mitmproxy.net.http.http1 import assemble_response
 from mitmproxy.proxy.layers import http as hooks
 from mitmproxy.proxy import server_hooks
 from mitmproxy.proxy.mode_specs import ProxyMode
-from mitmproxy.proxy.server import ConnectionIO
 from mitmproxy.test import taddons, tflow, tutils
 
-from lab import addon_chain, clock
+from lab import addon_chain, clock, throttle
 
 LAN_PROXY_BASE_HOST = "192.0.2.10:8080"
 LAN_PROXY_BASE = f"http://{LAN_PROXY_BASE_HOST}"
@@ -144,28 +142,25 @@ class ClientWriter:
         return self.closed.is_set() or hung_up
 
 
-class Proxyserver:
-    """Stands in for mitmproxy's proxyserver addon: the live client connections, by id."""
-
-    def __init__(self):
-        self.connections = {}
-
-
 class Lab:
     """The full lab addon chain, kept running across flows like mitmweb,
     so options can change between flows (as mitmweb's options PUT does).
 
     mitmweb's server replay and save-to-file built-ins run after it, as in
-    mitmweb (both idle unless their options are set). Time is a TestClock."""
+    mitmweb (both idle unless their options are set). Time is a TestClock.
+
+    The lab reaches past its hooks for two things, and a running flow gets the test's:
+    the clock, and its client connection's writer (throttle.client_writer, the one
+    mitmproxy internal the lab uses, which tests/test_mitmproxy_contract.py checks)."""
 
     def __init__(self, **options):
         self.clock = TestClock()
-        self._proxyserver = Proxyserver()
+        self._clients = {}  # client connection id -> its ClientWriter, while `run` sends to it
         self._sent = {}  # flow id -> (when its response started, its ClientWriter)
         self._reached_origin = {}  # flow id -> seconds from run to the Origin getting the request
         # owns its own event loop
         self._context = taddons.context(
-            *addon_chain(), serverplayback.ServerPlayback(), save.Save(), self._proxyserver
+            *addon_chain(), serverplayback.ServerPlayback(), save.Save()
         )
         manager = self._context.master.addons
         for addon in manager.chain:  # as mitmweb's script loader does after load
@@ -202,12 +197,13 @@ class Lab:
         hangs up. `lab_stops_at`: seconds after the response starts at which mitmweb
         stops, cancelling the tasks still sending it, as asyncio does on the way out.
         """
-        real_clock, clock.current = clock.current, self.clock
+        real = clock.current, throttle.client_writer
+        clock.current, throttle.client_writer = self.clock, self._client_writer
         try:
             run = self._run(flow, origin_response, client_hangs_up_at, lab_stops_at)
             return self._context.master.event_loop.run_until_complete(run)
         finally:
-            clock.current = real_clock
+            clock.current, throttle.client_writer = real
 
     def received(self, flow):
         """What reached the client of a flow `run` answered: (seconds since its response
@@ -238,6 +234,9 @@ class Lab:
         self.last_server = server
         return None if server.error else server.address
 
+    def _client_writer(self, flow):
+        return self._clients.get(flow.client_conn.id)
+
     async def _hook(self, hook):
         manager = self._context.master.addons
         for addon in manager.chain:
@@ -245,9 +244,7 @@ class Lab:
 
     async def _run(self, flow, origin_response, client_hangs_up_at, lab_stops_at):
         client = ClientWriter(self.clock)
-        self._proxyserver.connections[flow.client_conn.id] = SimpleNamespace(
-            transports={flow.client_conn: ConnectionIO(writer=client)}
-        )
+        self._clients[flow.client_conn.id] = client
         try:
             forwarded = await self._exchange(flow, origin_response)
             if flow.response is not None and not flow.error:
@@ -256,7 +253,7 @@ class Lab:
                 await self._send(flow, client, lab_stops_at)
             return forwarded
         finally:
-            del self._proxyserver.connections[flow.client_conn.id]
+            del self._clients[flow.client_conn.id]
 
     async def _send(self, flow, client, lab_stops_at):
         """mitmproxy writes the response to the client, then ends the connection: it

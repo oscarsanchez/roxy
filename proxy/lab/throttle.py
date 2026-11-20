@@ -54,7 +54,10 @@ class Throttle:
 
 def client_writer(flow):
     """mitmproxy's writer for the flow's client connection; None if the client is gone
-    (or never was, as for a flow replayed from mitmweb)."""
+    (or never was, as for a flow replayed from mitmweb).
+
+    The lab's one reach into mitmproxy's internals: tests/chain.py stands in for it,
+    and tests/test_mitmproxy_contract.py checks it against a real mitmdump."""
     handler = ctx.master.addons.get("proxyserver").connections.get(flow.client_conn.id)
     transport = handler and handler.transports.get(flow.client_conn)
     return transport and transport.writer
