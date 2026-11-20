@@ -40,7 +40,7 @@ EOF
     scenario) cat <<'EOF'
 usage: roxy scenario list [--app NAME] | set NAME | clear
   list      the Scenarios of the App Profile roxy start would load here (or NAME's)
-            and the lab's own, each with its source
+            and the lab's own, each once with its source (a name in both: refused)
   set NAME  make NAME the running lab's active Scenario (lab-wide)
   clear     leave the running lab with no active Scenario
 EOF
@@ -101,28 +101,14 @@ status() {
   if [ -z "$scenario" ]; then
     echo "Scenario:          none"
   else
-    found_in="$(scenario_lookup ${app:+--app "$app"} source "$scenario")" || exit 1
+    found_in="$(proxy_cli source ${app:+--app "$app"} "$scenario")" || exit 1
     echo "Scenario:          $scenario  ($found_in)"
   fi
 }
 
-# list_scenarios DIR SOURCE : a line per Scenario in DIR, with its SOURCE.
-list_scenarios() {
-  local f
-  for f in "$1"/*.toml; do
-    [ -f "$f" ] || continue
-    printf '%-28s %s\n' "$(basename "$f" .toml)" "$2"
-  done
-}
-
 scenario() {
-  local app
   case "${1:-} $# ${2:-}" in
-    "list 1 "|"list 3 --app")
-      app="$(resolve_app "${3:-}")"
-      echo "App Profile: ${app:-none}"
-      [ -z "$app" ] || list_scenarios "$(app_scenarios_dir "$app")" "App Profile $app"
-      list_scenarios "$LAB_SCENARIOS_DIR" lab ;;
+    "list 1 "|"list 3 --app") proxy_cli scenario "$@" ;;
     "set 2 "*) set_scenario "$2" ;;
     "clear 1 ") set_scenario "" ;;
     *) die "$(usage scenario | head -1)" ;;
@@ -168,30 +154,10 @@ console() {
   exec "$SCRIPTS/console" "$@"
 }
 
-# app_new NAME : an empty App Profile for the git repo of the current folder.
-app_new() {
-  local name="$1" repo dir
-  [[ "$name" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]] || die "an App Profile name is letters, digits, '.', '_' and '-': '$name'"
-  dir="$APPS_DIR/$name"
-  [ ! -e "$dir" ] || die "the App Profile '$name' already exists, in $dir"
-  repo="$(git rev-parse --show-toplevel 2>/dev/null)" || die "run roxy app new inside the app's git repo"
-  repo="$(cd "$repo" && pwd -P)"
-  mkdir -p "$dir/scenarios"
-  jq -n --arg repo "$repo" '{repo: $repo, origin_allowlist: []}' > "$dir/profile.json"
-  echo "App Profile '$name' for $repo"
-  echo "  Scenarios, with their mocks next to them: $dir/scenarios/"
-  echo "  Public Endpoint Origins: origin_allowlist in $dir/profile.json"
-}
-
 app() {
-  local f
   case "${1:-} $#" in
-    "new 2") app_new "$2" ;;
-    "list 1")
-      for f in "$APPS_DIR"/*/profile.json; do
-        [ -f "$f" ] || { echo "no App Profiles (roxy app new NAME, in an app's repo)"; break; }
-        printf '%-20s %s\n' "$(basename "$(dirname "$f")")" "$(jq -r .repo "$f")"
-      done ;;
+    "new 2") proxy_cli app new -- "$2" ;;
+    "list 1") proxy_cli app list ;;
     *) die "$(usage app | head -1)" ;;
   esac
 }

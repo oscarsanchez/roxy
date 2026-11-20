@@ -2,7 +2,8 @@
 # Start the lab: mitmweb with the lab addon chain, listening on the LAN for Prefixed URLs.
 # Usage: scripts/start-lab [--app NAME] [--tunnel] [--ca-routing] [--replay SESSION]
 #   --app NAME loads the App Profile NAME; without it, the profile whose repo holds the
-#   current folder, if any (resolve_app in scripts/lib.sh).
+#   current folder, if any (proxy/cli.py resolve); a Scenario in both the profile's and
+#   the lab's stops the start.
 #   --tunnel also opens a Cloudflare quick tunnel to the listener (the Public
 #   Endpoint, for Cloud Devices) and prints the public Proxy Base. Stopping the
 #   lab (Ctrl-C) closes the tunnel too.
@@ -37,9 +38,9 @@ if [ -n "$replay" ]; then
 fi
 
 if $tunnel; then require_lab_settings MITMWEB_PASSWORD LAB_SECRET; else require_lab_settings MITMWEB_PASSWORD; fi
-LAB_APP="$(resolve_app "$app")"
+resolved="$(proxy_cli resolve ${app:+--app "$app"})" || exit 1  # two lines: name, repo
+LAB_APP="${resolved%%$'\n'*}" app_repo="${resolved#*$'\n'}"
 export LAB_APP  # read by scripts/run-mitmweb
-if [ -n "$LAB_APP" ]; then scenario_lookup --app "$LAB_APP" check || exit 1; fi
 lab_lock lab  # one lab per user; deploy, launch and grid take the devices lock instead
 if $tunnel; then
   command -v cloudflared >/dev/null || die "cloudflared is required for --tunnel (brew install cloudflared)"
@@ -62,7 +63,7 @@ echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASS
 ip="$(lan_ip)" || true  # lan_ip names the problem; the lab still starts
 print_lan_addresses "$ip"
 if [ -n "$LAB_APP" ]; then
-  echo "App Profile:       $LAB_APP  ($(jq -r .repo "$APPS_DIR/$LAB_APP/profile.json"))"
+  echo "App Profile:       $LAB_APP  ($app_repo)"
 else
   echo "App Profile:       none"
 fi

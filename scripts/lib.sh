@@ -8,10 +8,6 @@ export ROXY_CONFIG_DIR="${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rox
 SECRETS_FILE="$ROXY_CONFIG_DIR/secrets.env"
 DEVICES_FILE="$ROXY_CONFIG_DIR/devices.json"
 SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
-# App Profiles: APPS_DIR/<name>/profile.json ({"repo", "origin_allowlist"}) and
-# APPS_DIR/<name>/scenarios/ (its Scenarios and their mocks). proxy/lab/app_profile.py loads one.
-APPS_DIR="$ROXY_CONFIG_DIR/apps"
-LAB_SCENARIOS_DIR="$REPO_ROOT/proxy/scenarios"  # the lab's own Scenarios
 # Saved sessions: the user data directory, in the loaded App Profile's folder (LAB_APP, which
 # scripts/start-lab exports), or the one for sessions without a profile.
 CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-profile}"
@@ -138,33 +134,9 @@ require_lab_settings() {
   [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }
 
-# resolve_app [NAME] : the App Profile to load: NAME (an unknown one fails), else the one
-# whose repo holds the current folder (the deepest, for nested repos), else none (empty).
-resolve_app() {
-  local here f repo best="" best_repo=""
-  if [ -n "${1:-}" ]; then
-    [ -f "$APPS_DIR/$1/profile.json" ] || die "unknown App Profile '$1' (roxy app list shows them)"
-    echo "$1"
-    return
-  fi
-  here="$(pwd -P)"
-  for f in "$APPS_DIR"/*/profile.json; do
-    [ -f "$f" ] || continue
-    repo="$(jq -r .repo "$f")"
-    case "$here/" in
-      "$repo/"*) [ ${#repo} -le ${#best_repo} ] || { best="$(basename "$(dirname "$f")")"; best_repo="$repo"; } ;;
-    esac
-  done
-  echo "$best"
-}
-
-# app_scenarios_dir NAME : the folder of App Profile NAME's Scenarios and their mocks.
-app_scenarios_dir() { echo "$APPS_DIR/$1/scenarios"; }
-
-# scenario_lookup [--app NAME] check | source SCENARIO : the Scenario lookup rule (the App
-# Profile's Scenarios, then the lab's; a name in both refused), which the proxy holds:
-# check fails naming every clash, source prints 'App Profile NAME' or 'lab'.
-scenario_lookup() { (cd "$REPO_ROOT/proxy" && uv run --quiet python scenario_lookup.py "$@"); }
+# proxy_cli ARG... : App Profiles and their Scenarios (proxy/cli.py describes the commands),
+# run in the caller's folder, which resolving and app new read. Refusals print error: ... and exit 1.
+proxy_cli() { uv run --quiet --project "$REPO_ROOT/proxy" python "$REPO_ROOT/proxy/cli.py" "$@"; }
 
 # The Mac's address on the default-route interface.
 lan_ip() {

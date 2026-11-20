@@ -10,8 +10,8 @@ A scenario is `<lab_scenarios_dir>/<name>.toml`, a list of rules:
 Set `lab_scenario` (mitmweb options, `--set`, or the options API) to switch
 scenarios without a restart; empty means none. The active file is reloaded
 when it changes. The loaded App Profile's Scenarios (lab.app_profile) join the
-lab's own: find_scenario holds the lookup rule, for this addon and for the shell
-scripts (scenario_lookup.py).
+lab's own: find_scenario holds the lookup rule, for this addon and for lab.app_profiles
+(the CLI's Scenario listing and sources).
 """
 
 import logging

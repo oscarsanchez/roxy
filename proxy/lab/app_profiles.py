@@ -47,6 +47,7 @@ class Profile(NamedTuple):
     repo: Path
     origin_allowlist: list
     scenarios_dir: Path
+    file: Path  # its profile.json, where the user edits origin_allowlist
 
 
 NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
@@ -99,7 +100,7 @@ class AppProfiles:
             raise BadProfile(f"App Profile {name!r} in {file}: {e!r}") from e
         if not isinstance(allowlist, list) or not all(isinstance(host, str) for host in allowlist):
             raise BadProfile(f"App Profile {name!r}: origin_allowlist must be a list of hosts, in {file}")
-        return Profile(repo, allowlist, self._folder(name) / "scenarios")
+        return Profile(repo, allowlist, self._folder(name) / "scenarios", file)
 
     def scenarios(self, app):
         """Every Scenario App Profile APP (None: no profile) sees, as (name, source): the

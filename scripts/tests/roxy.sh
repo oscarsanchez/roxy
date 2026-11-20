@@ -27,7 +27,7 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 # (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs its calls the same way.
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
-# command (roxy flows runs Python) goes to the real uv.
+# command (proxy/cli.py and roxy flows run Python) goes to the real uv.
 # route and ipconfig give the Mac the LAN IP 192.0.2.10.
 export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log" REAL_UV="$(command -v uv)"
 mkdir -p "$TMP/bin"
@@ -167,75 +167,53 @@ echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
 [ "$(tail -1 "$RCE_LOG")" = "$(printf '%q ' console player)" ] || fail "console on a Cloud Device ran: $(cat "$RCE_LOG")"
 echo "ok: console on a Cloud Device goes through rce console"
 
-# App Profiles, in two temp app repos. A git hook (scripts/check from the pre-commit hook)
-# exports the checkout's GIT_DIR, which would point their git commands at the roxy repo.
+# App Profiles, in a temp app repo: one smoke check per command. proxy/tests/test_app_profiles.py
+# covers resolution, refusals and clashes at AppProfiles' interface.
+# A git hook (scripts/check from the pre-commit hook) exports the checkout's GIT_DIR, which
+# would point git in the temp repo at the roxy repo.
 unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
-repos="$TMP/repos"
-for app in app-a app-b; do git init -q "$repos/$app"; mkdir -p "$repos/$app/src/nested"; done
-root_a="$(cd "$repos/app-a" && pwd -P)" root_b="$(cd "$repos/app-b" && pwd -P)"
-listed_repo() { "$ROXY" app list | awk -v n="$1" '$1 == n {print $2}'; }
+repo_a="$TMP/repos/app-a"
+git init -q "$repo_a"
+mkdir -p "$repo_a/src/nested"
+root_a="$(cd "$repo_a" && pwd -P)"
+scenarios_a="$ROXY_CONFIG_DIR/apps/app-a/scenarios"
 
-# app new, run in a subfolder of an app's repo, records the repo's git root; app list shows
-# every profile with its repo.
-out="$(cd "$repos/app-a/src/nested" && "$ROXY" app new app-a)" || fail "app new app-a: $out"
-out="$(cd "$repos/app-b" && "$ROXY" app new app-b)" || fail "app new app-b: $out"
-[ "$(listed_repo app-a)" = "$root_a" ] || fail "app list shows app-a at '$(listed_repo app-a)', not its git root $root_a"
-[ "$(listed_repo app-b)" = "$root_b" ] || fail "app list shows app-b at '$(listed_repo app-b)', not $root_b"
-echo "ok: app new records the repo's git root, and app list shows each profile"
+# app new, run in a subfolder of an app's repo, records the repo's git root; app list shows it;
+# a refused app new says why, as error: ..., and exits 1.
+out="$(cd "$repo_a/src/nested" && "$ROXY" app new app-a)" || fail "app new app-a: $out"
+case "$out" in "App Profile 'app-a' for $root_a"*) ;; *) fail "app new app-a said: $out" ;; esac
+[ "$("$ROXY" app list | awk '$1 == "app-a" {print $2}')" = "$root_a" ] || fail "app list: $("$ROXY" app list)"
+if err="$(cd "$repo_a" && "$ROXY" app new app-a 2>&1)"; then fail "app new took the existing name app-a"; fi
+case "$err" in "error: the App Profile 'app-a' already exists"*) ;; *) fail "app new of an existing name said: $err" ;; esac
+echo "ok: app new records the repo's git root, app list shows it, and a refusal is an error"
 
-# app new refuses a name that exists, keeping that profile; and a folder outside any repo.
-if err="$(cd "$repos/app-b" && "$ROXY" app new app-a 2>&1)"; then fail "app new took the existing name app-a"; fi
-case "$err" in *"app-a"*"exists"*) ;; *) fail "app new of an existing name said: $err" ;; esac
-[ "$(listed_repo app-a)" = "$root_a" ] || fail "a refused app new changed app-a's repo to $(listed_repo app-a)"
-if err="$(cd "$TMP" && "$ROXY" app new loose 2>&1)"; then fail "app new outside a git repo exited 0"; fi
-case "$err" in *"git repo"*) ;; *) fail "app new outside a git repo said: $err" ;; esac
-"$ROXY" app new ../escape >/dev/null 2>&1 && fail "app new took the name ../escape"
-echo "ok: app new refuses an existing name, a folder outside a repo, and a name that is a path"
-
-# roxy start loads --app NAME from anywhere, else the profile whose repo holds the current
-# folder, else none; an unknown --app fails before mitmweb starts.
+# roxy start loads the profile whose repo holds the current folder, naming it and its repo.
 start_in() { local dir="$1"; shift; rm -f "$UV_LOG"; (cd "$dir" && "$ROXY" start "$@" 2>&1); }
 started_app() { sed -n 's/^lab_app=//p' "$UV_LOG"; }
-out="$(start_in "$TMP" --app app-b)" || fail "start --app app-b: $out"
-[ "$(started_app)" = app-b ] || fail "start --app app-b loaded '$(started_app)'"
-case "$out" in *"App Profile:       app-b"*) ;; *) fail "start --app app-b does not say so: $out" ;; esac
-out="$(start_in "$repos/app-a/src/nested")" || fail "start in app-a's repo: $out"
+out="$(start_in "$repo_a/src/nested")" || fail "start in app-a's repo: $out"
 [ "$(started_app)" = app-a ] || fail "start in a folder of app-a's repo loaded '$(started_app)'"
-out="$(start_in "$repos/app-a" --app app-b)" || fail "start --app app-b in app-a's repo: $out"
-[ "$(started_app)" = app-b ] || fail "start --app app-b in app-a's repo loaded '$(started_app)'"
-out="$(start_in "$TMP")" || fail "start outside every profile's repo: $out"
-[ -e "$UV_LOG" ] && [ -z "$(started_app)" ] || fail "start outside every profile's repo loaded '$(started_app)'"
-case "$out" in *"App Profile:       none"*) ;; *) fail "start without a profile does not say so: $out" ;; esac
-if out="$(start_in "$TMP" --app nope)"; then fail "start --app nope exited 0"; fi
-case "$out" in *"unknown App Profile 'nope'"*) ;; *) fail "start --app nope said: $out" ;; esac
-[ ! -e "$UV_LOG" ] || fail "start --app nope started mitmweb"
-echo "ok: start loads the App Profile named, else the current repo's, else none; an unknown name fails"
+case "$out" in *"App Profile:       app-a  ($root_a)"*) ;; *) fail "start in app-a's repo does not say so: $out" ;; esac
+echo "ok: start loads the current repo's App Profile"
 
 # The session is saved in the user data directory, under the loaded App Profile's name.
-start_in "$repos/app-a" >/dev/null || fail "start in app-a's repo"
 saved="$(ls "$XDG_DATA_HOME/roxy/captures/app-a/"*.mitm 2>/dev/null)" || true
 [ -n "$saved" ] || fail "start with app-a saved no session under captures/app-a: $(find "$XDG_DATA_HOME" -name '*.mitm')"
 echo "ok: a session is saved under the App Profile's name"
 
-# A profile Scenario named like one of the lab's own fails the start, naming both sources.
-clash="$ROXY_CONFIG_DIR/apps/app-a/scenarios/json-503.toml"
-printf '[[rule]]\nname = "mine"\nfilter = "~u /json"\nstatus = 500\n' > "$clash"
-if out="$(start_in "$repos/app-a")"; then fail "start with a clashing Scenario name exited 0"; fi
-case "$out" in *"json-503"*"lab"*"app-a"*) ;; *) fail "the clash refusal does not name the Scenario and both sources: $out" ;; esac
-[ ! -e "$UV_LOG" ] || fail "start with a clashing Scenario name started mitmweb"
-rm "$clash"
-echo "ok: a profile Scenario named like the lab's own fails the start, naming both"
-
-# scenario list shows the profile roxy start would load here, and its Scenarios beside the
-# lab's own, each marked by source.
-touch "$ROXY_CONFIG_DIR/apps/app-a/scenarios/empty-catalog.toml"
-out="$(cd "$repos/app-a/src" && "$ROXY" scenario list)" || fail "scenario list in app-a's repo: $out"
-case "$out" in *"App Profile: app-a"*) ;; *) fail "scenario list in app-a's repo does not name app-a: $out" ;; esac
+# scenario list --app shows the profile's Scenarios beside the lab's own, each once with its
+# source, and a name in both once, refused; that name fails the start, naming both sources.
+touch "$scenarios_a/empty-catalog.toml"
+printf '[[rule]]\nname = "mine"\nfilter = "~u /json"\nstatus = 500\n' > "$scenarios_a/json-503.toml"
+out="$(cd "$TMP" && "$ROXY" scenario list --app app-a)" || fail "scenario list --app app-a: $out"
+case "$out" in "App Profile: app-a"*) ;; *) fail "scenario list --app app-a does not name app-a: $out" ;; esac
 [ "$(source_of empty-catalog "$out")" = "App Profile app-a" ] || fail "scenario list lacks app-a's empty-catalog: $out"
-[ "$(source_of json-503 "$out")" = lab ] || fail "scenario list in app-a's repo lacks the lab's json-503: $out"
-out="$(cd "$repos/app-a" && "$ROXY" scenario list --app app-b)" || fail "scenario list --app app-b: $out"
-[ -z "$(source_of empty-catalog "$out")" ] || fail "scenario list --app app-b shows app-a's Scenario: $out"
-echo "ok: scenario list shows the App Profile's Scenarios and the lab's, by source"
+[ "$(source_of hls-404 "$out")" = lab ] || fail "scenario list lacks the lab's hls-404: $out"
+[ "$(source_of json-503 "$out")" = "refused: in both (rename the profile's)" ] || fail "scenario list does not refuse json-503 once: $out"
+if out="$(start_in "$repo_a")"; then fail "start with a clashing Scenario name exited 0"; fi
+case "$out" in "error: "*"json-503"*"lab"*"app-a"*) ;; *) fail "the clash refusal does not name the Scenario and both sources: $out" ;; esac
+[ ! -e "$UV_LOG" ] || fail "start with a clashing Scenario name started mitmweb"
+rm "$scenarios_a/json-503.toml"
+echo "ok: scenario list shows each Scenario once by source, a clash as refused, and the clash fails the start"
 
 # status names the running lab's App Profile, and where its active Scenario came from.
 out="$(FAKE_LAB_UP=1 FAKE_APP=app-a FAKE_SCENARIO=empty-catalog "$ROXY" status)" || fail "status with app-a: $out"

@@ -209,7 +209,7 @@ roxy app list                                            # each profile and its 
 - `scenarios/<scenario>.toml`: its Scenarios, written like the lab's own, with their mocks next to them (`map_local = "mocks/catalog.json"` answers from `scenarios/mocks/catalog.json`).
 - `profile.json`: `repo`, and `origin_allowlist`, the hosts the Public Endpoint may reach for this app on top of the lab's own (a leading dot allows any subdomain).
 
-`roxy start` loads at most one: `--app <name>` (an unknown name fails), else the profile whose repo holds the current folder, else none. To switch apps, stop the lab and start it in the other app's folder. A profile Scenario named like one of the lab's own stops the start, naming both. Restart the lab after editing `profile.json`; a Scenario file reloads as usual.
+`roxy start` loads at most one: `--app <name>` (an unknown name fails), else the profile whose repo holds the current folder, else none. To switch apps, stop the lab and start it in the other app's folder. A profile Scenario named like one of the lab's own stops the start, naming both; `roxy scenario list` shows that name once, as `refused: in both (rename the profile's)`. Restart the lab after editing `profile.json`; a Scenario file reloads as usual.
 
 ### Guards
 

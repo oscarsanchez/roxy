@@ -14,7 +14,8 @@ unset ROXY_CONFIG_DIR LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER LAB_LAN_SUBNET
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# The fake uv stands in for `uv run mitmweb ...`: it logs one argument per line.
+# The fake uv stands in for `uv run mitmweb ...`: it logs one argument per line. Its empty
+# answer to start-lab's App Profile resolve (proxy/cli.py) means none, as these settings have none.
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/uv" <<'EOF'
 #!/usr/bin/env bash
