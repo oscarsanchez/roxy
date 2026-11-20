@@ -191,6 +191,31 @@ def test_a_bad_profile_json_is_refused_naming_the_profile(profiles, app_profile,
         profiles.profile("example-app")
 
 
+@pytest.mark.parametrize(
+    "fallback_origin, reason",
+    [
+        ({"path": "^/vod/(", "origin": "https://cdn.example"}, "fallback_origin path is not a regex"),
+        ({"path": "^/vod/", "origin": "cdn.example"}, "fallback_origin origin must be http(s)://host[:port]"),
+        ({"path": "^/vod/", "origin": "https://cdn.example/vod"}, "fallback_origin origin must be http(s)://host"),
+        ({"path": "^/vod/", "origin": "ftp://cdn.example"}, "fallback_origin origin must be http(s)://host"),
+        ({"path": "^/vod/"}, "fallback_origin must be"),
+        ("https://cdn.example", "fallback_origin must be"),
+    ],
+)
+def test_a_bad_fallback_origin_is_refused_naming_the_profile(profiles, app_profile, fallback_origin, reason):
+    app_profile("example-app", fallback_origin=fallback_origin)
+
+    with pytest.raises(BadProfile, match=rf"App Profile 'example-app': {re.escape(reason)}"):
+        profiles.profile("example-app")
+
+
+def test_a_bad_fallback_origin_stops_the_lab_from_starting(app_profile):
+    app_profile("example-app", fallback_origin={"path": "(", "origin": "https://cdn.example"})
+
+    with pytest.raises(OptionsError, match="App Profile 'example-app': fallback_origin path is not a regex"):
+        Lab(lab_app="example-app")
+
+
 def test_scenarios_lists_the_profiles_then_the_labs_each_with_its_source(profiles, repo):
     profiles.new("app-a", cwd=repo("app-a"))
     (profiles.profile("app-a").scenarios_dir / "empty-catalog.toml").touch()
