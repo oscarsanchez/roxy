@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Install roxy: link bin/roxy from this checkout into ~/.local/bin, and seed the settings
-# root (scripts/lib.sh) with each settings file it lacks, from settings.example/.
+# root (scripts/lib.sh) with each settings file it lacks, from settings.example/, and switch
+# on the repo's git hooks.
 # Safe to run again: it refreshes the link and never overwrites a setting. It refuses,
 # changing nothing, when ~/.local/bin/roxy exists and is not a link.
 set -euo pipefail
@@ -25,6 +26,9 @@ for example in "$REPO_ROOT"/settings.example/*; do
     echo "seeded $file: fill it in"
   fi
 done
+
+git -C "$REPO_ROOT" config core.hooksPath .githooks  # scripts/check on every commit, worktrees included
+echo "git hooks on: .githooks"
 
 case ":$PATH:" in
   *":$bin:"*) ;;

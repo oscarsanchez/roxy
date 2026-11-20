@@ -322,7 +322,8 @@ out="$(run_install)" || fail "install, run again: $out"
 [ "$(cat "$settings/devices.json")" = '{"Mine": {"ip": "192.0.2.99"}}' ] || fail "install overwrote devices.json"
 cmp -s "$REPO/settings.example/settings.json" "$settings/settings.json" || fail "install did not seed the missing settings.json"
 [ "$(realpath "$link")" = "$ROXY" ] || fail "install, run again, broke the link"
-echo "ok: install is idempotent and keeps existing settings"
+[ "$(git -C "$REPO" config --get core.hooksPath)" = .githooks ] || fail "install did not switch on the repo's git hooks"
+echo "ok: install is idempotent, keeps existing settings and switches on the git hooks"
 
 # A roxy at the link's place that is not a link is someone else's: install refuses, changing nothing.
 rm "$link"

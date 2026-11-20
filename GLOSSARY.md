@@ -1,4 +1,4 @@
-# Roku MITM Lab
+# roxy
 
 A lab for inspecting and manipulating the network traffic that a Roku app sends and receives, on both real Roku hardware and Roku's cloud-hosted emulator.
 

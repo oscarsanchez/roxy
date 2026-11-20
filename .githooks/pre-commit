@@ -1,5 +1,8 @@
 #!/usr/bin/env bash
-# Enable once per clone: git config core.hooksPath .githooks
+# Enable once per clone: git config core.hooksPath .githooks (install.sh does it)
 # Runs scripts/check; prints its output only when a check fails.
 out="$("$(git rev-parse --show-toplevel)/scripts/check" 2>&1)" || { echo "$out"; exit 1; }
 echo "scripts/check: all checks passed"
+# A clone's own extra checks, untracked, shared by its worktrees.
+local_hook="$(git rev-parse --git-common-dir)/hooks/pre-commit.local"
+[ ! -x "$local_hook" ] || "$local_hook"
