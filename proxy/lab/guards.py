@@ -59,7 +59,7 @@ class Guards:
         )
         loader.add_option(
             "lab_origin_allowlist", Sequence[str], CONFIG["origin_allowlist"],
-            'Origin hosts the lab forwards to. A leading dot (".mux.com") allows any subdomain.',
+            'Origin hosts the Public Endpoint (the tunnel) forwards to. A leading dot (".mux.com") allows any subdomain.',
         )
         loader.add_option(
             "lab_rce_egress_ips", Sequence[str], CONFIG["rce_egress_ips"],
@@ -105,7 +105,8 @@ class Guards:
             refuse(flow, 403, "secret-segment")
         elif not self._client_allowed(flow):
             refuse(flow, 403, "client-ip")
-        elif not _host_allowed(flow.request.host):
+        elif through_tunnel(flow) and not _host_allowed(flow.request.host):
+            # The Public Endpoint only: the LAN relays to any public Origin, as Charles does.
             refuse(flow, 403, "origin-host")
         elif _non_public(await _origin_addresses(flow.request.host, flow.request.port)):
             # Unresolvable passes: the Origin connect fails, an Origin failure, not a guard block.

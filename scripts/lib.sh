@@ -12,6 +12,7 @@ SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
 CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/no-profile"
 
 LAB_PORT=8080      # LAN listener (Prefix Routing)
+LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
 LAB_WEB_PORT=8081  # mitmweb UI, localhost only
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab

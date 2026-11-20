@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from chain import Lab, assert_refused, lab_flow, origin_json, run_chain
+from chain import SECRET, TUNNEL_OPTIONS, Lab, assert_refused, lab_flow, origin_json, run_chain, tunnel_flow
 
 
 @pytest.mark.parametrize("peer", [("8.8.8.8", 4000), ("10.0.0.5", 4000), ("198.51.100.1", 4000)])
@@ -60,36 +60,50 @@ def test_the_lan_subnet_is_set_in_config():
     assert_refused(old_lan, run_chain(old_lan, origin_json(), lab_lan_subnets=["10.0.0.0/8"]), "client-ip")
 
 
-def test_an_origin_host_not_on_the_allowlist_is_refused():
-    flow = lab_flow("/https://evil.example/json")
+def test_a_lan_request_reaches_a_public_origin_not_on_the_allowlist():
+    flow = lab_flow("/https://not-allowlisted.example/json")
 
     forwarded = run_chain(flow, origin_json())
 
-    assert_refused(flow, forwarded, "origin-host")
+    assert forwarded.url == "https://not-allowlisted.example/json"
+    assert not flow.marked
+
+
+def endpoint_flow(host):
+    """A Cloud Device request through the Public Endpoint, with the secret, from an RCE egress IP."""
+    return tunnel_flow(f"/{SECRET}/https://{host}/json")
+
+
+def run_endpoint(flow, **options):
+    return run_chain(flow, origin_json(), **{**TUNNEL_OPTIONS, **options})
+
+
+def test_the_public_endpoint_refuses_a_public_origin_not_on_the_allowlist():
+    flow = endpoint_flow("not-allowlisted.example")
+
+    assert_refused(flow, run_endpoint(flow), "origin-host")
 
 
 @pytest.mark.parametrize("host", ["stream.mux.com", "a.b.mux.com", "STREAM.MUX.COM", "stream.mux.com."])
 def test_a_leading_dot_allowlist_entry_allows_subdomains(host):
-    flow = lab_flow(f"/https://{host}/x.m3u8")
+    flow = endpoint_flow(host)
 
-    assert run_chain(flow, origin_json()) is not None
+    assert run_endpoint(flow) is not None
 
 
 @pytest.mark.parametrize("host", ["mux.com", "evilmux.com", "httpbin.org.evil.example", "evilhttpbin.org"])
 def test_lookalike_hosts_are_not_allowed(host):
-    flow = lab_flow(f"/https://{host}/json")
+    flow = endpoint_flow(host)
 
-    assert_refused(flow, run_chain(flow, origin_json()), "origin-host")
+    assert_refused(flow, run_endpoint(flow), "origin-host")
 
 
 def test_the_origin_allowlist_is_set_in_config():
-    added = lab_flow("/https://new-origin.example/json")
-    removed = lab_flow("/https://httpbin.org/json")
+    added = endpoint_flow("new-origin.example")
+    removed = endpoint_flow("httpbin.org")
 
-    assert run_chain(added, origin_json(), lab_origin_allowlist=["new-origin.example"]) is not None
-    assert_refused(
-        removed, run_chain(removed, origin_json(), lab_origin_allowlist=["new-origin.example"]), "origin-host"
-    )
+    assert run_endpoint(added, lab_origin_allowlist=["new-origin.example"]) is not None
+    assert_refused(removed, run_endpoint(removed, lab_origin_allowlist=["new-origin.example"]), "origin-host")
 
 
 @pytest.mark.parametrize(
@@ -102,13 +116,21 @@ def test_the_origin_allowlist_is_set_in_config():
         "0.0.0.0", "::ffff:127.0.0.1",
     ],
 )
-def test_an_origin_that_resolves_to_a_non_public_address_is_refused(dns, address):
+def test_an_origin_that_resolves_to_a_non_public_address_is_refused_from_the_lan(dns, address):
     dns["httpbin.org"] = [address]
     flow = lab_flow("/https://httpbin.org/json")
 
     forwarded = run_chain(flow, origin_json())
 
     assert_refused(flow, forwarded, "origin-address")
+
+
+@pytest.mark.parametrize("address", ["10.0.0.1", "127.0.0.1", "169.254.169.254", "fd12:3456::1"])
+def test_an_origin_that_resolves_to_a_non_public_address_is_refused_through_the_public_endpoint(dns, address):
+    dns["httpbin.org"] = [address]
+    flow = endpoint_flow("httpbin.org")
+
+    assert_refused(flow, run_endpoint(flow), "origin-address")
 
 
 def test_an_origin_is_refused_if_any_of_its_addresses_is_not_public(dns):

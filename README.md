@@ -14,11 +14,11 @@ Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](
 
 ### Routing
 
-**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`. The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
+**Prefix Routing** works on every Target Device. The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>`, or `<Proxy Base>/;<Origin URL>` as a Charles-enabled build does (port 8888). How to wire an app: [Prefix Routing guide](docs/prefix-routing.md). The Lab Apps take the Proxy Base from the `proxyBase` launch param, with a build-time default as the fallback. The Proxy Base differs by Target Device kind:
 
 | Target Device | Proxy Base |
 |---|---|
-| Physical Device | `http://<mac-lan-ip>:8080`. Give the Mac a DHCP reservation so it stays stable. |
+| Physical Device | `http://<mac-lan-ip>:8080`, or `:8888` (Charles's port). Give the Mac a DHCP reservation so it stays stable. |
 | Cloud Device | `https://<tunnel-host>/<secret>/<device-slug>`: the Public Endpoint (a Cloudflare quick tunnel), the secret segment, and the slug that names the Cloud Device (`scripts/launch` adds it). |
 
 **CA Routing** (Physical Devices only): DNS on the router points Origins at the Mac, and a CA Routing build of the app calls Origin URLs directly while trusting the lab's CA on every agent. See [CA Routing](#ca-routing-physical-devices-only).
@@ -29,12 +29,12 @@ mitmweb runs in mitmproxy's `reverse` mode. Its UI listens on `127.0.0.1` only, 
 
 1. **Origin decoding**: recovers the Origin and the client's Proxy Base from the Prefixed URL path, or from Host/SNI in CA Routing.
 2. **Device labels**: names the Target Device that sent the flow.
-3. **Guards**: refuse anything but an allowed client, an allowlisted Origin host and a public Origin address (see [Guards](#guards)).
+3. **Guards**: refuse anything but an allowed client and a public Origin address, and on the Public Endpoint an allowlisted Origin host (see [Guards](#guards)).
 4. **Request header cleanup**: `Host` is the Origin's, `Referer` and `Origin` are decoded back, tunnel headers are stripped.
 5. **Response header and body rewriting**: URLs in headers and in HLS, DASH, VAST/XML and JSON bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests come back through the lab.
-6. **Scenarios**: the active Scenario's Manipulation rules, last, so they see the response as the client gets it.
+6. **Scenarios**: the active Scenario's Manipulation rules, last, so they see the response as the client gets it. The one exception, `map_remote`, swaps the Origin right after Origin decoding, before the guards.
 
-While the lab runs, any client on your LAN subnets can relay through it to the allowlisted Origins.
+While the lab runs, any device on your LAN subnets can relay through it to any public host, the same as with Charles.
 
 ## Quickstart
 
@@ -69,7 +69,7 @@ git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check
 ### 3. Start the lab
 
 ```sh
-scripts/start-lab                    # mitmweb UI http://127.0.0.1:8081; prints the LAN Proxy Base
+scripts/start-lab                    # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
 scripts/start-lab --tunnel           # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
 scripts/start-lab --replay <session>.mitm   # answer from a saved session (see Recording and replay)
 scripts/start-lab --ca-routing       # also listens on 443/80 (see CA Routing)
@@ -130,9 +130,12 @@ status = 503                                    # status override (the Origin's 
 # header = { name = "Cache-Control", value = "no-store" }   # replace; "" removes (mitmproxy modify_headers)
 # body = { pattern = "regex", replacement = "text" }        # regex replace (mitmproxy modify_body)
 # map_local = "mocks/json.json"                 # answer from a file next to the Scenario (mitmproxy map_local)
+# map_remote = "https://postman-echo.com:443"   # send to another Origin: scheme, host and optional port only
 ```
 
 `header` and `body` act on the request and the response, like their mitmproxy built-ins: add `~q` or `~s` to the filter to pick one.
+
+`map_remote` keeps the request's path and query, and Host follows the new Origin. It runs before the guards, so the new host is judged like any other: a private address is refused, and through the tunnel so is a host off the allowlist. Responses from it are rewritten with the client's Proxy Base, as usual. Later rules' filters see the new Origin.
 
 Manifest edits change manifests only (`filter = "~all"` is fine) and run after Prefixed URL rewriting, so the manifest still routes through the lab:
 
@@ -166,7 +169,7 @@ It fills one grid cell through the running native lab (`scripts/start-lab`, not 
 The same addons, config, Scenarios and mitmweb flags (`scripts/run-mitmweb`), mounted from the repo; no Python or cloudflared to install. Settings and secrets come from the same settings root (mounted read-only; `ROXY_CONFIG_DIR` works here too), and sessions are saved in the same user data directory.
 
 ```sh
-docker compose up                       # LAN listener on :8080, mitmweb UI on http://127.0.0.1:8081
+docker compose up                       # LAN listeners on :8080 and :8888, mitmweb UI on http://127.0.0.1:8081
 docker compose --profile tunnel up      # plus the quick tunnel, for Cloud Devices
 curl -s 127.0.0.1:20241/quicktunnel     # the tunnel's hostname: public Proxy Base https://<hostname>/<LAB_SECRET>
 docker compose --profile tunnel down    # stops both, closing the Public Endpoint
@@ -182,10 +185,11 @@ LAB_REPLAY=<session>.mitm docker compose up    # replay (path relative to the sa
 
 ### Guards
 
-The lab forwards a request only if the client is allowed, the Origin host is on the allowlist, and the Origin resolves to public addresses only. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed`; through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
+The lab forwards a request only if the client is allowed, the Origin resolves to public addresses only, and, through the tunnel, the Origin host is on the allowlist. Anything else gets a 403 from the lab with an `X-Lab-Blocked` reason (`secret-segment`, `client-ip`, `origin-host`, `origin-address`) and is marked in mitmweb (filter `~marked`). A non-Prefixed request gets 400 `not-prefixed`; through the tunnel it gets 403 `secret-segment`, so a scanner learns nothing.
 
-- A LAN client must be on one of your `lan_subnets`.
-- A request through the tunnel (it arrives on the tunnel listener, port 8082, which only cloudflared can reach) needs the secret path segment, and its `CF-Connecting-IP` must be one of the RCE egress IPs. Tunnel headers are trusted only there: a LAN client sending them is judged by its real IP.
+- A LAN client must be on one of your `lan_subnets`, and may reach any public Origin: the allowlist guards the Public Endpoint only.
+- Relay exposure: while the lab runs, any device on your LAN subnets can use it as an HTTP relay to any public host, the same as with Charles. Only private, loopback, link-local and unique-local Origins stay out of reach.
+- A request through the tunnel (it arrives on the tunnel listener, port 8082, which only cloudflared can reach) needs the secret path segment, its `CF-Connecting-IP` must be one of the RCE egress IPs, and its Origin host must be on the allowlist. Tunnel headers are trusted only there: a LAN client sending them is judged by its real IP.
 - The address guard resolves the Origin, and mitmproxy then dials one of the addresses it checked (IPv4 first), never a later DNS answer: a name that turns private between the check and the connect (DNS rebinding) is not dialled. The cost: no server connection reuse across requests.
 - Tunnel and forwarding headers (`CF-*`, `X-Forwarded-*`, `CDN-Loop`, `Forwarded`, `Via`...) never reach the Origin.
 - Secrets on the command line: `scripts/run-mitmweb` passes `MITMWEB_PASSWORD` and `LAB_SECRET` to mitmweb as `--set` flags, so any local user can read them with `ps`. Accepted for a single-user lab Mac; do not run the lab on a shared machine.
@@ -193,7 +197,7 @@ The lab forwards a request only if the client is allowed, the Origin host is on 
 
 ### Header and body rewriting
 
-URLs in response headers (Location, Content-Location, Link, Refresh) and bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests (segments, images, ads) come back through the lab. Set-Cookie is scoped to the Prefixed path, and its `Domain` is dropped. The body rewriter is chosen by content type, falling back to the URL extension; anything else passes byte for byte.
+URLs in response headers (Location, Content-Location, Link, Refresh) and bodies become Prefixed URLs with the client's Proxy Base and the separator (`/` or `/;`) the request used, so follow-up requests (segments, images, ads) come back through the lab. A URL already carrying the client's Proxy Base is left as it is. Set-Cookie is scoped to the Prefixed path (to the Proxy Base for `/;`: a cookie path cannot hold `;`), and its `Domain` is dropped. The body rewriter is chosen by content type, falling back to the URL extension; anything else passes byte for byte.
 
 - Each format has an option `lab_rewrite_<format>` (`hls`, `dash`, `json`, `xml`) listing its content types and `.ext` extensions. Change it in mitmweb's Options or with `--set`; an empty list turns the format off.
 - HLS: URI lines and `URI=` attributes (`EXT-X-KEY`, `EXT-X-MAP`, `EXT-X-MEDIA`, `EXT-X-I-FRAME-STREAM-INF`).

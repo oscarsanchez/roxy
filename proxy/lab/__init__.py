@@ -7,19 +7,21 @@ from lab.origin_decoder import OriginDecoder
 from lab.refusal import KeepRefusals
 from lab.request_headers import RequestHeaderCleanup
 from lab.response_headers import ResponseHeaderRewriter
-from lab.scenarios import Scenarios
+from lab.scenarios import Scenarios, ScenariosBeforeGuards
 
 
 def addon_chain():
     """Fresh lab addon instances, in hook order."""
     guards = Guards()
+    scenarios = Scenarios()
     return [
         OriginDecoder(),
+        ScenariosBeforeGuards(scenarios),  # Origin swaps (map_remote), judged by the guards
         DeviceLabels(guards),  # before the guards: refused flows are labelled too
         guards,
         KeepRefusals(),  # before the response rewriters
         RequestHeaderCleanup(),
         ResponseHeaderRewriter(),
         BodyRewriter(),
-        Scenarios(),  # keep last: its actions see the response as the client gets it
+        scenarios,  # keep last: its actions see the response as the client gets it
     ]

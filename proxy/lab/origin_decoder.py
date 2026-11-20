@@ -24,9 +24,10 @@ class OriginDecoder:
         # Needs keep_host_header=true, or Host is already the dummy reverse target.
         parsed = parse_prefixed_url(f"{client_scheme(flow)}://{flow.request.host_header}{flow.request.path}")
         if parsed is not None:
-            proxy_base, origin_url = parsed
-            flow.metadata["proxy_base"] = proxy_base  # rewriters use the client's own Proxy Base
-            flow.request.url = origin_url
+            # rewriters use the client's own Proxy Base and separator
+            flow.metadata["proxy_base"] = parsed.proxy_base
+            flow.metadata["separator"] = parsed.separator
+            flow.request.url = parsed.origin_url
         elif (host := self._ca_routed_host(flow)) is not None:
             flow.request.url = f"{client_scheme(flow)}://{host}{flow.request.path}"
             flow.request.host_header = host  # an SNI-only request still tells the Origin its Host

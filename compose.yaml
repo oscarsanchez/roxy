@@ -5,7 +5,7 @@
 # are saved to the same user data directory too.
 #   docker compose up                    # LAN listener only (Physical Devices)
 #   docker compose --profile tunnel up   # plus the quick tunnel (Cloud Devices)
-# Ports match scripts/lib.sh: 8080 LAN listener, 8081 UI, 8082 tunnel listener.
+# Ports match scripts/lib.sh: 8080 and 8888 LAN listeners, 8081 UI, 8082 tunnel listener.
 # CA Routing (phase 2) is not wired here; it runs with scripts/start-lab --ca-routing.
 # Under Compose it would need LAB_CA_ROUTING=true, ports 443 and 80 published, and a
 # persistent mitmproxy confdir volume (/home/mitmproxy/.mitmproxy): the container
@@ -31,6 +31,7 @@ services:
       PYTHONUNBUFFERED: "1"        # mitmweb's log shows in `docker compose logs` as it happens
     ports:
       - "8080:8080"            # LAN listener, for Physical Devices
+      - "8888:8888"            # second LAN listener: Charles's port, which client hooks hardcode
       - "127.0.0.1:8081:8081"  # mitmweb UI, localhost only
       # 8082, the tunnel listener, is not published: only cloudflared reaches it.
     volumes:
