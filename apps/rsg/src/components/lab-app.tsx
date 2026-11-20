@@ -8,9 +8,10 @@ import { labCertificatesFile } from "../ca-routing";
 import { type Report, resultLine } from "../result";
 import { CASES } from "./cases";
 
-// Launch params (ECP): proxyBase, case, run. Without proxyBase, the build-time default is used.
-type LaunchParams = { proxyBase?: string; case?: string; run?: string };
-type Run = { caseId: string; runId: string; proxyBase: string; report: Report };
+// Launch params (ECP): proxyBase, separator, case, run. Without proxyBase, the build-time
+// default is used. separator=/; builds Charles-style Prefixed URLs; anything else, the lab's own "/".
+type LaunchParams = { proxyBase?: string; separator?: string; case?: string; run?: string };
+type Run = { caseId: string; runId: string; proxyBase: string; separator: string; report: Report };
 
 const CASE_IDS = Object.keys(CASES);
 
@@ -24,6 +25,7 @@ const LabAppDescriptor: AnchorNodeDescriptor = {
 const LabApp: AnchorNodeImplementation<typeof LabAppDescriptor> = () => {
     const { launchParams } = useLaunchConfig<LaunchParams>();
     const proxyBase = () => launchParams().proxyBase || __DEFAULT_PROXY_BASE__;
+    const separator = () => (launchParams().separator === "/;" ? "/;" : "/");
     const [run, setRun] = createSignal<Run>();
     const [result, setResult] = createSignal("");
     // The menu (a native LabelList) holds real focus; no focus framework is needed.
@@ -50,7 +52,7 @@ const LabApp: AnchorNodeImplementation<typeof LabAppDescriptor> = () => {
             report([["status", "unknown_case"]]);
             return;
         }
-        setRun({ caseId, runId, proxyBase: proxyBase(), report });
+        setRun({ caseId, runId, proxyBase: proxyBase(), separator: separator(), report });
     };
 
     // The first value is always {} (params arrive later), so act only once a case is named.
@@ -77,7 +79,7 @@ const LabApp: AnchorNodeImplementation<typeof LabAppDescriptor> = () => {
         <group>
             <rectangle width={1920} height={1080} color="0x101820FF" />
             <label translation={[120, 75]} text="roxy Lab App (RSG 2.0)" />
-            <label translation={[120, 150]} width={1680} text={labCertificatesFile ? "CA Routing build: Origin URLs" : `Proxy Base: ${proxyBase()}`}
+            <label translation={[120, 150]} width={1680} text={labCertificatesFile ? "CA Routing build: Origin URLs" : `Proxy Base: ${proxyBase()}, separator ${separator()}`}
             />
             <label translation={[120, 225]} width={900} text={run() ? `Case: ${run()!.caseId}` : "No case"} />
             <labelList
@@ -90,7 +92,7 @@ const LabApp: AnchorNodeImplementation<typeof LabAppDescriptor> = () => {
             />
             <label translation={[120, 900]} width={1680} wrap={true} text={result()} />
             <Show when={run()} keyed>
-                {r => <Dynamic component={CASES[r.caseId].component} proxyBase={r.proxyBase} report={r.report} />}
+                {r => <Dynamic component={CASES[r.caseId].component} proxyBase={r.proxyBase} separator={r.separator} report={r.report} />}
             </Show>
         </group>
     );

@@ -8,7 +8,7 @@ import { bodyFields, httpRequest, textFingerprint } from "../http";
 import { isPrefixed, prefixedUrl } from "../prefixed-url";
 import type { Report } from "../result";
 
-export type CaseProps = { proxyBase: string; report: Report };
+export type CaseProps = { proxyBase: string; separator: string; report: Report };
 
 const PLAYBACK_TIMEOUT_MS = 30000;
 const AD_TIMEOUT_MS = 50000; // the ad tag, its wrapped tag and a 10 s ad
@@ -26,7 +26,7 @@ function attempt(report: Report, work: () => Promise<void>): void {
 const HttpGet: Component<CaseProps & { originUrl: string }> = props => {
     onMount(() =>
         attempt(props.report, async () => {
-            props.report(await bodyFields(await httpRequest(prefixedUrl(props.proxyBase, props.originUrl))));
+            props.report(await bodyFields(await httpRequest(prefixedUrl(props.proxyBase, props.separator, props.originUrl))));
         })
     );
     return <group />;
@@ -45,7 +45,7 @@ const JsonPost: Component<CaseProps> = props => {
     const body = JSON.stringify({ case: "json_post", n: 1, ok: true });
     onMount(() =>
         attempt(props.report, async () => {
-            const result = await httpRequest(prefixedUrl(props.proxyBase, "https://httpbin.org/post"), body);
+            const result = await httpRequest(prefixedUrl(props.proxyBase, props.separator, "https://httpbin.org/post"), body);
             const [status, bytes] = await bodyFields(result);
             props.report([
                 status,
@@ -76,7 +76,7 @@ const Image: Component<CaseProps> = props => {
     onMount(() =>
         attempt(props.report, async () => {
             const catalog = await httpRequest(
-                prefixedUrl(props.proxyBase, "https://dummyjson.com/products?limit=1&select=title,thumbnail")
+                prefixedUrl(props.proxyBase, props.separator, "https://dummyjson.com/products?limit=1&select=title,thumbnail")
             );
             status = catalog.status;
             const thumbnail = catalogThumbnail(catalog.text);
@@ -84,7 +84,7 @@ const Image: Component<CaseProps> = props => {
                 props.report([["status", status], ["poster", "no_catalog"]]);
                 return;
             }
-            if (isPrefixed(props.proxyBase, thumbnail)) prefixed = "yes";
+            if (isPrefixed(props.proxyBase, props.separator, thumbnail)) prefixed = "yes";
             setUri(thumbnail);
         })
     );
@@ -136,14 +136,14 @@ const PlayVideo: Component<
     // Built once: an inline content={<VideoContentNode/>} is rebuilt on every prop read.
     const content = (
         <VideoContentNode
-            url={prefixedUrl(props.proxyBase, props.originUrl)}
+            url={prefixedUrl(props.proxyBase, props.separator, props.originUrl)}
             streamFormat={props.streamFormat}
             // Sets the Video's HttpAgent, which also fetches the license. SDK 2.19.1 types have
             // no DrmHttpCertificatesFile.
             httpCertificatesFile={labCertificatesFile}
             drmParams={
                 props.licenseUrl
-                    ? { keySystem: "widevine", licenseServerURL: prefixedUrl(props.proxyBase, props.licenseUrl) }
+                    ? { keySystem: "widevine", licenseServerURL: prefixedUrl(props.proxyBase, props.separator, props.licenseUrl) }
                     : undefined
             }
         />
@@ -248,7 +248,7 @@ const Raf: Component<CaseProps> = props => {
         <group>
             <rectangle ref={adView} width={1920} height={1080} color="0x00000000" />
             <Ads
-                adUrl={prefixedUrl(props.proxyBase, AD_TAG)}
+                adUrl={prefixedUrl(props.proxyBase, props.separator, AD_TAG)}
                 adView={adView}
                 debugOutput={debugOutput()}
                 onAdsState={state => {
@@ -261,7 +261,7 @@ const Raf: Component<CaseProps> = props => {
                     ads = pods.reduce((n, pod) => n + (pod.ads?.length ?? 0), 0);
                     if (ads === 0) return report("no_ads");
                     const first = firstStreamUrl(pods);
-                    if (first) media = isPrefixed(props.proxyBase, first) ? "lab" : "direct";
+                    if (first) media = isPrefixed(props.proxyBase, props.separator, first) ? "lab" : "direct";
                     setCommand("showAds");
                 }}
                 onShowAdsResult={result => {
