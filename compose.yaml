@@ -1,6 +1,8 @@
 # The lab under Docker Compose: the same addon chain, config, scenarios and
 # mitmweb flags (scripts/run-mitmweb) as scripts/start-lab, mounted from the repo.
-# Secrets come from .env, which Compose reads from this directory.
+# Settings and secrets come from the settings root, as for scripts/start-lab:
+# ROXY_CONFIG_DIR, else roxy in the user config directory (scripts/lib.sh). Sessions
+# are saved to the same user data directory too.
 #   docker compose up                    # LAN listener only (Physical Devices)
 #   docker compose --profile tunnel up   # plus the quick tunnel (Cloud Devices)
 # Ports match scripts/lib.sh: 8080 LAN listener, 8081 UI, 8082 tunnel listener.
@@ -8,21 +10,24 @@
 # Under Compose it would need LAB_CA_ROUTING=true, ports 443 and 80 published, and a
 # persistent mitmproxy confdir volume (/home/mitmproxy/.mitmproxy): the container
 # makes a new CA each time otherwise, and the CA Routing build ships that CA.
-name: roku-mitm-lab
+name: roxy
 
 services:
   mitmweb:
     image: mitmproxy/mitmproxy:12.3.1  # the version pinned in proxy/pyproject.toml
     user: mitmproxy
     entrypoint: ["/lab/scripts/run-mitmweb", "mitmweb"]
+    # MITMWEB_PASSWORD (required: run-mitmweb names it if empty) and LAB_SECRET (empty:
+    # every tunnel request is refused).
+    env_file: ${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/roxy}/secrets.env
     environment:
-      MITMWEB_PASSWORD: ${MITMWEB_PASSWORD:?missing secret in .env}
-      LAB_SECRET: ${LAB_SECRET:-}  # empty: every tunnel request is refused
-      LAB_REPLAY: ${LAB_REPLAY:-}  # replay mode: a saved session, e.g. captures/<start time>.mitm
+      ROXY_CONFIG_DIR: /lab/settings
+      XDG_DATA_HOME: /lab/data
+      LAB_REPLAY: ${LAB_REPLAY:-}  # replay mode: a saved session, relative to the saved-session folder
       LAB_LOCAL_HOST: 0.0.0.0      # the ports below keep the UI and tunnel listener local
-      # The LAN subnet (proxy/config/guards.json) plus Docker Desktop's host address: on macOS
-      # every published-port client arrives from 192.168.65.1 (README, Docker Compose).
-      LAB_LAN_SUBNETS: ${LAB_LAN_SUBNETS:-192.0.2.0/24 192.168.65.1/32}
+      # Docker Desktop's host address replaces the LAN subnets: on macOS every published-port
+      # client arrives from 192.168.65.1 (README, Docker Compose).
+      LAB_LAN_SUBNETS: ${LAB_LAN_SUBNETS:-192.168.65.1/32}
       PYTHONUNBUFFERED: "1"        # mitmweb's log shows in `docker compose logs` as it happens
     ports:
       - "8080:8080"            # LAN listener, for Physical Devices
@@ -31,7 +36,9 @@ services:
     volumes:
       - ./proxy:/lab/proxy:ro
       - ./scripts:/lab/scripts:ro
-      - ./captures:/lab/captures  # every session is saved here; must be writable by the image's uid 1000
+      - ${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-${HOME}/.config}/roxy}:/lab/settings:ro
+      # every session is saved here; must be writable by the image's uid 1000
+      - ${XDG_DATA_HOME:-${HOME}/.local/share}/roxy:/lab/data/roxy
 
   cloudflared:
     image: cloudflare/cloudflared:2026.11.0
