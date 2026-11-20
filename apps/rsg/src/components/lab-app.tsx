@@ -76,7 +76,7 @@ const LabApp: AnchorNodeImplementation<typeof LabAppDescriptor> = () => {
     return (
         <group>
             <rectangle width={1920} height={1080} color="0x101820FF" />
-            <label translation={[120, 75]} text="Roku MITM Lab (RSG 2.0)" />
+            <label translation={[120, 75]} text="roxy Lab App (RSG 2.0)" />
             <label translation={[120, 150]} width={1680} text={labCertificatesFile ? "CA Routing build: Origin URLs" : `Proxy Base: ${proxyBase()}`}
             />
             <label translation={[120, 225]} width={900} text={run() ? `Case: ${run()!.caseId}` : "No case"} />

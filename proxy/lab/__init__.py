@@ -1,4 +1,4 @@
-"""Roku MITM lab: the mitmproxy addon chain."""
+"""roxy: the lab's mitmproxy addon chain."""
 
 from lab.body_rewriting import BodyRewriter
 from lab.device_labels import DeviceLabels

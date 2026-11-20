@@ -1,7 +1,7 @@
 [project]
-name = "roku-mitm-lab-proxy"
+name = "roxy-proxy"
 version = "0.1.0"
-description = "mitmproxy addons for the Roku MITM lab"
+description = "mitmproxy addons for the roxy lab"
 requires-python = ">=3.12"
 dependencies = ["mitmproxy==12.3.1"]
 

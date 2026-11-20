@@ -29,7 +29,7 @@ const configuration: RokuConfig = {
             generateHd: true
         },
         manifestEntries: {
-            title: "Roku MITM Lab (RSG 2.0)",
+            title: "roxy Lab App (RSG 2.0)",
             major_version: 1,
             minor_version: 0,
             build_version: 1,

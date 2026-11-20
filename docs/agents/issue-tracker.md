@@ -14,7 +14,7 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 
 1. Set the `Status:` line to `resolved`, or to `ready-for-human` when only checks the user must run on a Target Device remain (name them in the note).
 2. Append a closing note under `## Comments`: what was done, the commit, and anything left open.
-3. Check the feature's `ready-for-human` tickets and the docs they name (e.g. `docs/evaluation.md`). Close any that this work's evidence settles, and fix any doc line it makes stale.
+3. Check the feature's `ready-for-human` tickets and the docs they name (e.g. `README.md`). Close any that this work's evidence settles, and fix any doc line it makes stale.
 
 ## When a skill says "publish to the issue tracker"
 

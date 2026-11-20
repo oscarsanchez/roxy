@@ -894,7 +894,7 @@ wheels = [
 ]
 
 [[package]]
-name = "roku-mitm-lab-proxy"
+name = "roxy-proxy"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

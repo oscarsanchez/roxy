@@ -1,6 +1,8 @@
-# Roku MITM Lab
+# roxy
 
-mitmproxy/mitmweb lab for inspecting and manipulating Roku Lab App traffic on Physical Devices and Cloud Devices (RCE). Design: `docs/design.md`. Vocabulary: `GLOSSARY.md`.
+A mitmproxy/mitmweb lab for inspecting and manipulating the traffic of Roku Lab Apps and Product Apps on Physical Devices and Cloud Devices (RCE). Design and usage: `README.md`. Vocabulary: `GLOSSARY.md`.
+
+Personal settings (secrets, devices, LAN subnets) live in the settings root, never in the repo: `README.md`, Settings.
 
 Writing or reviewing code: `CODING_STANDARDS.md`.
 

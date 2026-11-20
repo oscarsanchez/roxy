@@ -5,7 +5,7 @@
 #   Endpoint, for Cloud Devices) and prints the public Proxy Base. Stopping the
 #   lab (Ctrl-C) closes the tunnel too.
 #   --ca-routing also listens on ports 443 and 80 for CA Routing (phase 2,
-#   Physical Devices on the GL.iNet; see docs/ca-routing.md).
+#   Physical Devices on the GL.iNet; see README, CA Routing).
 #   --replay SESSION answers requests from a saved session (a .mitm file) with
 #   mitmproxy's server replay instead of asking the Origin; requests it did not
 #   record get a 404 and never reach their Origin.
@@ -59,7 +59,7 @@ quick_tunnel_host() {
 echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in $SECRETS_FILE)"
 echo "LAN Proxy Base:    $(lan_proxy_base)"
 if [ "$LAB_CA_ROUTING" = true ]; then
-  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $(lan_ip); point lab Origins here in DNS (docs/ca-routing.md)"
+  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $(lan_ip); point lab Origins here in DNS (README, CA Routing)"
 fi
 
 # mitmweb and the tunnel stop together, whichever way the lab stops.

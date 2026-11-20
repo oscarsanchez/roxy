@@ -1,7 +1,7 @@
 [project]
-name = "roku-mitm-lab-grid"
+name = "roxy-grid"
 version = "0.1.0"
-description = "Grid runner for the Roku MITM lab: fills one grid cell on a Target Device"
+description = "Grid runner for the roxy lab: fills one grid cell on a Target Device"
 requires-python = ">=3.12"
 dependencies = []
 

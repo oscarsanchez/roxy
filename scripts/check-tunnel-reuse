@@ -7,8 +7,8 @@
 #   response. Fails if any request is not a 200 from the Origin, or takes over 10 s.
 #   The regression it guards: pinned Origin connections are never reused, and mitmproxy
 #   keeps at most 5 open per address per client connection, so on a reused connection the
-#   6th request to the same Origin waited forever (the Cloud Device widevine row in
-#   docs/evaluation.md).
+#   6th request to the same Origin waited forever (seen in the Cloud Device widevine
+#   grid cell).
 #   Uses the running lab, or starts one for the check (scripts/start-lab, no tunnel).
 #   Needs internet (storage.googleapis.com); no Cloud Device, cloudflared or RCE.
 #   Not part of scripts/check, which stays offline.

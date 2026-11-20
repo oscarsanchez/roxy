@@ -2,7 +2,7 @@
     "name": "roku-mitm-lab-rsg",
     "version": "1.0.0",
     "private": true,
-    "description": "RSG 2.0 Lab App for the Roku MITM Lab",
+    "description": "RSG 2.0 Lab App for the roxy lab",
     "type": "module",
     "scripts": {
         "build": "rk build --debug --local",
