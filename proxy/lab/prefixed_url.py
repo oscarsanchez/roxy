@@ -30,6 +30,13 @@ class PrefixedUrl(NamedTuple):
     origin_url: str
 
 
+class ClientProxyBase(NamedTuple):
+    """The Proxy Base and separator a client's Prefixed request used."""
+
+    proxy_base: str
+    separator: str
+
+
 def build_prefixed_url(proxy_base, separator, origin_url):
     return f"{proxy_base.rstrip('/')}{separator}{origin_url}"
 
@@ -67,10 +74,10 @@ def remember_client(flow, parsed):
 
 
 def client_proxy_base(flow):
-    """(proxy_base, separator) of the client that made `flow`, or None if its request was not Prefixed."""
+    """The ClientProxyBase of the client that made `flow`, or None if its request was not Prefixed."""
     if "proxy_base" not in flow.metadata:
         return None
-    return flow.metadata["proxy_base"], flow.metadata["separator"]
+    return ClientProxyBase(flow.metadata["proxy_base"], flow.metadata["separator"])
 
 
 def prefixed_for_client(flow, origin_url):

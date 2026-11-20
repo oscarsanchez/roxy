@@ -73,11 +73,41 @@ def catalog_thumbnail(path, content_type, **options):
 def test_a_content_type_added_to_a_format_option_gets_that_rewriter():
     path = "/https://dummyjson.com/products"
 
-    assert catalog_thumbnail(path, "application/vnd.api+json") == CATALOG_THUMBNAIL
+    assert catalog_thumbnail(path, "application/x-catalog") == CATALOG_THUMBNAIL
     assert catalog_thumbnail(
-        path, "application/vnd.api+json",
-        lab_rewrite_json=["application/json", "application/VND.api+json"],
+        path, "application/x-catalog",
+        lab_rewrite_json=["application/json", "application/X-Catalog"],
     ) == f"{LAN_PROXY_BASE}/{CATALOG_THUMBNAIL}"
+
+
+@pytest.mark.parametrize("content_type", ["application/vnd.api+json", "application/problem+JSON; charset=utf-8"])
+def test_a_json_suffixed_content_type_gets_the_json_rewriter(content_type):
+    assert catalog_thumbnail("/https://dummyjson.com/products", content_type) == f"{LAN_PROXY_BASE}/{CATALOG_THUMBNAIL}"
+
+
+def test_an_xml_suffixed_content_type_gets_the_xml_rewriter():
+    body = '<ad><media url="https://ads.example.com/ad.mp4"/></ad>'
+    flow = lab_flow("/https://ads.example.com/ad")
+    run_chain(flow, tutils.tresp(headers=http.Headers(content_type="application/vnd.example+xml"), content=body.encode()))
+
+    assert flow.response.text == f'<ad><media url="{LAN_PROXY_BASE}/https://ads.example.com/ad.mp4"/></ad>'
+
+
+def test_a_url_extension_wins_over_a_suffixed_content_type():
+    flow = lab_flow("/https://media.example.com/live/master.m3u8")
+    origin = tutils.tresp(
+        headers=http.Headers(content_type="application/vnd.example+json"), content=b"#EXTM3U\n/live/720p.m3u8\n"
+    )
+
+    run_chain(flow, origin)
+
+    assert flow.response.text == f"#EXTM3U\n{LAN_PROXY_BASE}/https://media.example.com/live/720p.m3u8\n"
+
+
+def test_a_suffix_entry_removed_from_a_format_option_turns_its_suffix_off():
+    assert catalog_thumbnail(
+        "/https://dummyjson.com/products", "application/vnd.api+json", lab_rewrite_json=["application/json"]
+    ) == CATALOG_THUMBNAIL
 
 
 def test_a_url_extension_added_to_a_format_option_gets_that_rewriter():

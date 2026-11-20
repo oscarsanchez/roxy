@@ -71,6 +71,15 @@ NAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*")
 ORIGIN = re.compile(r"https?://[A-Za-z0-9.-]+(?::[0-9]+)?")
 
 
+def _rewrite_text(value):
+    """profile.json's rewrite_text (False if absent). Raises ValueError if it is not a bool."""
+    if value is None:
+        return False
+    if not isinstance(value, bool):
+        raise ValueError("rewrite_text must be true or false")
+    return value
+
+
 def _fallback_origin(value):
     """profile.json's fallback_origin as a FallbackOrigin (None if absent). Raises
     ValueError saying what is wrong with it."""
@@ -130,14 +139,12 @@ class AppProfiles:
         try:
             doc = json.loads(file.read_text())
             repo, allowlist = Path(doc["repo"]), doc["origin_allowlist"]
-            rewrite_text = doc.get("rewrite_text", False)
         except (OSError, ValueError, KeyError, TypeError) as e:
             raise BadProfile(f"App Profile {name!r} in {file}: {e!r}") from e
         if not isinstance(allowlist, list) or not all(isinstance(host, str) for host in allowlist):
             raise BadProfile(f"App Profile {name!r}: origin_allowlist must be a list of hosts, in {file}")
-        if not isinstance(rewrite_text, bool):
-            raise BadProfile(f"App Profile {name!r}: rewrite_text must be true or false, in {file}")
-        try:
+        try:  # the optional keys
+            rewrite_text = _rewrite_text(doc.get("rewrite_text"))
             fallback = _fallback_origin(doc.get("fallback_origin"))
         except ValueError as e:
             raise BadProfile(f"App Profile {name!r}: {e}, in {file}") from e

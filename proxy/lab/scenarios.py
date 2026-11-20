@@ -125,6 +125,7 @@ class Scenarios:
         # A Scenario that stays active keeps its rules, even after a broken edit, unless
         # where Scenarios are found changed.
         kept = {} if {"lab_scenarios_dir", "lab_app"} & updated else {s.name: s for s in self.active}
+        profile = self.app_profile.profile
         names = scenario_names(ctx.options.lab_scenario)
         active = []
         for name in names:
@@ -132,7 +133,7 @@ class Scenarios:
                 if names.count(name) > 1:
                     raise ValueError("listed more than once")
                 active.append(kept.get(name) or ActiveScenario(
-                    name, find_scenario(name, self.app_profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
+                    name, find_scenario(name, profile and profile.scenarios_dir, Path(ctx.options.lab_scenarios_dir))
                 ))
             except (ValueError, OSError) as e:
                 raise exceptions.OptionsError(f"scenario {name!r}: {e}") from e

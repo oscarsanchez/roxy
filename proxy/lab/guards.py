@@ -93,6 +93,11 @@ class Guards:
         client = ip_address(flow.client_conn.peername[0])
         return any(client in subnet for subnet in self.lan_subnets)
 
+    def _origin_allowlist(self):
+        """The lab's own Public Endpoint allowlist, then the loaded App Profile's."""
+        profile = self.app_profile.profile
+        return [*ctx.options.lab_origin_allowlist, *(profile.origin_allowlist if profile else [])]
+
     def _secret_given(self, flow):
         secret = ctx.options.lab_secret
         proxy_base, _ = client_proxy_base(flow)
@@ -107,9 +112,7 @@ class Guards:
             refuse(flow, 403, "secret-segment")
         elif not self._client_allowed(flow):
             refuse(flow, 403, "client-ip")
-        elif through_tunnel(flow) and not _host_allowed(
-            flow.request.host, [*ctx.options.lab_origin_allowlist, *self.app_profile.origin_allowlist]
-        ):
+        elif through_tunnel(flow) and not _host_allowed(flow.request.host, self._origin_allowlist()):
             # The Public Endpoint only: the LAN relays to any public Origin, as Charles does.
             refuse(flow, 403, "origin-host")
         elif _non_public(await _origin_addresses(flow.request.host, flow.request.port)):
