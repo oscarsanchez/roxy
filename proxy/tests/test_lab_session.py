@@ -326,10 +326,16 @@ def test_a_throttled_flow_is_timed_to_its_last_byte_at_the_client(scenarios):
     assert timed["duration_ms"] == pytest.approx(13_000, abs=100)  # then 10 s paced
 
 
+def scenario_rules(lab, app_scenarios_dir=None):
+    """The rules of LAB's active Scenarios, as roxy status reads them: its state, then the rules."""
+    session = LabSession(lab)
+    return session.scenario_rules(session.state(), app_scenarios_dir)
+
+
 def test_each_active_scenarios_rules_count_the_flows_they_acted_on_in_scenario_then_file_order(recorded_flows):
     session = LabSession(FakeMitmweb(recorded_flows, lab_scenario="hls-404,json-503"))
 
-    assert session.scenario_rules(app_scenarios_dir=None) == [
+    assert session.scenario_rules(session.state(), app_scenarios_dir=None) == [
         ScenarioRules("hls-404", [RuleFlows("hls-404", "mux master playlist missing", 0)], None),
         ScenarioRules("json-503", [RuleFlows("json-503", "httpbin json fails", 1)], None),
     ]
@@ -338,7 +344,7 @@ def test_each_active_scenarios_rules_count_the_flows_they_acted_on_in_scenario_t
 def test_since_a_launch_a_rule_counts_only_the_flows_from_then_on(recorded_flows):
     session = LabSession(FakeMitmweb(recorded_flows, lab_scenario="json-503"))
 
-    [after] = session.scenario_rules(None, since=parse_since("2025-11-20T10:02:00.001Z"))  # the 503 at 10:02
+    [after] = session.scenario_rules(session.state(), None, since=parse_since("2025-11-20T10:02:00.001Z"))  # the 503 at 10:02
 
     assert after.rules == [RuleFlows("json-503", "httpbin json fails", 0)]
 
@@ -351,7 +357,7 @@ def test_a_rule_named_the_same_in_two_scenarios_is_counted_per_scenario(scenario
     with Lab(**{**options, "lab_scenario": "first"}) as lab:
         lab.run(flow, origin(b"{}"))
 
-    rules = LabSession(FakeMitmweb([flow], **options)).scenario_rules(None)
+    rules = scenario_rules(FakeMitmweb([flow], **options))
 
     assert [scenario.rules for scenario in rules] == [
         [RuleFlows("second", "json fails", 0)], [RuleFlows("first", "json fails", 1)],
@@ -361,7 +367,7 @@ def test_a_rule_named_the_same_in_two_scenarios_is_counted_per_scenario(scenario
 def test_an_active_scenario_whose_file_no_longer_loads_says_why_instead_of_its_rules(scenarios):
     options = scenarios("broken", '[[rule]]\nname = "no filter"\nstatus = 503\n')
 
-    [broken] = LabSession(FakeMitmweb(**options)).scenario_rules(None)
+    [broken] = scenario_rules(FakeMitmweb(**options))
 
     assert (broken.scenario, broken.rules) == ("broken", [])
     assert "'no filter': needs a filter expression" in broken.error
@@ -370,7 +376,7 @@ def test_an_active_scenario_whose_file_no_longer_loads_says_why_instead_of_its_r
 def test_an_app_profiles_scenario_is_found_in_its_folder_before_the_labs(tmp_path):
     (tmp_path / "catalog-fails.toml").write_text('[[rule]]\nname = "catalog 500"\nfilter = "~u /catalog"\nstatus = 500\n')
 
-    [found] = LabSession(FakeMitmweb(lab_app="example-app", lab_scenario="catalog-fails")).scenario_rules(tmp_path)
+    [found] = scenario_rules(FakeMitmweb(lab_app="example-app", lab_scenario="catalog-fails"), tmp_path)
 
     assert found.rules == [RuleFlows("catalog-fails", "catalog 500", 0)]
 
@@ -378,7 +384,7 @@ def test_an_app_profiles_scenario_is_found_in_its_folder_before_the_labs(tmp_pat
 def test_with_no_active_scenario_the_rules_need_no_flows_from_the_lab(recorded_flows):
     lab = FakeMitmweb(recorded_flows)  # a long session's flows are large: their bodies come too
 
-    assert LabSession(lab).scenario_rules(None) == []
+    assert scenario_rules(lab) == []
     assert [path for path in lab.gets if path.startswith("flows")] == []
 
 
@@ -387,7 +393,7 @@ def test_the_rules_fetch_only_the_marked_flows_never_every_body(recorded_flows):
     session (segments, most traffic) stays in mitmweb with its bodies."""
     lab = FakeMitmweb(recorded_flows, lab_scenario="json-503")
 
-    LabSession(lab).scenario_rules(None)
+    scenario_rules(lab)
 
     assert [path for path in lab.gets if path.startswith("flows")] == ["flows/dump?filter=~marked"]
 

@@ -116,7 +116,7 @@ def status(args):
     session, profiles = LabSession(mitmweb()), app_profiles()
     try:
         state = session.state()
-        rules = session.scenario_rules(app_scenarios_dir(profiles, state.app), since=args.since)
+        rules = session.scenario_rules(state, app_scenarios_dir(profiles, state.app), since=args.since)
     except LabDown:
         if args.json:
             raise  # main says so on stderr

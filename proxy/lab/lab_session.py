@@ -148,12 +148,14 @@ class LabSession:
         ]
         return [_summary(f) for f in flows[-limit if limit else None:]]
 
-    def scenario_rules(self, app_scenarios_dir, since=None):
-        """Each active Scenario, in order, with its rules and how many flows each acted on
-        (the flows' scenario_rules, SINCE as for flows), so a rule that acted on none shows.
-        Its file is found as the lab finds it (find_scenario): APP_SCENARIOS_DIR, the loaded
-        App Profile's Scenarios (None without one), else the lab's own."""
-        state = self.state()
+    def scenario_rules(self, state, app_scenarios_dir, since=None):
+        """Each Scenario active in STATE (the lab's state()), in order, with its rules and how
+        many flows each acted on (the flows' scenario_rules, SINCE as for flows), so a rule
+        that acted on none shows. The counts come from the marked flows: a flow someone
+        unmarks by hand in mitmweb drops out, which shows as a false "acted on nothing yet",
+        never as a silent pass. Its file is found as the lab finds it (find_scenario):
+        APP_SCENARIOS_DIR, the loaded App Profile's Scenarios (None without one), else the
+        lab's own."""
         if not state.scenarios:  # no flows to fetch: a long session's dump, bodies and all, is large
             return []
         # Only the marked flows: every flow a rule acted on is marked (target_devices.annotate),
