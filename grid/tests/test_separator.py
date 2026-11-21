@@ -13,19 +13,18 @@ PROXY_BASE = "http://192.0.2.10:8080"
 CELL = ["classic", "physical", "json", "--proxy-base", PROXY_BASE]
 
 
-class NoFlows:
-    def flows(self):
-        return []
-
-
 @pytest.fixture
 def launches(tmp_path, monkeypatch):
-    """A fake scripts/launch in place of the real one; return a reader of its argument lists."""
-    scripts = tmp_path / "scripts"
+    """A fake scripts/launch in place of the real one, and a fake roxy whose lab has no flows;
+    return a reader of the launch's argument lists."""
+    scripts, bin_dir = tmp_path / "scripts", tmp_path / "bin"
     scripts.mkdir()
+    bin_dir.mkdir()
     log = tmp_path / "launch.log"
     (scripts / "launch").write_text(f'#!/usr/bin/env bash\nprintf "%q " "$@" >> {log}; echo >> {log}\necho run=7\n')
-    (scripts / "launch").chmod(0o755)
+    (bin_dir / "roxy").write_text("#!/usr/bin/env bash\necho '[]'\n")
+    for fake in (scripts / "launch", bin_dir / "roxy"):
+        fake.chmod(0o755)
     monkeypatch.setattr(run_cell, "SCRIPTS", scripts)
     monkeypatch.setattr(run_cell, "REPO", tmp_path)  # its evidence goes to tmp_path/out
     return lambda: [shlex.split(line) for line in log.read_text().splitlines()]
@@ -34,7 +33,7 @@ def launches(tmp_path, monkeypatch):
 def launch(cell: Cell) -> None:
     console = Console(iter(()), lambda: None)
     config = {"run_timeout_s": 0, "settle_s": 0}
-    launch_once(Session("Den", cell, PROXY_BASE, console, NoFlows(), config), "json-503")
+    launch_once(Session("Den", cell, PROXY_BASE, console, config), "json-503")
 
 
 def json_cell(**changes) -> Cell:

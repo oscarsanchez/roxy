@@ -1,7 +1,8 @@
 """A grid cell's verdict from its two runs. Pure: no devices, no network.
 
-Oracles (spec, Testing Decisions, Seam B): the lab's recorded flows and the Lab App's
-result line `LABRESULT <case> run=<id> <key>=<value>...` from the debug console.
+Oracles (spec, Testing Decisions, Seam B): the lab's recorded flows, as `roxy flows --json`
+sums them up (README, Flows for agents), and the Lab App's result line
+`LABRESULT <case> run=<id> <key>=<value>...` from the debug console.
 """
 
 import re
@@ -29,7 +30,8 @@ class Cell:
 @dataclass
 class Run:
     """One launch of the Lab App: its result line (None if none came), the flows the lab
-    recorded from the Target Device meanwhile, and the console output meanwhile."""
+    recorded from the Target Device meanwhile (`roxy flows --json` entries), and the console
+    output meanwhile."""
 
     result: str | None
     flows: list[dict] = field(default_factory=list)
@@ -94,14 +96,10 @@ def result_line(console: str, case: str, run_id: str) -> str | None:
     return None
 
 
-def device_flows(flows: list[dict], device: str, start: float, end: float) -> list[dict]:
-    """The flows (mitmweb /flows.json entries) the Target Device named `device` started
-    in [start, end): the lab's device label names it, natively and under Compose alike. The
-    label is the flow comment, up to the ` | ` before the Scenario rules that acted on it."""
-    return [
-        f for f in flows
-        if start <= f["request"]["timestamp_start"] < end and (f.get("comment") or "").partition(" | ")[0] == device
-    ]
+def device_flows(flows: list[dict], device: str) -> list[dict]:
+    """The flows (`roxy flows --json` entries) of the Target Device named `device`: the lab
+    names each flow's, natively and under Compose alike."""
+    return [f for f in flows if f["device"] == device]
 
 
 def fields(result: str) -> dict[str, str]:
@@ -175,8 +173,9 @@ def check(cell: Cell, baseline: Run, manipulated: Run, proxy_base: str) -> Verdi
     if not succeeded:
         problems.append(f"without a scenario the Lab App did not succeed (wants {describe(cell.ok)}): {describe(before)}")
 
-    for f in refused(baseline.flows):
-        problems.append(f"the lab refused {f['request']['host']}{f['request']['path']} ({blocked_reason(f)})")
+    for f in baseline.flows:
+        if f["refusal"]:
+            problems.append(f"the lab refused {f['url']} ({f['refusal']})")
 
     seen = hosts(baseline.flows)
     for pattern in cell.expect_hosts:
@@ -194,16 +193,11 @@ def check(cell: Cell, baseline: Run, manipulated: Run, proxy_base: str) -> Verdi
     return Verdict("pass", f"{cell.scenario} changed the result: {describe(was)} -> {describe(changed)}")
 
 
-def blocked_reason(flow: dict) -> str | None:
-    """The lab's own refusal reason (X-Lab-Blocked), None for a flow it forwarded."""
-    headers = (flow.get("response") or {}).get("headers") or []
-    return next((v for k, v in headers if k.lower() == "x-lab-blocked"), None)
-
-
-def refused(flows: list[dict]) -> list[dict]:
-    return [f for f in flows if blocked_reason(f)]
+def origin_host(flow: dict) -> str:
+    """The flow's Origin host: its url is the Origin URL."""
+    return urlsplit(flow["url"]).hostname
 
 
 def hosts(flows: list[dict]) -> set[str]:
-    """Origin hosts of the flows the lab forwarded (the decoder sets request.host to the Origin)."""
-    return {f["request"]["host"] for f in flows if not blocked_reason(f)}
+    """Origin hosts of the flows the lab forwarded."""
+    return {origin_host(f) for f in flows if not f["refusal"]}

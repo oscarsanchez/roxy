@@ -17,9 +17,10 @@ JSON_CELL = Cell(
 )
 
 
-def flow(host, status=200, blocked=None):
-    headers = [["X-Lab-Blocked", blocked]] if blocked else []
-    return {"request": {"host": host, "path": "/x"}, "response": {"status_code": status, "headers": headers}}
+def flow(host, status=200, refusal=None, device="Living Room"):
+    """A flow as `roxy flows --json` sums it up (the README's Flows for agents), trimmed to
+    what the verdict reads."""
+    return {"device": device, "url": f"https://{host}/x", "status": status, "refusal": refusal}
 
 
 def run(result, flows=(), console=""):
@@ -93,10 +94,23 @@ def test_content_the_lab_never_saw_while_the_lab_app_succeeded_is_a_leak():
 
 
 def test_flows_the_lab_refused_fail_the_cell():
-    refused = run(BASELINE.result, [flow("httpbin.org"), flow("192.0.2.10", 400, blocked="not-prefixed")])
+    refused = run(BASELINE.result, [flow("httpbin.org"), flow("192.0.2.10", 400, refusal="not-prefixed")])
     v = judge(JSON_CELL, refused, MANIPULATED, PROXY_BASE)
     assert v.outcome == "fail"
-    assert "the lab refused 192.0.2.10/x (not-prefixed)" in v.reason
+    assert "the lab refused https://192.0.2.10/x (not-prefixed)" in v.reason
+
+
+def test_a_refused_flow_is_not_a_host_the_lab_saw():
+    refused = run(BASELINE.result, [flow("httpbin.org", 403, refusal="origin-host")])
+    v = judge(JSON_CELL, refused, MANIPULATED, PROXY_BASE)
+    assert "httpbin.org never reached the lab" in v.reason
+
+
+def test_an_origin_status_is_not_a_refusal():
+    # Only the lab's own refusal counts: an Origin's 403 is the Origin's answer.
+    forbidden = run(BASELINE.result, [flow("httpbin.org", 403)])
+    v = judge(JSON_CELL, forbidden, MANIPULATED, PROXY_BASE)
+    assert v.outcome == "pass", v.reason
 
 
 def test_an_origin_url_on_the_console_is_a_leak_but_a_prefixed_url_is_not():
@@ -158,44 +172,15 @@ def test_a_line_still_being_written_is_not_a_result_yet():
     assert result_line("LABRESULT json_get run=222 status=50", "json_get", "222") is None
 
 
-def lab_flow(device, started, host="httpbin.org", peer="192.0.2.54"):
-    """A mitmweb /flows.json entry; the lab's device label is its comment."""
-    return {
-        "comment": device,
-        "client_conn": {"peername": [peer, 50000]},
-        "request": {"host": host, "path": "/", "timestamp_start": started},
-    }
-
-
-def test_a_runs_flows_are_the_ones_the_lab_labelled_with_the_target_device_during_the_run():
+def test_a_runs_flows_are_the_ones_whose_target_device_is_the_cells():
     flows = [
-        lab_flow("Living Room", 99.0),  # before the run
-        lab_flow("Living Room", 100.0),
-        lab_flow("Living Room", 105.0, peer="127.0.0.1"),
-        lab_flow("Bedroom", 105.0, peer="192.0.2.55"),  # another Target Device
-        lab_flow("", 105.0),  # unlabelled: not a Target Device
-        lab_flow("Living Room", 110.0),  # after the run
+        flow("httpbin.org", device="Living Room"),
+        flow("httpbin.org", device="Living Room 2"),  # another Target Device: the name must match exactly
+        flow("httpbin.org", device="Bedroom"),
+        flow("httpbin.org", device=None),  # a client nothing names: not a Target Device
+        flow("example.com", device="Living Room"),
     ]
-    assert [f["request"]["timestamp_start"] for f in device_flows(flows, "Living Room", 100.0, 110.0)] == [100.0, 105.0]
-
-
-def test_a_cloud_devices_flows_are_the_ones_labelled_with_its_name_whatever_their_peer():
-    flows = [
-        lab_flow("Living Room", 105.0),
-        lab_flow("Cloud Device", 105.0, peer="127.0.0.1"),  # native: cloudflared on loopback
-        lab_flow("Cloud Device", 106.0, peer="172.18.0.3"),  # Compose: cloudflared's container
-        lab_flow("", 107.0, peer="127.0.0.1"),
-    ]
-    assert [f["request"]["timestamp_start"] for f in device_flows(flows, "Cloud Device", 100.0, 110.0)] == [105.0, 106.0]
-
-
-def test_a_flow_a_scenario_acted_on_is_still_its_devices():
-    flows = [
-        lab_flow("Living Room | json-503/httpbin json fails", 105.0),  # the lab adds the rules after the label
-        lab_flow("Living Room 2 | json-503/httpbin json fails", 106.0),
-        lab_flow("json-503/httpbin json fails", 107.0),  # unlabelled
-    ]
-    assert [f["request"]["timestamp_start"] for f in device_flows(flows, "Living Room", 100.0, 110.0)] == [105.0]
+    assert [f["url"] for f in device_flows(flows, "Living Room")] == ["https://httpbin.org/x", "https://example.com/x"]
 
 
 def test_the_verdict_is_a_row_for_the_evaluation_grid():

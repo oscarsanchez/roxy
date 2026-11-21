@@ -10,7 +10,7 @@
 # CA Routing, scripts/grid --ca-routing).
 
 run_timeout_s = 60  # per launch; the playback cases report within 30 s
-settle_s = 3        # after the result line, so in-flight flows reach mitmweb
+settle_s = 3        # after the result line, so in-flight flows reach the lab
 
 # Projected Cloud Device time and cost, printed before the grid runner touches RCE.
 rce_start_s = 120  # a Run the grid starts: billed from the request, takes input after about 80 s

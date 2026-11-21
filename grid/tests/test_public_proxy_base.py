@@ -1,7 +1,7 @@
 """A Cloud Device cell launches with the running tunnel's public Proxy Base, as scripts/launch
 does, unless --proxy-base names another. Fakes on PATH: curl answers for cloudflared's metrics
 (FAKE_TUNNEL_HOST set: a tunnel is up), rce knows every Device Name. Each run stops before it
-touches a Target Device: no mitmweb password."""
+touches a Target Device: no lab answers roxy status."""
 
 import os
 

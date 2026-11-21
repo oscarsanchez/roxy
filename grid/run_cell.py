@@ -4,7 +4,8 @@ Usage: scripts/grid <flavour> <physical|cloud> <traffic-class> [--proxy-base URL
 
 Deploys the flavour, then launches its case twice with scripts/launch: first with the
 cell's Manipulation scenario, then with no scenario (so the lab is left with none
-active). The oracles are mitmweb's flows and the Lab App's result line on the console.
+active). The oracles are the lab's flows (`roxy flows --json`) and the Lab App's result
+line on the console. The lab is read through the public roxy commands only.
 Cells are defined in grid/cells.toml; the verdict logic is in verdict.py.
 """
 
@@ -18,12 +19,13 @@ import sys
 import threading
 import time
 import tomllib
-import urllib.request
 from contextlib import contextmanager, nullcontext
 from dataclasses import dataclass, replace
 from pathlib import Path
 
-from verdict import CRASH_MARKERS, DEVICE_KINDS, Cell, Run, cell_from_config, device_flows, judge, result_line, row, setup
+from verdict import (
+    CRASH_MARKERS, DEVICE_KINDS, Cell, Run, cell_from_config, device_flows, judge, origin_host, result_line, row, setup,
+)
 
 GRID = Path(__file__).resolve().parent
 REPO = GRID.parent
@@ -32,14 +34,24 @@ CONSOLE_PORT = 8085  # BrightScript console: print output of every thread, one c
 LAUNCH_S = 5  # projected time of one scripts/launch call
 
 
-def lab(snippet: str) -> str:
-    """Run a shell snippet with scripts/lib.sh loaded (one source for settings, secrets,
-    devices, LAN IP). Its error, which names what is missing, ends the cell."""
-    script = f'set -euo pipefail; . "$1"; {snippet}'
-    done = subprocess.run(["bash", "-c", script, "lab", str(SCRIPTS / "lib.sh")], stdout=subprocess.PIPE, text=True)
+def output(command: list[str]) -> str:
+    """The command's output. Its error, which says what is wrong, ends the cell."""
+    done = subprocess.run(command, stdout=subprocess.PIPE, text=True)
     if done.returncode:
         sys.exit(done.returncode)
     return done.stdout.strip()
+
+
+def lab(snippet: str) -> str:
+    """Run a shell snippet with scripts/lib.sh loaded (one source for settings, secrets,
+    devices, LAN IP)."""
+    return output(["bash", "-c", f'set -euo pipefail; . "$1"; {snippet}', "lab", str(SCRIPTS / "lib.sh")])
+
+
+def roxy(*args: str):
+    """The running lab's answer to a roxy command, parsed from its JSON (the lab down: roxy
+    says so, and the cell ends)."""
+    return json.loads(output([str(REPO / "bin" / "roxy"), *args]))
 
 
 def save_log(text: str, *parts: str) -> Path:
@@ -48,10 +60,6 @@ def save_log(text: str, *parts: str) -> Path:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
     return path.relative_to(REPO)
-
-
-def secret(name: str) -> str:
-    return lab(f'load_env; require_env {name}; printf %s "${name}"')
 
 
 class Console:
@@ -157,40 +165,20 @@ def cloud_console(name: str) -> Console:
     return Console(iter(proc.stdout.readline, ""), close)
 
 
-class Mitmweb:
-    """The running lab's mitmweb API on localhost (started by scripts/start-lab)."""
+def confirm_ours(state: dict) -> None:
+    """Stop unless the running lab (its `roxy status --json`) is this checkout's: its
+    scenarios are the ones cells.toml names, and nobody else's lab gets a scenario set or a
+    device launched."""
+    ours = str(REPO / "proxy" / "scenarios")
+    if state["scenarios_dir"] != ours:
+        sys.exit(f"error: the running lab is not this checkout's (its scenarios: {state['scenarios_dir']}). "
+                 f"Start it from here: {REPO / 'bin' / 'roxy'} start")
 
-    def __init__(self):
-        self.url = f"http://127.0.0.1:{lab('echo $LAB_WEB_PORT')}"
-        self.password = secret("MITMWEB_PASSWORD")
 
-    def get(self, path: str):
-        req = urllib.request.Request(f"{self.url}/{path}", headers={"Authorization": f"Bearer {self.password}"})
-        try:
-            with urllib.request.urlopen(req, timeout=10) as answer:
-                return json.load(answer)
-        except OSError as e:
-            sys.exit(f"error: mitmweb at {self.url} did not answer ({e}). Is scripts/start-lab running?")
-
-    def flows(self) -> list[dict]:
-        return self.get("flows.json")
-
-    def option(self, name: str):
-        return self.get("options.json").get(name, {}).get("value")
-
-    def confirm_ours(self) -> None:
-        """Stop unless the lab answering is this checkout's: its scenarios are the ones
-        cells.toml names, and nobody else's lab gets a scenario set or a device launched."""
-        ours = str(REPO / "proxy" / "scenarios")
-        theirs = self.option("lab_scenarios_dir")
-        if theirs != ours:
-            sys.exit(f"error: the lab at {self.url} is not this checkout's (its scenarios: {theirs}). "
-                     f"Start it from here: {SCRIPTS / 'start-lab'}")
-
-    def confirm_ca_routing(self) -> None:
-        """Stop unless the lab is in CA Routing: otherwise it refuses every Origin URL."""
-        if not self.option("lab_ca_routing"):
-            sys.exit(f"error: the lab is not in CA Routing. Start it with {SCRIPTS / 'start-lab'} --ca-routing")
+def confirm_ca_routing(state: dict) -> None:
+    """Stop unless the running lab is in CA Routing: otherwise it refuses every Origin URL."""
+    if not state["ca_routing"]:
+        sys.exit(f"error: the lab is not in CA Routing. Start it with {REPO / 'bin' / 'roxy'} start --ca-routing")
 
 
 def confirm_rce_cost(config: dict) -> None:
@@ -221,13 +209,12 @@ class Session:
     cell: Cell
     proxy_base: str
     console: Console
-    mitmweb: Mitmweb
     config: dict
 
 
 def launch_once(session: Session, scenario: str) -> Run:
     device, cell, console, config = session.device, session.cell, session.console, session.config
-    mark, start = len(console.text), time.time()
+    mark = len(console.text)
     out = subprocess.run(
         [str(SCRIPTS / "launch"), "--scenario", scenario, "--proxy-base", session.proxy_base, device,
          f"case={cell.case}", f"separator={cell.separator}"],
@@ -244,10 +231,10 @@ def launch_once(session: Session, scenario: str) -> Run:
             break
         time.sleep(0.5)
     time.sleep(config["settle_s"])
-    end = time.time()
-    flows = device_flows(session.mitmweb.flows(), device, start, end)
+    # Before the next launch: since this run id, the lab holds this run's flows only.
+    flows = device_flows(roxy("flows", "--json", "--since", run_id), device)
     run = Run(result=result, flows=flows, console=console.text[mark:])
-    hosts = sorted({f["request"]["host"] for f in flows})
+    hosts = sorted({origin_host(f) for f in flows})
     # Kept for the verdict's evidence: the console and flows behind each launch.
     name = f"{cell.flavour}-{setup(cell.device_kind, cell.ca_routing)}-{cell.traffic_class}-{run_id}"
     log = save_log(run.console, "grid", f"{name}.console.log")
@@ -293,10 +280,10 @@ def main(argv: list[str]) -> int:
     print(f"cell: {cell.flavour} x {DEVICE_KINDS[cell.device_kind]} x {cell.traffic_class} "
           f"(device {device}, case {cell.case}, scenario {cell.scenario}, {routing})")
     # Everything that can stop the cell is checked before the Target Device is touched.
-    mitmweb = Mitmweb()
-    mitmweb.confirm_ours()
+    state = roxy("status", "--json")
+    confirm_ours(state)
     if cell.ca_routing:
-        mitmweb.confirm_ca_routing()
+        confirm_ca_routing(state)
     if cloud:
         confirm_rce_cost(config)  # before the first RCE call: status, start, console, deploy
     with cloud_run(rce_name) if cloud else nullcontext():
@@ -311,7 +298,7 @@ def main(argv: list[str]) -> int:
             app = str(REPO / config["flavours"][cell.flavour])
             subprocess.run([str(SCRIPTS / "deploy"), *ca_routing, device, app], check=True)
             # With the scenario first, then without: the lab ends with no scenario active.
-            session = Session(device, cell, proxy_base, console, mitmweb, config)
+            session = Session(device, cell, proxy_base, console, config)
             manipulated = launch_once(session, cell.scenario)
             baseline = launch_once(session, "")
         finally:
