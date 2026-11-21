@@ -6,7 +6,7 @@
 #   docker compose up                    # LAN listener only (Physical Devices)
 #   docker compose --profile tunnel up   # plus the quick tunnel (Cloud Devices)
 # Ports match scripts/lib.sh: 8080 and 8888 LAN listeners, 8081 UI, 8082 tunnel listener.
-# CA Routing (phase 2) is not wired here; it runs with scripts/start-lab --ca-routing.
+# CA Routing is not wired here; it runs with scripts/start-lab --ca-routing.
 # Under Compose it would need LAB_CA_ROUTING=true, ports 443 and 80 published, and a
 # persistent mitmproxy confdir volume (/home/mitmproxy/.mitmproxy): the container
 # makes a new CA each time otherwise, and the CA Routing build ships that CA.

@@ -79,8 +79,8 @@ HLS_ERROR = run("LABRESULT hls run=2 state=error errorCode=-1", [flow("stream.mu
 def test_expected_hosts_may_be_patterns():
     playing = run(
         "LABRESULT hls run=1 state=playing errorCode=0",
-        [flow("stream.mux.com"), flow("manifest-gcp-us-east1-vop1.edgemv.mux.com"),
-         flow("chunk-oci-us-ashburn-1-vop1.fastly.mux.com", 206)],
+        [flow("stream.mux.com"), flow("manifest-a.mux.com"),
+         flow("chunk-a.mux.com", 206)],
     )
     assert judge(HLS_CELL, playing, HLS_ERROR, PROXY_BASE).outcome == "pass"
 

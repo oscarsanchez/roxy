@@ -44,7 +44,7 @@ While the lab runs, any device on your LAN subnets can relay through it to any p
 
 - macOS with [uv](https://docs.astral.sh/uv/) (installs the pinned mitmproxy 12.3.1 into `proxy/.venv`) and `brew install jq`.
 - A Roku in developer mode on the same LAN as the Mac.
-- Cloud Devices only: `brew install cloudflared` and the `rce` CLI (install it as its README says), which does every RCE call for the lab. Give the Cloud Device an rce Device Name and a Dev Snapshot once: `rce device alias <id> player`, `rce device setup-dev player`.
+- Cloud Devices only: `brew install cloudflared` and the [`rce` CLI](https://github.com/oscarsanchez/rce-cli) (install it as its README says), which does every RCE call for the lab. Give the Cloud Device an rce Device Name and a Dev Snapshot once: `rce device alias <id> player`, `rce device setup-dev player`.
 - RSG 2.0 Lab App only: Node 24+ (`brew install node@24`; `scripts/deploy` puts it first on PATH), pnpm 11, `brew install squashfs`.
 - Compose only: Docker. It replaces uv and cloudflared.
 
@@ -283,7 +283,7 @@ The lab forwards a request only if the client is allowed, the Origin resolves to
 - Tunnel and forwarding headers (`CF-*`, `X-Forwarded-*`, `CDN-Loop`, `Forwarded`, `Via`...) never reach the Origin.
 - Secrets on the command line: `scripts/run-mitmweb` passes `MITMWEB_PASSWORD` and `LAB_SECRET` to mitmweb as `--set` flags, so any local user can read them with `ps`. Accepted for a single-user lab Mac; do not run the lab on a shared machine.
 - Secrets in output: `roxy status`, the `roxy start` banner and the grid show the public Proxy Base as `https://<tunnel-host>/<secret>`, since terminals and agent transcripts get copied around; `roxy launch` and the grid read the real one from the lab and your settings and send it to the Cloud Device. `roxy status --show-secret` prints it whole, for pasting into a Cloud Device by hand.
-- Defaults: `lan_subnets` in your `settings.json`; `rce_egress_ips` and `origin_allowlist` in `proxy/config/guards.json` (a leading dot such as `.mux.com` allows any subdomain), plus the loaded App Profile's `origin_allowlist`. Live changes: mitmweb Options `lab_lan_subnets`, `lab_rce_egress_ips`, `lab_origin_allowlist`.
+- Defaults: `lan_subnets` in your `settings.json`; `rce_egress_ips` and `origin_allowlist` in `proxy/config/guards.json` (the RCE egress IPs are Roku's, observed from RCE Runs, and may change; a leading dot such as `.mux.com` allows any subdomain), plus the loaded App Profile's `origin_allowlist`. Live changes: mitmweb Options `lab_lan_subnets`, `lab_rce_egress_ips`, `lab_origin_allowlist`.
 
 ### Header and body rewriting
 

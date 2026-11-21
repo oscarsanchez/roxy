@@ -7,8 +7,8 @@
 #   --tunnel also opens a Cloudflare quick tunnel to the listener (the Public
 #   Endpoint, for Cloud Devices) and prints the public Proxy Base, its secret as <secret>. Stopping the
 #   lab (Ctrl-C) closes the tunnel too.
-#   --ca-routing also listens on ports 443 and 80 for CA Routing (phase 2,
-#   Physical Devices behind the CA Routing router; see README, CA Routing).
+#   --ca-routing also listens on ports 443 and 80 for CA Routing
+#   (Physical Devices behind the CA Routing router; see README, CA Routing).
 #   --replay RECORDING answers requests from a Recording (a .mitm file) with
 #   mitmproxy's server replay instead of asking the Origin; requests it did not
 #   record get a 404 and never reach their Origin.

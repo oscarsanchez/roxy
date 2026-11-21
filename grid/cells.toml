@@ -65,7 +65,7 @@ ok = { state = "playing" }
 case = "widevine"
 scenario = "widevine-license-fail"
 expect_hosts = ["storage.googleapis.com", "proxy.uat.widevine.com"]
-# license is not in ok: Roku OS 16 on a Roku 3 reports 2 on success, not the HTTP status (ticket 11).
+# license is not in ok: Roku OS 16 on a Roku 3 reports 2 on success, not the HTTP status.
 ok = { state = "playing" }
 
 [classes.raf]

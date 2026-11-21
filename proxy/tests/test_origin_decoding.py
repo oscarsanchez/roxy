@@ -17,7 +17,7 @@ def test_prefixed_url_is_forwarded_to_its_origin_url():
 
 @pytest.mark.parametrize("separator", ["/", "/;"])
 def test_both_separators_forward_to_the_origin_and_come_back_in_the_same_form(separator):
-    """The lab's own form and the Charles-style form (ADR-0002) round-trip."""
+    """The lab's own form and the Charles-style form round-trip."""
     flow = lab_flow(f"{separator}https://httpbin.org/redirect/1")
 
     forwarded = run_chain(flow, redirect_to("https://httpbin.org/json"))

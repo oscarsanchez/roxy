@@ -1,5 +1,5 @@
-"""Regression tests from a real Charles rewrite set: patterns an app's Charles rules
-re-pointed at the proxy by hand, which roxy handles with no rule, in either separator.
+"""Regression tests for common Charles-hook patterns: URLs a Charles Rewrite set
+re-points at the proxy by hand, which roxy handles with no rule, in either separator.
 Hosts are documentation hosts."""
 
 import pytest

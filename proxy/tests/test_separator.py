@@ -1,5 +1,5 @@
 """Every URL the lab sends back keeps the separator the request arrived with:
-"/" (the lab's own form) or "/;" (the Charles-style form, ADR-0002). A client
+"/" (the lab's own form) or "/;" (the Charles-style form). A client
 app's own "already prefixed?" check relies on it."""
 
 import json

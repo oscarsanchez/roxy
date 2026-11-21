@@ -1,4 +1,4 @@
-"""The single source of truth for the Prefixed URL format (ADR-0001, ADR-0002).
+"""The single source of truth for the Prefixed URL format and its two forms.
 
     <proxy-base><separator><origin-url>
     proxy-base = scheme://host[:port][/secret-segment[/device-slug]]

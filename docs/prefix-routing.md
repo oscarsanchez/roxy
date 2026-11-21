@@ -1,6 +1,6 @@
 # Prefix Routing guide
 
-How a Roku app sends its Outbound Traffic through the lab by putting the Proxy Base in front of each URL it builds. It works on every Target Device and needs no certificate on the device. Vocabulary: `GLOSSARY.md`. Why two forms: ADR-0002. Routing by DNS and the lab's CA instead: `docs/ca-routing.md`.
+How a Roku app sends its Outbound Traffic through the lab by putting the Proxy Base in front of each URL it builds. It works on every Target Device and needs no certificate on the device. Vocabulary: `GLOSSARY.md`. Two forms, so an app with a Charles hook (`/;`, port 8888) works unchanged. Routing by DNS and the lab's CA instead: `docs/ca-routing.md`.
 
 ## Quick start
 

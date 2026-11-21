@@ -1,7 +1,7 @@
 import { labCertificatesFile } from "./ca-routing";
 
 // The single Prefixed URL helper: every URL the Lab App requests goes through it.
-// Format (ADR-0001): <proxy-base><separator><origin-url>, separator "/" (the lab's own
+// Format: <proxy-base><separator><origin-url>, separator "/" (the lab's own
 // form) or "/;" (Charles-style).
 // A CA Routing build leaves the Origin URL as it is.
 export const prefixedUrl = (proxyBase: string, separator: string, originUrl: string): string =>

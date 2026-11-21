@@ -11,29 +11,29 @@ from chain import SECRET, TUNNEL_OPTIONS, assert_refused, lab_flow, origin_json,
 CDN = "https://cdn.example"
 # A Charles hook's leftover: a root-relative manifest line the app resolved against the
 # proxy port, so the lab sees the CDN's path with no Origin in front of it.
-VOD_PATH = "/live/abc123/hls/index.m3u8?token=a%2Fb&x="
+MANIFEST_PATH = "/live/abc123/hls/index.m3u8?token=a%2Fb&x="
 
 
 @pytest.fixture
 def fallback(app_profile):
-    """Lab options loading an App Profile whose fallback Origin is CDN, for /live…/vod/ paths."""
+    """Lab options loading an App Profile whose fallback Origin is CDN, for /live/<id>/hls/ paths."""
     app_profile("example-app", fallback_origin={"path": r"^/live/[^/]+/hls/", "origin": CDN})
     return {"lab_app": "example-app"}
 
 
 def test_a_matching_bare_path_reaches_the_fallback_origin_with_its_path_and_query(fallback):
-    flow = lab_flow(VOD_PATH)
+    flow = lab_flow(MANIFEST_PATH)
 
     forwarded = run_chain(flow, origin_json(), **fallback)
 
-    assert forwarded.url == f"{CDN}{VOD_PATH}"
+    assert forwarded.url == f"{CDN}{MANIFEST_PATH}"
     assert forwarded.headers["host"] == "cdn.example"
 
 
 def test_its_manifest_comes_back_prefixed_in_the_charles_form(fallback):
     """The Charles pattern: a bare /live/…/hls/… path on the proxy port goes to the CDN, and
     the manifest's lines come back as Prefixed URLs with `/;`, so the segments come back too."""
-    flow = lab_flow(VOD_PATH, host_header="192.0.2.10:8888")
+    flow = lab_flow(MANIFEST_PATH, host_header="192.0.2.10:8888")
 
     run_chain(flow, manifest(
         "#EXTM3U\n"
@@ -56,31 +56,31 @@ def test_a_bare_path_the_regex_does_not_match_is_still_refused(fallback, path):
 
 def test_without_a_fallback_origin_a_matching_bare_path_is_refused(app_profile):
     app_profile("example-app")
-    flow = lab_flow(VOD_PATH)
+    flow = lab_flow(MANIFEST_PATH)
 
     assert_refused(flow, run_chain(flow, origin_json(), lab_app="example-app"), "not-prefixed", status=400)
 
 
 def test_the_guards_refuse_a_fallback_origin_with_a_private_address(fallback, dns):
     dns["cdn.example"] = ["10.0.0.20"]
-    flow = lab_flow(VOD_PATH)
+    flow = lab_flow(MANIFEST_PATH)
 
     assert_refused(flow, run_chain(flow, origin_json(), **fallback), "origin-address")
 
 
 def test_the_guards_refuse_a_lan_client_outside_the_lan_subnets(fallback):
-    flow = lab_flow(VOD_PATH, peer=("203.0.113.9", 51000))
+    flow = lab_flow(MANIFEST_PATH, peer=("203.0.113.9", 51000))
 
     assert_refused(flow, run_chain(flow, origin_json(), **fallback), "client-ip")
 
 
-@pytest.mark.parametrize("path", [VOD_PATH, f"/{SECRET}{VOD_PATH}"])
+@pytest.mark.parametrize("path", [MANIFEST_PATH, f"/{SECRET}{MANIFEST_PATH}"])
 def test_the_public_endpoint_takes_no_fallback_even_for_an_allowlisted_host(app_profile, path):
     """A Cloud Device must send a Prefixed URL behind the secret: the Public Endpoint never
     guesses an Origin, so nothing reaches the fallback Origin around its guards."""
     app_profile(
         "example-app", origin_allowlist=["cdn.example"],
-        fallback_origin={"path": "/vod/", "origin": CDN},
+        fallback_origin={"path": r"^/live/[^/]+/hls/", "origin": CDN},
     )
     flow = tunnel_flow(path)
 

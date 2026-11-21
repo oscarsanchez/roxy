@@ -1,4 +1,4 @@
-"""CA Routing (phase 2): a Physical Device whose DNS points lab Origins at the Mac
+"""CA Routing: a Physical Device whose DNS points lab Origins at the Mac
 calls Origin URLs directly. The Origin comes from Host, else SNI."""
 
 import pytest

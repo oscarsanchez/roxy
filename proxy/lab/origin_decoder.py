@@ -1,7 +1,7 @@
 """Origin decoding: point each incoming request at its Origin.
 
 Prefix Routing: the Origin comes from the Prefixed URL path.
-CA Routing (phase 2, option lab_ca_routing): a request that is not a Prefixed URL
+CA Routing (option lab_ca_routing): a request that is not a Prefixed URL
 is an Origin URL the Lab App called directly, sent here by DNS; its Origin comes
 from Host, else SNI.
 A fallback Origin (the loaded App Profile's fallback_origin): a bare path on a LAN
