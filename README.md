@@ -51,6 +51,7 @@ While the lab runs, any device on your LAN subnets can relay through it to any p
 ### 2. Install and settings
 
 ```sh
+git clone <roxy's repository URL> roxy && cd roxy
 ./install.sh                               # links roxy into ~/.local/bin (put that on your PATH); seeds missing settings
 git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check (see Tests)
 ```
