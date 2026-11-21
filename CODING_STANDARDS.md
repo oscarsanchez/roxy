@@ -7,6 +7,7 @@ The judgement calls a reviewer checks. Mechanical rules (tests, shell syntax, Co
 - **Trust decisions read lab-owned state.** A guard, the Target Device decision or a rewrite decides from what the lab itself established: the listener a request arrived on, and `flow.metadata` set by an earlier addon (`proxy_base`, `lab_refusal`). A header the client or the Origin sets is data, not evidence. The one exception is a header whose sender the lab has proven: tunnel headers such as `CF-Connecting-IP`, trusted only on the tunnel listener, which only cloudflared reaches (`proxy/lab/clients.py`).
 - **Runtime-specific trust lives in that runtime's config.** Shared config (`proxy/config/*.json`, addon option defaults) applies to every runtime: native, Compose and CA Routing alike. Trust that one runtime needs, such as Docker Desktop's `192.168.65.1`, goes in that runtime's own config (`LAB_LAN_SUBNETS` in `compose.yaml`), so no other runtime inherits it.
 - **The secret check comes first on the tunnel.** An unauthenticated tunnel request learns nothing about the lab: it gets 403 `secret-segment` whatever it sends, with no refusal reason, header or behaviour that reveals another guard, the routing or the config.
+- **The lab secret never reaches printed output.** Anything a command prints that can hold the secret (a public Proxy Base, a URL, a banner or cell line) goes through `redact_secret` (`scripts/lib.sh`), which shows it as `<secret>`. Only `roxy status --show-secret` prints the secret itself.
 
 ## Boundaries
 
