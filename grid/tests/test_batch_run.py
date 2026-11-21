@@ -171,6 +171,16 @@ def test_a_cloud_batch_asks_once_and_runs_every_cell_in_one_capped_run(events, a
     assert log[launches[-1] + 1:] == [STATUS, STOP, STATUS]
 
 
+def test_a_cloud_batch_launches_with_the_secret_and_prints_it_nowhere(events, answers, settings, capfd):
+    (settings / "secrets.env").write_text("LAB_SECRET=s3cret\nMITMWEB_PASSWORD=\n")
+    main(CLOUD_BATCH)
+    launches = [e for e in events() if e[0] == "launch"]
+    assert launches and all(e[e.index("--proxy-base") + 1] == "https://203.0.113.5/s3cret" for e in launches)
+    out, err = capfd.readouterr()
+    assert "Proxy Base https://203.0.113.5/<secret>, separator /)" in out
+    assert "s3cret" not in out + err
+
+
 def test_a_cloud_batch_leaves_a_run_it_did_not_start_running(events, answers, monkeypatch):
     monkeypatch.setenv("FAKE_STATUS", "running")
     main(CLOUD_BATCH)

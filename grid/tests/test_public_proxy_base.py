@@ -33,11 +33,13 @@ def fakes(settings, tmp_path, monkeypatch):
     (settings / "secrets.env").write_text("LAB_SECRET=s3cret\nMITMWEB_PASSWORD=\n")
 
 
-def test_a_cloud_cell_uses_the_running_tunnels_public_proxy_base(monkeypatch, capfd):
+def test_a_cloud_cell_uses_the_running_tunnels_public_proxy_base_and_prints_no_secret(monkeypatch, capfd):
     monkeypatch.setenv("FAKE_TUNNEL_HOST", "example.trycloudflare.com")
     with pytest.raises(SystemExit):
         main(CELL)
-    assert "Proxy Base https://example.trycloudflare.com/s3cret, separator /)" in capfd.readouterr().out
+    out, err = capfd.readouterr()
+    assert "Proxy Base https://example.trycloudflare.com/<secret>, separator /)" in out
+    assert "s3cret" not in out + err
 
 
 def test_a_cloud_cell_without_a_tunnel_says_how_to_start_one(capfd):

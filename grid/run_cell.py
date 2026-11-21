@@ -308,6 +308,7 @@ class Target:
 
     device: str
     proxy_base: str
+    shown_proxy_base: str  # proxy_base as the grid prints it: its secret as <secret> (scripts/lib.sh redact_secret)
     ip: str | None = None  # a Physical Device's, for its console
     rce_name: str | None = None  # a Cloud Device's
 
@@ -321,15 +322,17 @@ def target(device_kind: str, ca_routing: bool, proxy_base: str | None) -> Target
         rce_name = lab(f"rce_device_name {shlex.quote(device)}")
         if not rce_name:
             sys.exit(f"error: {device} has no rce_device_name in devices.json (settings root)")
-        return Target(device, proxy_base, rce_name=rce_name)
+        shown = lab(f"load_env; redact_secret {shlex.quote(proxy_base)}")
+        return Target(device, proxy_base, shown, rce_name=rce_name)
     ip = lab(f"device_field {shlex.quote(device)} ip")
     if not ip:
         sys.exit(f"error: {device} has no ip in devices.json (settings root)")
-    return Target(device, proxy_base, ip=ip)
+    return Target(device, proxy_base, proxy_base, ip=ip)
 
 
 def describe(cell: Cell, target: Target) -> str:
-    routing = "CA Routing build" if cell.ca_routing else f"Proxy Base {target.proxy_base}, separator {cell.separator}"
+    routing = ("CA Routing build" if cell.ca_routing
+               else f"Proxy Base {target.shown_proxy_base}, separator {cell.separator}")
     return (f"cell: {cell.flavour} x {DEVICE_KINDS[cell.device_kind]} x {cell.traffic_class} "
             f"(device {target.device}, case {cell.case}, scenario {cell.scenario}, {routing})")
 
