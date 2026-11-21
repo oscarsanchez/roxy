@@ -116,7 +116,8 @@ def status(args):
     session, profiles = LabSession(mitmweb()), app_profiles()
     try:
         state = session.state()
-        rules = session.scenario_rules(state, app_scenarios_dir(profiles, state.app), since=args.since)
+        app_dir, app_error = app_scenarios_dir(profiles, state.app)
+        rules = session.scenario_rules(state, app_dir, since=args.since)
     except LabDown:
         if args.json:
             raise  # main says so on stderr
@@ -126,19 +127,27 @@ def status(args):
         print(json.dumps({**state._asdict(), "rules": [rule._asdict() for found in rules for rule in found.rules]}))
         return
     listed = []
+    readable_app = state.app if app_dir else None
     for found in rules:
-        listed.append(f"{found.scenario}  ({profiles.source(state.app, found.scenario)})")
+        listed.append(f"{found.scenario}  ({profiles.source(readable_app, found.scenario)})")
         if found.error:
             listed.append(f"  cannot read its rules: {found.error}")
         listed += [f"  {rule.rule}  {acted_on(rule.flows)}" for rule in found.rules]
     print(f"lab: up (mitmweb UI {mitmweb().url})")
-    print(f"App Profile:       {state.app or 'none'}")
+    print(f"App Profile:       {state.app or 'none'}" + (f"  (cannot read it: {app_error})" if app_error else ""))
     print("Scenarios:         " + ("\n                   ".join(listed) or "none"))
 
 
 def app_scenarios_dir(profiles, app):
-    """The Scenarios folder of the loaded App Profile APP, None without one."""
-    return profiles.profile(app).scenarios_dir if app else None
+    """The Scenarios folder of the loaded App Profile APP (None without one), and why APP
+    cannot be read, renamed or deleted since the lab loaded it (None if it can). Without
+    its folder, the active Scenarios are found as without a profile."""
+    if not app:
+        return None, None
+    try:
+        return profiles.profile(app).scenarios_dir, None
+    except AppProfileError as e:
+        return None, str(e)
 
 
 def acted_on(flows):

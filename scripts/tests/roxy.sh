@@ -187,6 +187,18 @@ not:
 $want"
 echo "ok: status --json says when the lab is down, and prints the lab's state"
 
+# The loaded App Profile renamed or deleted since roxy start: status says so on its line and
+# still lists the Scenarios, and exits 0, as for a Scenario it cannot read; so does --json.
+out="$(lab_up app-gone json-503 "$ROXY" status)" || fail "status with its App Profile gone exited non-zero: $out"
+case "$out" in *"App Profile:       app-gone  (cannot read it: "*"app-gone"*) ;; *) fail "status with its App Profile gone does not say so:
+$out" ;; esac
+case "$out" in *"Scenarios:         json-503  (lab)"$'\n'"                     httpbin json fails  0 flows"*) ;; *) fail "status with its App Profile gone lacks the Scenarios:
+$out" ;; esac
+out="$(lab_up app-gone json-503 "$ROXY" status --json)" || fail "status --json with its App Profile gone exited non-zero: $out"
+[ "$(jq -c '[.app, .rules[].rule]' <<< "$out")" = '["app-gone","httpbin json fails"]' ] \
+  || fail "status --json with its App Profile gone said: $out"
+echo "ok: status reports a loaded App Profile it cannot read, and exits 0"
+
 # scenario list: the lab's own Scenarios, with or without a running lab.
 source_of() { awk -v n="$1" '$1 == n {$1 = ""; sub(/^ +/, ""); print}' <<< "$2"; }
 out="$("$ROXY" scenario list)" || fail "scenario list: $out"
