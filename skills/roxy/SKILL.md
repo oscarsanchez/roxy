@@ -66,6 +66,7 @@ Every Lab Session is saved as a Recording (a `.mitm` file). `roxy export --har [
 
 - One lab per user: one App Profile per session and one set of active Scenarios, lab-wide. Deploys and launches take a per-user `devices` lock and refuse while someone else holds it, naming the holder; set `LAB_LOCK_OWNER` to your name, and `LAB_LOCK_WAIT=1` waits instead.
 - A Charles hook builds `http://<ip>:8888/;` only, so such an app goes through the lab on Physical Devices only. Cloud Devices need the kit (or a hook that takes a whole Proxy Base) and `roxy start --tunnel`, whose hostname changes on every start: launch again after a restart.
+- `roxy status` and `roxy start` show the public Proxy Base as `https://<tunnel-host>/<secret>`, keeping the lab's secret out of your transcript; `roxy launch` and the grid send the real one. `roxy status --show-secret` prints it whole: only for a user pasting it into a Cloud Device by hand, never to read it yourself.
 - The lab never sees Roku OS traffic, SDKs with their own fixed endpoints, or DRM and ad requests the app does not route.
 - CA Routing (no Prefixed URLs; DNS on the user's router) is for Physical Devices only, and needs router setup by the user: [CA Routing guide](ca-routing.md).
 - `roxy flows` is read-only. Holding and editing a flow by hand is the user's, in mitmweb (`http://127.0.0.1:8081`, password-protected).

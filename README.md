@@ -74,13 +74,14 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 
 ```sh
 roxy start                           # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
-roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
+roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<secret>
 roxy start --replay <recording>.mitm # answer from a Recording (see Recording and replay)
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
 roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios and their rules
 roxy status --since <run>            # each active rule's flows since that launch only (see Scenarios)
 roxy status --json                   # for tools: {"app", "scenarios", "ca_routing", "scenarios_dir", "rules"}; the lab down: exit 1
+roxy status --show-secret            # the public Proxy Base with LAB_SECRET in it, to paste into a Cloud Device by hand (see Guards)
 roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
 roxy export --har                    # the newest Recording as a HAR file in this folder (see Export as HAR)
 ```
@@ -278,6 +279,7 @@ The lab forwards a request only if the client is allowed, the Origin resolves to
 - The address guard resolves the Origin, and mitmproxy then dials one of the addresses it checked (IPv4 first), never a later DNS answer: a name that turns private between the check and the connect (DNS rebinding) is not dialled. The cost: no server connection reuse across requests.
 - Tunnel and forwarding headers (`CF-*`, `X-Forwarded-*`, `CDN-Loop`, `Forwarded`, `Via`...) never reach the Origin.
 - Secrets on the command line: `scripts/run-mitmweb` passes `MITMWEB_PASSWORD` and `LAB_SECRET` to mitmweb as `--set` flags, so any local user can read them with `ps`. Accepted for a single-user lab Mac; do not run the lab on a shared machine.
+- Secrets in output: `roxy status`, the `roxy start` banner and the grid show the public Proxy Base as `https://<tunnel-host>/<secret>`, since terminals and agent transcripts get copied around; `roxy launch` and the grid read the real one from the lab and your settings and send it to the Cloud Device. `roxy status --show-secret` prints it whole, for pasting into a Cloud Device by hand.
 - Defaults: `lan_subnets` in your `settings.json`; `rce_egress_ips` and `origin_allowlist` in `proxy/config/guards.json` (a leading dot such as `.mux.com` allows any subdomain), plus the loaded App Profile's `origin_allowlist`. Live changes: mitmweb Options `lab_lan_subnets`, `lab_rce_egress_ips`, `lab_origin_allowlist`.
 
 ### Header and body rewriting
