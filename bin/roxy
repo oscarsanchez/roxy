@@ -48,7 +48,8 @@ shows its secret segment as <secret>.
   --since RUN|TIME  count only flows since a roxy launch run id, or a time like
                     2026-11-20T10:00:00Z
   --show-secret     print the real public Proxy Base, to paste into a Cloud Device by
-                    hand: the output then holds the lab's secret
+                    hand: the output then holds the lab's secret (not with --json,
+                    which carries no Proxy Base)
 EOF
     ;;
     scenario) cat <<'EOF'
@@ -128,7 +129,10 @@ status() {
     if [ "$arg" = --show-secret ]; then show_secret=true; else args+=("$arg"); fi
   done
   set -- ${args[@]+"${args[@]}"}
-  case " $* " in *" --json "*) proxy_cli status "$@"; return ;; esac
+  case " $* " in *" --json "*)
+    ! $show_secret || die "--json carries no Proxy Base, so no secret to show: drop --show-secret. $(usage status | head -1)"
+    proxy_cli status "$@"; return ;;
+  esac
   load_env
   lab="$(proxy_cli status "$@")" || { [ -z "$lab" ] || echo "$lab"; exit 1; }
   public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"

@@ -187,6 +187,11 @@ not:
 $want"
 echo "ok: status --json says when the lab is down, and prints the lab's state"
 
+# status --json --show-secret: refused, as --json carries no Proxy Base to show.
+if err="$(lab_up "" "" "$ROXY" status --json --show-secret 2>&1)"; then fail "status --json --show-secret exited 0: $err"; fi
+case "$err" in *"--json carries no Proxy Base"*"usage: roxy status"*) ;; *) fail "status --json --show-secret said: $err" ;; esac
+echo "ok: status refuses --json with --show-secret"
+
 # The loaded App Profile renamed or deleted since roxy start: status says so on its line and
 # still lists the Scenarios, and exits 0, as for a Scenario it cannot read; so does --json.
 out="$(lab_up app-gone json-503 "$ROXY" status)" || fail "status with its App Profile gone exited non-zero: $out"
