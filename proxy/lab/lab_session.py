@@ -154,6 +154,8 @@ class LabSession:
         Its file is found as the lab finds it (find_scenario): APP_SCENARIOS_DIR, the loaded
         App Profile's Scenarios (None without one), else the lab's own."""
         state = self.state()
+        if not state.scenarios:  # no flows to fetch: a long session's dump, bodies and all, is large
+            return []
         acted = Counter(rule for flow in self.flows(since=since) for rule in flow["scenario_rules"])
         found = []
         for scenario in state.scenarios:

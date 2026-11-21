@@ -78,8 +78,10 @@ class FakeMitmweb:
         self.up = True
         self.signed_in = True  # False: the password LabSession signs in with is wrong
         self.puts = []  # every PUT, as (path, body)
+        self.gets = []  # every GET's path
 
     def get(self, path):
+        self.gets.append(path)
         if refused := self._refusal():
             return refused
         url = urlsplit(path)
@@ -371,6 +373,13 @@ def test_an_app_profiles_scenario_is_found_in_its_folder_before_the_labs(tmp_pat
     [found] = LabSession(FakeMitmweb(lab_app="example-app", lab_scenario="catalog-fails")).scenario_rules(tmp_path)
 
     assert found.rules == [RuleFlows("catalog-fails", "catalog 500", 0)]
+
+
+def test_with_no_active_scenario_the_rules_need_no_flows_from_the_lab(recorded_flows):
+    lab = FakeMitmweb(recorded_flows)  # a long session's flows are large: their bodies come too
+
+    assert LabSession(lab).scenario_rules(None) == []
+    assert [path for path in lab.gets if path.startswith("flows")] == []
 
 
 def test_reading_the_flows_never_changes_the_lab(recorded_flows):
