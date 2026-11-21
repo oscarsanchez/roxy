@@ -14,3 +14,12 @@ def settings(tmp_path, monkeypatch):
     shutil.copytree(SETTINGS_EXAMPLE, root)
     monkeypatch.setenv("ROXY_CONFIG_DIR", str(root))
     return root
+
+
+@pytest.fixture(autouse=True)
+def out_dir(tmp_path, monkeypatch):
+    """Where the grid writes its evidence (scripts/lib.sh ROXY_OUT_DIR): a temp folder, never
+    the checkout's out/."""
+    out = tmp_path / "out"
+    monkeypatch.setenv("ROXY_OUT_DIR", str(out))
+    return out

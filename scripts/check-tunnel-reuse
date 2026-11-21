@@ -30,8 +30,8 @@ stop_lab() {
 if tunnel_listener_up; then
   echo "using the running lab"
 else
-  mkdir -p "$REPO_ROOT/out"
-  lab_log="$REPO_ROOT/out/check-tunnel-reuse-lab.log"
+  mkdir -p "$ROXY_OUT_DIR"
+  lab_log="$ROXY_OUT_DIR/check-tunnel-reuse-lab.log"
   echo "starting the lab for the check (log: $lab_log)"
   "$REPO_ROOT/scripts/start-lab" >"$lab_log" 2>&1 &
   lab_pid=$!

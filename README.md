@@ -410,7 +410,7 @@ cd proxy && uv run pytest     # Seam A: the full addon chain, no network
 cd grid && uv run pytest      # grid verdict logic, its settings, batches, and its Cloud Device side against a fake rce; no devices
 ```
 
-No check reads your own settings: `scripts/check` points `ROXY_CONFIG_DIR` at a temp folder seeded from `settings.example/` (and the user data directory at another), and the pytest suites seed their own.
+No check reads your own settings: `scripts/check` points `ROXY_CONFIG_DIR` at a temp folder seeded from `settings.example/` (the user data directory and `ROXY_OUT_DIR`, the build output and logs that default to `out/`, at others), and the pytest suites seed their own.
 
 Live checks need the internet or a Target Device, so `scripts/check` leaves them out:
 

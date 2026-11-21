@@ -26,10 +26,10 @@ lab_lock devices
 package_app() {
   local name stage zip
   name="$(basename "$1")"
-  stage="$REPO_ROOT/out/$name"
-  zip="$REPO_ROOT/out/$name.zip"
+  stage="$ROXY_OUT_DIR/$name"
+  zip="$ROXY_OUT_DIR/$name.zip"
   rm -rf "$stage" "$zip"
-  mkdir -p "$REPO_ROOT/out"
+  mkdir -p "$ROXY_OUT_DIR"
   cp -R "$1" "$stage"
   printf 'lab_proxy_base=%s\n' "$2" >> "$stage/manifest"
   if [ "${ROXY_KIT:-}" = 1 ]; then  # the kit's build-time constant (kit/example-classic)
@@ -45,12 +45,12 @@ package_app() {
 }
 
 # rsg_ca_bundle : write the RSG CA Routing build's certificate bundle (certifi's public
-# roots, as the proxy venv has them, plus the lab's CA) into out/; print its path.
+# roots, as the proxy venv has them, plus the lab's CA) into ROXY_OUT_DIR; print its path.
 rsg_ca_bundle() {
-  local bundle="$REPO_ROOT/out/lab-ca-bundle.crt" roots
+  local bundle="$ROXY_OUT_DIR/lab-ca-bundle.crt" roots
   roots="$(cd "$REPO_ROOT/proxy" && uv run --quiet python -c 'import certifi; print(certifi.where())')" \
     || die "could not find certifi's bundle in the proxy venv (cd proxy && uv sync)"
-  mkdir -p "$REPO_ROOT/out"
+  mkdir -p "$ROXY_OUT_DIR"
   cat "$roots" "$LAB_CA_CERT" > "$bundle"
   echo "$bundle"
 }
@@ -61,7 +61,7 @@ rsg_ca_bundle() {
 # (the Lab App's, and with ROXY_KIT=1 the kit example's roxy-config.ts).
 build_rsg_app() {
   local out ca_bundle=""
-  out="$REPO_ROOT/out/$(basename "$1")"
+  out="$ROXY_OUT_DIR/$(basename "$1")"
   if $ca_routing; then ca_bundle="$(rsg_ca_bundle)"; fi
   if [ -d /opt/homebrew/opt/node@24/bin ]; then PATH="/opt/homebrew/opt/node@24/bin:$PATH"; fi
   [ "$(node -p 'process.versions.node.split(".")[0]' 2>/dev/null || echo 0)" -ge 24 ] \

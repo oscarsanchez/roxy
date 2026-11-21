@@ -4,17 +4,17 @@
 # Usage: scripts/check [STEP...]   e.g. scripts/check glossary
 #   With STEPs, only those run, in the order given; without, every step (STEPS below).
 # It never reads your own settings: the settings root is a temp folder seeded from
-# settings.example/, and the user data directory a temp folder too.
+# settings.example/, and the user data directory and out/ (ROXY_OUT_DIR) temp folders too.
 set -euo pipefail
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-export ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data"
+export ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data" ROXY_OUT_DIR="$TMP/out"
 . "$(dirname "$0")/lib.sh"
 cd "$REPO_ROOT"
 mkdir -p "$ROXY_CONFIG_DIR"
 cp -R settings.example/. "$ROXY_CONFIG_DIR"
 
-STEPS=(proxy grid syntax lock rce settings roxy kit compose glossary imports steps)
+STEPS=(proxy grid syntax lock rce settings roxy kit compose glossary imports out steps)
 
 # step_NAME: one step; its first line is its header, == NAME: what it checks.
 step_proxy() {
@@ -83,6 +83,17 @@ step_imports() {
   if grep -nE '^[[:space:]]*(from|import)[[:space:]]+lab([.[:space:]]|$)' proxy/tests/test_*.py \
     | grep -vE ':[[:space:]]*from lab\.(app_profiles|lab_session) import '; then
     die "proxy tests import lab modules (above); go through tests/chain.py instead"
+  fi
+}
+
+step_out() {
+  echo "== out: build output and logs go through ROXY_OUT_DIR"
+  # Packages, logs and evidence go to ROXY_OUT_DIR (scripts/lib.sh), never a path into the
+  # checkout's out/: scripts/check points it at a temp folder, so no check writes there.
+  # lib.sh holds the default; this file, the pattern.
+  if grep -d skip -nE '(REPO(_ROOT)?\}?/out([/"]|$)|REPO / "out")' bin/* scripts/* grid/*.py \
+    | grep -vE '^scripts/(lib\.sh|check):'; then
+    die "the lines above write the checkout's out/; go through ROXY_OUT_DIR instead"
   fi
 }
 

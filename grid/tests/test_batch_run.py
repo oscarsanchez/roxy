@@ -144,6 +144,17 @@ def test_one_cell_prints_its_lines_and_row_as_before_with_no_table(events, capfd
     ]
 
 
+
+def test_a_cells_evidence_goes_to_the_out_dir_lib_sh_names(events, tmp_path, monkeypatch, capfd):
+    """Outside the checkout too (scripts/check's temp ROXY_OUT_DIR): the path is then printed whole."""
+    evidence = tmp_path.parent / f"{tmp_path.name}-evidence"
+    monkeypatch.setenv("ROXY_OUT_DIR", str(evidence))
+    main(["classic", "physical", "json", "--proxy-base", "http://192.0.2.10:8080"])
+    log = evidence / "grid" / "classic-physical-json-1.console.log"
+    assert log.exists() and (evidence / "grid" / "classic-physical-json-1.flows.json").exists()
+    assert f"    console: {log} (flows: .flows.json beside it)" in capfd.readouterr().out.splitlines()
+
+
 @pytest.fixture
 def answers(monkeypatch):
     """Answer yes to the RCE cost question; return the questions asked."""

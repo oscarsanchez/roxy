@@ -26,7 +26,7 @@ def launches(tmp_path, monkeypatch):
     for fake in (scripts / "launch", bin_dir / "roxy"):
         fake.chmod(0o755)
     monkeypatch.setattr(run_cell, "SCRIPTS", scripts)
-    monkeypatch.setattr(run_cell, "REPO", tmp_path)  # its evidence goes to tmp_path/out
+    monkeypatch.setattr(run_cell, "REPO", tmp_path)
     return lambda: [shlex.split(line) for line in log.read_text().splitlines()]
 
 

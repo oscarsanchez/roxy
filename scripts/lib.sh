@@ -21,7 +21,10 @@ LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reacha
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
 TUNNEL_METRICS="127.0.0.1:20241"  # cloudflared's local metrics server: readiness and the quick tunnel hostname
-CLOUDFLARED_LOG="${CLOUDFLARED_LOG:-$REPO_ROOT/out/cloudflared.log}"  # the tunnel's log; CLOUDFLARED_LOG overrides it (tests)
+# Build output and logs: packages, the tunnel's log, console and grid evidence, in the
+# checkout's gitignored out/. ROXY_OUT_DIR overrides it (tests). Exported: grid/ reads it too.
+export ROXY_OUT_DIR="${ROXY_OUT_DIR:-$REPO_ROOT/out}"
+CLOUDFLARED_LOG="$ROXY_OUT_DIR/cloudflared.log"  # the tunnel's log
 
 LAB_LOCK_DIR="${LAB_LOCK_DIR:-$HOME/.cache/roxy/locks}"  # per user, shared by every checkout
 

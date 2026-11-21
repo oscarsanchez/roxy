@@ -13,9 +13,9 @@ set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(dirname "$SCRIPTS")"
 TMP="$(mktemp -d)"
-classic="kit-test-classic-$$"  # a throwaway name keeps out/ of real builds
-trap 'rm -rf "$TMP" "$REPO/out/$classic" "$REPO/out/$classic.zip"' EXIT
-export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" RCE_LOG="$TMP/rce.log"
+classic="example-classic"
+trap 'rm -rf "$TMP"' EXIT
+export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" ROXY_OUT_DIR="$TMP/out" RCE_LOG="$TMP/rce.log"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER ROXY_KIT ROXY_CA_BUNDLE
 mkdir -p "$ROXY_CONFIG_DIR"
 cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"
@@ -28,7 +28,7 @@ proxy_code() { grep -nE '\.proxyBase|/;|lab-ca' "$@" || true; }
 
 # --- classic ---
 
-# The fake rce accepts the sideload; deploy has then left the package in out/.
+# The fake rce accepts the sideload; deploy has then left the package in ROXY_OUT_DIR.
 mkdir -p "$TMP/bin"
 printf '#!/usr/bin/env bash\nprintf "%%s\\n" "$*" >> "$RCE_LOG"\n' > "$TMP/bin/rce"
 chmod +x "$TMP/bin/rce"
@@ -53,7 +53,7 @@ compiled() {
 classic_build() {
   local pkg="$TMP/pkg-$1" on
   PATH="$TMP/bin:$PATH" ROXY_KIT="$1" "$SCRIPTS/deploy" "Cloud Device" "$TMP/$classic" >/dev/null || fail "deploy with ROXY_KIT=$1"
-  rm -rf "$pkg" && mkdir -p "$pkg" && unzip -q "$REPO/out/$classic.zip" -d "$pkg"
+  rm -rf "$pkg" && mkdir -p "$pkg" && unzip -q "$ROXY_OUT_DIR/$classic.zip" -d "$pkg"
   on="$(sed -n 's/^bs_const=.*roxy_kit=\([a-z]*\).*/\1/p' "$pkg/manifest")"
   [ -n "$on" ] || fail "the classic package's manifest declares no roxy_kit constant"
   : > "$TMP/compiled-$1.brs"

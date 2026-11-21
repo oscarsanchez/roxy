@@ -1,6 +1,6 @@
 # Coding Standards
 
-The judgement calls a reviewer checks. Mechanical rules (tests, shell syntax, Compose config, glossary terms, test imports) are enforced by `scripts/check`; read it there.
+The judgement calls a reviewer checks. Mechanical rules (tests, shell syntax, Compose config, glossary terms, test imports, paths into `out/`) are enforced by `scripts/check`; read it there.
 
 ## Trust
 
@@ -16,6 +16,8 @@ The judgement calls a reviewer checks. Mechanical rules (tests, shell syntax, Co
 - **Personal settings live in the settings root.** Secrets, device names and addresses, and LAN subnets are read from the settings root (`scripts/lib.sh`, `proxy/lab/config.py`), never from the repo. The repo ships `settings.example/` with documentation IPs (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) and made-up names, and tests run against a temp settings root seeded from it.
 
 ## Tests
+
+- **Tests write only to temp roots.** A test points all three roots the scripts write to at temp folders: the settings root (`ROXY_CONFIG_DIR`), the user data directory (`XDG_DATA_HOME`) and the build output and logs (`ROXY_OUT_DIR`, the checkout's `out/` by default), as `scripts/check` does. A script that writes one of them goes through its variable in `scripts/lib.sh`, never a path of its own.
 
 - **Fixtures from real material are rewritten whole.** A test fixture or doc example derived from a Product App's traffic, rules or config replaces every identifying part, not just the hostname: paths, tokens, IDs, query values and file names become made-up ones on documentation hosts (example.com/.net/.org). The leak check only knows the terms on its list; a client-specific path shape passes it.
 

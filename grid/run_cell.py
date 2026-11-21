@@ -13,6 +13,7 @@ Cells are defined in grid/cells.toml; the verdict logic is in verdict.py.
 
 import argparse
 import json
+import os
 import shlex
 import signal
 import socket
@@ -60,11 +61,12 @@ def roxy(*args: str):
 
 
 def save_log(text: str, *parts: str) -> Path:
-    """Write text to out/<parts...> (gitignored) and return the path, relative to the repo."""
-    path = REPO / "out" / Path(*parts)
+    """Write text to <ROXY_OUT_DIR>/<parts...> and return the path, relative to the repo when
+    it is in it. scripts/lib.sh exports ROXY_OUT_DIR: the checkout's gitignored out/ by default."""
+    path = Path(os.environ["ROXY_OUT_DIR"], *parts)
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text)
-    return path.relative_to(REPO)
+    return path.relative_to(REPO) if path.is_relative_to(REPO) else path
 
 
 class Console:

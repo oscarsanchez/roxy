@@ -7,7 +7,7 @@ SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(dirname "$SCRIPTS")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-export LAB_LOCK_DIR="$TMP/locks" RCE_LOG="$TMP/rce.log" ROXY_CONFIG_DIR="$TMP/settings"
+export LAB_LOCK_DIR="$TMP/locks" RCE_LOG="$TMP/rce.log" ROXY_CONFIG_DIR="$TMP/settings" ROXY_OUT_DIR="$TMP/out"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER
 mkdir -p "$ROXY_CONFIG_DIR"
 cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"  # its devices, never your own
@@ -57,20 +57,19 @@ case "$err" in *"Device Name '$name'"*) ;; *) fail "launch's refusal does not na
 echo "ok: an unknown Device Name stops launch before any billed call"
 
 # deploy: packages the app and sideloads it with rce, which knows the Cloud Device's dev
-# password: no secrets.env, no shared ROKU_DEV_PASSWORD. A throwaway app keeps out/ of real builds.
-app="$TMP/rce-test-app-$$"
+# password: no secrets.env, no shared ROKU_DEV_PASSWORD. The package goes to ROXY_OUT_DIR.
+app="$TMP/rce-test-app"
 mkdir -p "$app"
 printf 'title=rce test\n' > "$app/manifest"
-trap 'rm -rf "$TMP" "$REPO/out/$(basename "$app")" "$REPO/out/$(basename "$app").zip"' EXIT
 : > "$RCE_LOG"
 out="$(cd "$TMP" && env -u ROKU_DEV_PASSWORD "$SCRIPTS/deploy" "$device" "$app" 2>&1)" || fail "deploy: $out"
 expected="$(printf '%q ' device resolve "$name")
-$(printf '%q ' sideload "$name" "$REPO/out/$(basename "$app").zip")"
+$(printf '%q ' sideload "$name" "$ROXY_OUT_DIR/$(basename "$app").zip")"
 [ "$(cat "$RCE_LOG")" = "$expected" ] || fail "deploy ran:
 $(cat "$RCE_LOG")
 expected:
 $expected"
-unzip -p "$REPO/out/$(basename "$app").zip" manifest | grep -q '^lab_proxy_base=' || fail "the package has no baked Proxy Base"
+unzip -p "$ROXY_OUT_DIR/$(basename "$app").zip" manifest | grep -q '^lab_proxy_base=' || fail "the package has no baked Proxy Base"
 echo "ok: deploy sideloads through rce"
 
 # A sideload rce refuses fails deploy.

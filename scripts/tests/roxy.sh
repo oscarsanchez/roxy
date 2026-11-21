@@ -11,7 +11,7 @@ ROXY="$REPO/bin/roxy"
 TMP="$(mktemp -d)"
 mitmweb_pid=""
 trap '[ -z "$mitmweb_pid" ] || kill "$mitmweb_pid"; rm -rf "$TMP"' EXIT
-export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data"
+export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data" ROXY_OUT_DIR="$TMP/out"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER MITMWEB_PASSWORD LAB_SECRET
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
@@ -308,16 +308,16 @@ echo "ok: start loads the current repo's App Profile"
 
 # start --tunnel prints the public Proxy Base with its secret segment as <secret>: the secret
 # is nowhere in what it prints. A fake cloudflared stands in for the tunnel; its log goes to
-# CLOUDFLARED_LOG, never to the checkout's out/cloudflared.log (a live tunnel's log, which may
+# ROXY_OUT_DIR, never to the checkout's out/cloudflared.log (a live tunnel's log, which may
 # grow meanwhile but must not appear or shrink).
 printf '#!/usr/bin/env bash\n' > "$TMP/bin/cloudflared"
 chmod +x "$TMP/bin/cloudflared"
 checkout_log_size() { if [ -e "$REPO/out/cloudflared.log" ]; then wc -c < "$REPO/out/cloudflared.log"; else echo -1; fi; }
 before="$(checkout_log_size)"
-out="$(FAKE_TUNNEL_HOST=tunnel.example CLOUDFLARED_LOG="$TMP/cloudflared.log" start_in "$TMP" --tunnel)" \
+out="$(FAKE_TUNNEL_HOST=tunnel.example start_in "$TMP" --tunnel)" \
   || fail "start --tunnel: $out"
 after="$(checkout_log_size)"
-[ -e "$TMP/cloudflared.log" ] || fail "start --tunnel did not log to CLOUDFLARED_LOG"
+[ -e "$ROXY_OUT_DIR/cloudflared.log" ] || fail "start --tunnel did not log to ROXY_OUT_DIR"
 if [ "$before" -lt 0 ]; then [ "$after" -lt 0 ]; else [ "$after" -ge "$before" ]; fi \
   || fail "start --tunnel touched the checkout's out/cloudflared.log (size $before, then $after)"
 case "$out" in *"Public Proxy Base: https://tunnel.example/<secret>  "*) ;; *) fail "start --tunnel lacks the public Proxy Base:
