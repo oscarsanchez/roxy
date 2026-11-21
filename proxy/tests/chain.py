@@ -2,15 +2,16 @@
 
 Tests assert only on what reaches the Origin (the forwarded request) and what
 reaches the client (flow.response, and when its bytes arrived: Lab.received),
-or on what the lab records on a flow for mitmweb and roxy flows (target_device).
-No network: Origin responses are fixtures.
+or on what the lab shows: the flow's mitmweb comment and mark, and the flows
+summary (flows_summary). No network: Origin responses are fixtures.
 """
 
 import asyncio
+from io import BytesIO
 from pathlib import Path
 
 from mitmproxy import hooks as lifecycle
-from mitmproxy import connection, http
+from mitmproxy import connection, http, io
 from mitmproxy.addons import save, serverplayback
 from mitmproxy.net.http.http1 import assemble_response
 from mitmproxy.proxy.layers import http as hooks
@@ -19,7 +20,7 @@ from mitmproxy.proxy.mode_specs import ProxyMode
 from mitmproxy.test import taddons, tflow, tutils
 
 from lab import addon_chain, clock, throttle
-from lab.target_devices import target_device  # noqa: F401 (for tests: the flow's Target Device)
+from lab.lab_session import LabSession
 
 LAN_PROXY_BASE_HOST = "192.0.2.10:8080"
 LAN_PROXY_BASE = f"http://{LAN_PROXY_BASE_HOST}"
@@ -91,6 +92,20 @@ def assert_refused(flow, forwarded, reason, status=403):
     assert flow.response.status_code == status
     assert flow.response.headers["X-Lab-Blocked"] == reason
     assert flow.marked  # visible in mitmweb
+
+
+def flows_summary(*flows):
+    """FLOWS as `roxy flows --json` sums them up (LabSession.flows), from mitmweb's dump of them."""
+    dump = BytesIO()
+    writer = io.FlowWriter(dump)
+    for flow in flows:
+        writer.add(flow)
+
+    class Mitmweb:
+        def get(self, path):
+            return 200, dump.getvalue()
+
+    return LabSession(Mitmweb()).flows()
 
 
 def run_chain(flow, origin_response, **options):
