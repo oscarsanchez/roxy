@@ -41,8 +41,8 @@ def annotate(flow, applied):
     """Show the flow in mitmweb with APPLIED, the Scenario rules that acted on it (passed in:
     lab.scenarios, which owns them, imports this module through the throttle). The comment
     is `<name> | <scenario>/<rule>, ...`, either part left out when empty, and a flow a rule
-    acted on is marked unless it has a mark (a refusal keeps its own). Display only:
-    nothing reads them back."""
+    acted on is marked unless it has a mark (a refusal keeps its own). Nothing reads the
+    comment back; the mark narrows what roxy status fetches (LabSession.scenario_rules)."""
     device = target_device(flow)
     flow.comment = " | ".join(filter(None, [device and device.name, ", ".join(applied)]))
     if applied:

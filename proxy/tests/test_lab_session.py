@@ -382,6 +382,16 @@ def test_with_no_active_scenario_the_rules_need_no_flows_from_the_lab(recorded_f
     assert [path for path in lab.gets if path.startswith("flows")] == []
 
 
+def test_the_rules_fetch_only_the_marked_flows_never_every_body(recorded_flows):
+    """Every flow a rule acted on is marked, so ~marked loses none of them; the rest of a long
+    session (segments, most traffic) stays in mitmweb with its bodies."""
+    lab = FakeMitmweb(recorded_flows, lab_scenario="json-503")
+
+    LabSession(lab).scenario_rules(None)
+
+    assert [path for path in lab.gets if path.startswith("flows")] == ["flows/dump?filter=~marked"]
+
+
 def test_reading_the_flows_never_changes_the_lab(recorded_flows):
     lab = FakeMitmweb(recorded_flows)
 

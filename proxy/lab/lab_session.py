@@ -156,7 +156,9 @@ class LabSession:
         state = self.state()
         if not state.scenarios:  # no flows to fetch: a long session's dump, bodies and all, is large
             return []
-        acted = Counter(rule for flow in self.flows(since=since) for rule in flow["scenario_rules"])
+        # Only the marked flows: every flow a rule acted on is marked (target_devices.annotate),
+        # and the rest of a long session never comes back with its bodies.
+        acted = Counter(rule for flow in self.flows(filter="~marked", since=since) for rule in flow["scenario_rules"])
         found = []
         for scenario in state.scenarios:
             try:
