@@ -1,7 +1,7 @@
 """Fill grid cells on Target Devices through the running lab (Seam B).
 
 Usage: scripts/grid <flavours> <device-kinds> <traffic-classes> [--proxy-base URL] [--ca-routing]
-                    [--separator /|/;|/,/;]
+                    [--separator /|/;|/,/;] [--device NAME]
 Each of flavours, device kinds and traffic classes is one value, a comma list or `all`.
 
 Deploys each flavour once per Target Device, then launches each cell's case twice with
@@ -90,9 +90,13 @@ class Console:
         self._close()
 
 
-def physical_console(ip: str) -> Console:
-    """Port 8085 on the LAN. Unlike `nc` without -d, a socket keeps receiving new output."""
-    sock = socket.create_connection((ip, CONSOLE_PORT), timeout=10)
+def physical_console(device: str, ip: str) -> Console:
+    """DEVICE's port 8085 on the LAN. Unlike `nc` without -d, a socket keeps receiving new output."""
+    try:
+        sock = socket.create_connection((ip, CONSOLE_PORT), timeout=10)
+    except OSError as error:
+        sys.exit(f"error: {device} did not answer at {ip}:{CONSOLE_PORT} ({error}): "
+                 "it may be on another network than this Mac's")
     sock.settimeout(None)
 
     def chunks():
@@ -289,7 +293,11 @@ def parse_args(argv: list[str], config: dict) -> argparse.Namespace:
     parser.add_argument("--separator", type=values(["/", "/;"]), default=["/"],
                         help="the Prefixed URL form the Lab App builds: / (the lab's own), /; (Charles-style) "
                              "or both ('/,/;')")
+    parser.add_argument("--device", help="the Target Device for this call, a name from devices.json, instead of "
+                                         "grid_devices in settings.json (one device kind only)")
     args = parser.parse_args(argv)
+    if args.device and len(args.device_kind) > 1:
+        parser.error("--device is for one device kind: its Target Device fills that kind's cells")
     if args.ca_routing and "cloud" in args.device_kind:
         parser.error("CA Routing is for Physical Devices only")
     if args.ca_routing and args.separator != ["/"]:
@@ -315,10 +323,11 @@ class Target:
     rce_name: str | None = None  # a Cloud Device's
 
 
-def target(device_kind: str, ca_routing: bool, proxy_base: str | None) -> Target:
-    """The Target Device for DEVICE_KIND cells, from the settings root. Local and free."""
+def target(device_kind: str, ca_routing: bool, proxy_base: str | None, device: str | None) -> Target:
+    """The Target Device for DEVICE_KIND cells: DEVICE, else the one the settings root names.
+    Local and free."""
     cloud = device_kind == "cloud"
-    device = lab(f"grid_device {setup(device_kind, ca_routing)}")
+    device = device or lab(f"grid_device {setup(device_kind, ca_routing)}")
     proxy_base = (proxy_base or lab("require_public_proxy_base" if cloud else "lan_proxy_base")).rstrip("/")
     if cloud:
         rce_name = lab(f"rce_device_name {shlex.quote(device)}")
@@ -357,7 +366,7 @@ def fill_on(target: Target, cells: list[Cell], config: dict, max_runtime: int | 
     cell line; each cell's lines end with its row."""
     results = []
     with cloud_run(target.rce_name, max_runtime) if target.rce_name else nullcontext():
-        console = cloud_console(target.rce_name) if target.rce_name else physical_console(target.ip)
+        console = cloud_console(target.rce_name) if target.rce_name else physical_console(target.device, target.ip)
         try:
             time.sleep(1)  # the console replays recent history on connect
             if "already in use" in console.text:
@@ -385,7 +394,7 @@ def main(argv: list[str]) -> int:
     args = parse_args(argv, config)
     signal.signal(signal.SIGTERM, signal.default_int_handler)  # a kill stops the Run as Ctrl-C does
 
-    targets = {kind: target(kind, args.ca_routing, args.proxy_base) for kind in args.device_kind}
+    targets = {kind: target(kind, args.ca_routing, args.proxy_base, args.device) for kind in args.device_kind}
     for cell in args.cells:
         print(describe(cell, targets[cell.device_kind]))
     # Everything that can stop the batch is checked before a Target Device is touched.

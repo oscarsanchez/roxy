@@ -35,7 +35,7 @@ def main(argv: list[str]) -> int:
     ip = lab(f"device_field {shlex.quote(args.device)} ip")
     if not ip:
         sys.exit(f"error: {args.device} has no ip: Physical Devices only (a Cloud Device: rce console)")
-    console = physical_console(ip)
+    console = physical_console(args.device, ip)
     try:
         time.sleep(REPLAY_S)
         if "already in use" in console.text:

@@ -203,8 +203,9 @@ alter_segments = { from = 2, uri = "missing.ts", duration = 1.5 }   # HLS: new U
 ### 6. Grid runner
 
 ```sh
-scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf|raf_vmap> [--proxy-base URL] [--ca-routing] [--separator /|/;]
+scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf|raf_vmap> [--proxy-base URL] [--ca-routing] [--separator /|/;] [--device NAME]
 scripts/grid classic physical json
+scripts/grid classic physical json --device Bedroom   # another Physical Device, for this call only
 scripts/grid rsg cloud hls   # through the running tunnel (roxy start --tunnel)
 scripts/grid classic physical json --ca-routing   # CA Routing (see CA Routing)
 scripts/grid classic physical hls --separator '/;'   # the Charles-style form
@@ -215,6 +216,8 @@ scripts/grid all physical,cloud json,hls --separator '/,/;'   # each cell in bot
 A batch fills many cells in one call. Each of flavour, Target Device kind and traffic class takes one value, a comma list or `all`, and `--separator` takes `/`, `/;` or both (`'/,/;'`). The cells run one after another in a fixed order, under the one `devices` lock: Physical Device cells first, then by flavour, separator and class (in `grid/cells.toml`'s order). Each flavour is deployed once per Target Device, not once per cell. Each cell prints its lines as a single cell does; then the batch prints a table of every cell's row and a count (`N pass, N known-limit, N fail`), and exits 1 if any cell failed. A failing cell does not stop the batch; Ctrl-C does, after stopping a Run the grid started. A single cell prints no table.
 
 Cloud Device cells in a batch share one cost question and one Run: the grid prints the projected time and cost of all of them (one start-up, one deploy per flavour, two launches per cell), asks once, and starts one Run capped (`rce device start --max-runtime`) at that projection plus `rce_cap_margin_s` (`grid/cells.toml`), a backstop if the grid is killed outright. It keeps the Run across the cells and stops it after the last one. In a batch with both kinds, the Run is started only after the Physical Device cells.
+
+`--device NAME` fills the cells on NAME (from `devices.json`) instead of the device `grid_devices` names, for one call and one Target Device kind: the Mac moves between networks, and a Physical Device is reachable only from its own. A Physical Device the Mac cannot reach stops the grid before the deploy, naming the device and saying it may be on another network.
 
 A Cloud Device cell launches with the running tunnel's public Proxy Base, as `roxy launch` does; a Physical Device cell, with the LAN Proxy Base. `--proxy-base URL` sends another.
 

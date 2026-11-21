@@ -29,3 +29,19 @@ def test_a_missing_grid_device_setting_is_named(settings, capfd):
         main(CELL)
 
     assert "grid_devices.physical" in capfd.readouterr().err
+
+
+def test_device_overrides_the_setting_for_one_call(settings, capfd):
+    """The Mac moves between networks, and the device it reaches with it."""
+    with pytest.raises(SystemExit):
+        main([*CELL, "--device", "Bedroom"])
+
+    assert "(device Bedroom," in capfd.readouterr().out
+
+
+def test_device_takes_one_device_kind(settings, capfd):
+    with pytest.raises(SystemExit) as stopped:
+        main(["classic", "physical,cloud", "json", "--device", "Bedroom"])
+
+    assert stopped.value.code == 2
+    assert "--device is for one device kind" in capfd.readouterr().err

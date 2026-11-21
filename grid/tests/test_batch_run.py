@@ -155,6 +155,18 @@ def test_a_cells_evidence_goes_to_the_out_dir_lib_sh_names(events, tmp_path, mon
     assert f"    console: {log} (flows: .flows.json beside it)" in capfd.readouterr().out.splitlines()
 
 
+
+def test_an_unreachable_device_is_named_as_maybe_on_another_network(events, monkeypatch):
+    closed = socket.create_server(("127.0.0.1", 0))
+    monkeypatch.setattr(run_cell, "CONSOLE_PORT", closed.getsockname()[1])
+    closed.close()  # nothing listens there now: the connection is refused at once
+    with pytest.raises(SystemExit) as stopped:
+        main(["classic", "physical", "json", "--proxy-base", "http://192.0.2.10:8080"])
+    assert "Living Room" in str(stopped.value.code)
+    assert "may be on another network" in str(stopped.value.code)
+    assert not [e for e in events() if e[0] == "deploy"]
+
+
 @pytest.fixture
 def answers(monkeypatch):
     """Answer yes to the RCE cost question; return the questions asked."""

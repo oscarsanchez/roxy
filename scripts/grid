@@ -2,6 +2,7 @@
 # Fill grid cells (Lab App flavour x Target Device kind x traffic class) through the running
 # lab and print pass, fail or known-limit with a reason for each, as evaluation rows.
 # Usage: scripts/grid <flavours> <device-kinds> <traffic-classes> [--proxy-base URL] [--ca-routing] [--separator /|/;|/,/;]
+#                    [--device NAME]
 #   e.g. scripts/grid classic physical json            one cell
 #        scripts/grid classic,rsg physical all         a batch: comma lists, or all
 #   A batch runs its cells one after another: Physical Device cells first, then by flavour,
@@ -12,6 +13,8 @@
 #   --separator '/;': the Lab App builds Charles-style Prefixed URLs (its separator launch
 #   param); the default / is the lab's own form; '/,/;' runs each cell in both. Quote it:
 #   ; ends a shell command.
+#   --device NAME: the Target Device for this call (one device kind), instead of the one
+#   grid_devices in settings.json names: the device on the network the Mac is on now.
 #   Needs scripts/start-lab running (with --tunnel for a Cloud Device: its cells launch with
 #   the tunnel's public Proxy Base, as scripts/launch does; --proxy-base URL sends another).
 #   Cells, scenarios and expected hosts: grid/cells.toml.
