@@ -109,9 +109,12 @@ MITMWEB_PORT="$(cat "$TMP/mitmweb.port")"
 export LAB_WEB_PORT="$("$REAL_UV" run --quiet --project "$REPO/proxy" python -c \
   'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
 # lab_up APP SCENARIOS COMMAND... : run COMMAND with the fake mitmweb up, App Profile APP
-# loaded and SCENARIOS active (comma-separated, '' for none).
+# loaded and SCENARIOS active (comma-separated, '' for none), not in CA Routing, with the
+# lab's own Scenarios in $LAB_SCENARIOS.
+LAB_SCENARIOS="$REPO/proxy/scenarios"
 lab_up() {
-  printf '{"lab_app": {"value": "%s"}, "lab_scenario": {"value": "%s"}}' "$1" "$2" > "$FAKE_OPTIONS"
+  printf '{"lab_app": {"value": "%s"}, "lab_scenario": {"value": "%s"}, "lab_ca_routing": {"value": false}, "lab_scenarios_dir": {"value": "%s"}}' \
+    "$1" "$2" "$LAB_SCENARIOS" > "$FAKE_OPTIONS"
   shift 2
   LAB_WEB_PORT="$MITMWEB_PORT" "$@"
 }
@@ -153,6 +156,17 @@ for want in "Public Proxy Base: none" "Scenarios:         none"; do
 $out" ;; esac
 done
 echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenarios in order"
+
+# status --json: the lab down says so on stderr; the lab up prints its state as one JSON object.
+if err="$("$ROXY" status --json 2>&1 >/dev/null)"; then fail "status --json exited 0 with the lab down"; fi
+case "$err" in *"lab: down"*) ;; *) fail "status --json with the lab down said: $err" ;; esac
+out="$(lab_up app-x json-503,hls-404 "$ROXY" status --json)" || fail "status --json with the lab up: $out"
+want="{\"app\": \"app-x\", \"scenarios\": [\"json-503\", \"hls-404\"], \"ca_routing\": false, \"scenarios_dir\": \"$LAB_SCENARIOS\"}"
+[ "$out" = "$want" ] || fail "status --json with the lab up said:
+$out
+not:
+$want"
+echo "ok: status --json says when the lab is down, and prints the lab's state"
 
 # scenario list: the lab's own Scenarios, with or without a running lab.
 source_of() { awk -v n="$1" '$1 == n {$1 = ""; sub(/^ +/, ""); print}' <<< "$2"; }

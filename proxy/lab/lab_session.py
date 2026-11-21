@@ -50,6 +50,8 @@ class BadFilter(LabSessionError):
 class LabState(NamedTuple):
     app: str | None  # the loaded App Profile
     scenarios: list  # the active Scenarios' names, in order
+    ca_routing: bool  # whether the lab is in CA Routing
+    scenarios_dir: str  # the folder of the lab's own Scenarios
 
 
 class HttpTransport:
@@ -86,7 +88,12 @@ class LabSession:
         status, body = self.transport.get("options.json")
         _check_password(status)
         options = json.loads(body)
-        return LabState(options["lab_app"]["value"] or None, scenario_names(options["lab_scenario"]["value"]))
+        return LabState(
+            app=options["lab_app"]["value"] or None,
+            scenarios=scenario_names(options["lab_scenario"]["value"]),
+            ca_routing=options["lab_ca_routing"]["value"],
+            scenarios_dir=options["lab_scenarios_dir"]["value"],
+        )
 
     def set_scenarios(self, names):
         """Make NAMES the active Scenarios, lab-wide, in that order; none (or '') clears them.

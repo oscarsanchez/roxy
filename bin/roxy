@@ -32,9 +32,12 @@ Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI and the Pro
 EOF
     ;;
     status) cat <<'EOF'
-usage: roxy status
+usage: roxy status [--json]
 Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
 and the active Scenarios in order, each with its source. Exits 1 when the lab is down.
+  --json  the running lab's state as one JSON object, for tools: its App Profile (app,
+          null for none), its active Scenarios in order (scenarios), whether it is in
+          CA Routing (ca_routing) and the folder of its own Scenarios (scenarios_dir)
 EOF
     ;;
     scenario) cat <<'EOF'
@@ -92,7 +95,11 @@ EOF
 # status : the lab, App Profile and Scenario lines from the Lab Session (proxy/cli.py), with
 # the Proxy IP and Proxy Bases lines after the first.
 status() {
-  [ $# -eq 0 ] || die "$(usage status | head -1)"
+  case "$*" in
+    "") ;;
+    --json) proxy_cli status --json; return ;;
+    *) die "$(usage status | head -1)" ;;
+  esac
   local lab public
   load_env
   lab="$(proxy_cli status)" || { [ -z "$lab" ] || echo "$lab"; exit 1; }

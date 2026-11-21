@@ -16,6 +16,7 @@ passes them.
                                          empty for none); fails on a Scenario in both
   cli.py status                          the lab line, then the App Profile and Scenarios lines
                                          of roxy status; the lab down: its line, and exit 1
+  cli.py status --json                   the running lab's state (roxy status --help)
   cli.py flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
                                          the running lab's flows (roxy flows --help)
   cli.py run-id                          a fresh roxy launch run id
@@ -103,11 +104,15 @@ def resolve(args):
 
 
 def status(args):
+    if args.json:  # the lab down: main says so on stderr
+        print(json.dumps(LabSession(mitmweb()).state()._asdict()))
+        return
     try:
-        app, scenarios = LabSession(mitmweb()).state()
+        state = LabSession(mitmweb()).state()
     except LabDown:
         print(lab_down())
         sys.exit(1)
+    app, scenarios = state.app, state.scenarios
     profiles = app_profiles()
     listed = [f"{scenario}  ({profiles.source(app, scenario)})" for scenario in scenarios] or ["none"]
     print(f"lab: up (mitmweb UI {mitmweb().url})")
@@ -160,7 +165,9 @@ def main():
     resolve_parser = commands.add_parser("resolve")
     resolve_parser.add_argument("--app")
     resolve_parser.set_defaults(run=resolve)
-    commands.add_parser("status").set_defaults(run=status)
+    status_parser = commands.add_parser("status")
+    status_parser.add_argument("--json", action="store_true")
+    status_parser.set_defaults(run=status)
     flows_parser = commands.add_parser("flows", prog="roxy flows")
     flows_parser.add_argument("--json", action="store_true", required=True)
     flows_parser.add_argument("--filter")

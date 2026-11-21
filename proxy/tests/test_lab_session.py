@@ -9,6 +9,7 @@ import time
 from http.cookies import SimpleCookie
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
+from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 import pytest
@@ -29,6 +30,7 @@ from lab.lab_session import (
     parse_since,
 )
 
+LAB_SCENARIOS = Path(__file__).resolve().parents[1] / "scenarios"  # the lab's own, its default folder
 START = 1763632800  # 2025-11-20T10:00:00Z
 
 
@@ -68,7 +70,8 @@ class FakeMitmweb:
     mitmweb's GET flows/dump does."""
 
     def __init__(self, flows=(), **options):
-        self.options = {"lab_app": "", "lab_scenario": "", **options}
+        self.options = {"lab_app": "", "lab_scenario": "", "lab_ca_routing": False,
+                        "lab_scenarios_dir": str(LAB_SCENARIOS), **options}
         self.flows = list(flows)
         self.up = True
         self.signed_in = True  # False: the password LabSession signs in with is wrong
@@ -116,14 +119,18 @@ class FakeMitmweb:
             return 403, b""
 
 
-def test_the_state_names_the_loaded_app_profile_and_the_active_scenarios_in_order():
-    lab = FakeMitmweb(lab_app="example-app", lab_scenario="json-503,hls-404")
+def test_the_state_names_the_loaded_app_profile_the_active_scenarios_in_order_and_where_they_are():
+    lab = FakeMitmweb(lab_app="example-app", lab_scenario="json-503,hls-404", lab_ca_routing=True)
 
-    assert LabSession(lab).state() == LabState(app="example-app", scenarios=["json-503", "hls-404"])
+    assert LabSession(lab).state() == LabState(
+        app="example-app", scenarios=["json-503", "hls-404"], ca_routing=True, scenarios_dir=str(LAB_SCENARIOS),
+    )
 
 
 def test_the_state_of_a_lab_without_either_is_none_and_no_scenarios():
-    assert LabSession(FakeMitmweb()).state() == LabState(app=None, scenarios=[])
+    state = LabSession(FakeMitmweb()).state()
+
+    assert (state.app, state.scenarios, state.ca_routing) == (None, [], False)
 
 
 EVERY_OPERATION = {
@@ -380,7 +387,7 @@ def test_over_http_the_session_signs_in_and_passes_mitmwebs_xsrf_check(mitmweb_p
 
     session.set_scenarios(["json-503"])
 
-    assert session.state() == LabState(app=None, scenarios=["json-503"])
+    assert session.state().scenarios == ["json-503"]
     assert times(session.flows(filter='~d httpbin.org & ~u "/json"')) == ["10:02"]
 
 
