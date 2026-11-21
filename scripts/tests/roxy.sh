@@ -490,6 +490,13 @@ case "$(jq -r '.log.entries[3].response.content.text | @base64d' "$TMP/secret.ha
 esac
 echo "ok: export --har replaces the lab secret with <secret> everywhere"
 
+# What status, start and the grid print (redact_secret, scripts/lib.sh) shows the secret as
+# export --har (proxy/cli.py) does: one placeholder, defined in each language.
+shown="$(LAB_SECRET=test-secret bash -c '. "$1"; redact_secret "$2"' lab "$REPO/scripts/lib.sh" \
+  "https://tunnel.example/test-secret/cloud-device")"
+[ "$shown" = "$redacted" ] || fail "redact_secret shows $shown, export --har $redacted"
+echo "ok: redact_secret and export --har show the lab secret alike"
+
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.
 home="$TMP/home"

@@ -8,7 +8,7 @@ SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(dirname "$SCRIPTS")"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
-export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" ROXY_OUT_DIR="$TMP/out" \
+export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data" ROXY_OUT_DIR="$TMP/out" \
   EVENTS="$TMP/events" SCREEN="$TMP/screen"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER ROXY_KIT
 mkdir -p "$ROXY_CONFIG_DIR"
