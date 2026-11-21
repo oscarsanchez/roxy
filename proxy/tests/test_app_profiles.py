@@ -63,6 +63,26 @@ def test_a_profile_scenario_named_like_one_of_the_labs_own_is_refused(app_profil
         Lab(lab_app="example-app", lab_scenario="json-503")
 
 
+@pytest.mark.parametrize(
+    "path, options, status, blocked",
+    [
+        # no fallback Origin: a bare path its regex matches names no Origin
+        ("/vod/abc123/index.m3u8", {}, 400, "not-prefixed"),
+        # only the lab's Scenarios: its json-503, not the profile's of the same name
+        ("/https://httpbin.org/json", {"lab_scenario": "json-503"}, 503, None),
+    ],
+)
+def test_with_no_profile_loaded_the_lab_acts_on_its_own_config_alone(app_profile, path, options, status, blocked):
+    folder = app_profile("example-app", fallback_origin={"path": "^/vod/", "origin": "https://cdn.example"})
+    (folder / "scenarios" / "json-503.toml").write_text('[[rule]]\nname = "mine"\nfilter = "~u /json"\nstatus = 500\n')
+    flow = lab_flow(path)
+
+    run_chain(flow, origin_json(), **options)
+
+    assert flow.response.status_code == status
+    assert flow.response.headers.get("X-Lab-Blocked") == blocked
+
+
 # AppProfiles: the layout, resolution, creation and Scenario lookup that bin/roxy and
 # scripts/start-lab use through proxy/cli.py, against the temp settings root and temp git repos.
 
