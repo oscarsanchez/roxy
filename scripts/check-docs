@@ -1,0 +1,87 @@
+#!/usr/bin/env python3
+"""Fail on a relative link or #anchor that does not resolve, in tracked Markdown.
+
+Usage: scripts/check-docs [ROOT]   (run by scripts/check; ROOT defaults to the repo, a git checkout)
+- Links: inline [text](target) and <a href="target">, outside code. External URLs (any scheme) are skipped.
+- A target resolves from the real file the link lives in: a symlinked doc is checked once, as its target.
+- Anchors: GitHub heading slugs (duplicates get -1, -2...) and <a id/name="..."> in the target file.
+"""
+
+import re
+import subprocess
+import sys
+from pathlib import Path
+
+LINK = re.compile(r"!?\[(?:[^\[\]]|\[[^\]]*\])*\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
+HREF = re.compile(r"<a\s[^>]*href=\"([^\"]+)\"", re.I)
+HTML_ANCHOR = re.compile(r"<a\s[^>]*(?:id|name)=\"([^\"]+)\"", re.I)
+HEADING = re.compile(r"^#{1,6}\s+(.*?)\s*#*\s*$")
+FENCE = re.compile(r"^\s*(```|~~~)")
+CODE_SPAN = re.compile(r"(`+)(.+?)\1")
+SCHEME = re.compile(r"^[a-z][a-z0-9+.-]*:", re.I)
+
+
+def prose_lines(path: Path):
+    """(line number, text) for each line outside fenced code."""
+    fence = None
+    for n, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+        m = FENCE.match(line)
+        if m:
+            fence = None if fence == m.group(1) else (fence or m.group(1))
+            continue
+        if fence is None:
+            yield n, line
+
+
+def slug(heading: str) -> str:
+    text = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", heading)  # a link's text only
+    text = re.sub(r"<[^>]+>", "", text)
+    return re.sub(r"[^\w\- ]", "", text.lower()).replace(" ", "-")
+
+
+def anchors(path: Path, cache: dict) -> set:
+    if path not in cache:
+        found, seen = set(), {}
+        for _, line in prose_lines(path):
+            found.update(HTML_ANCHOR.findall(line))
+            m = HEADING.match(line)
+            if m:
+                base = slug(m.group(1))
+                k = seen.get(base, 0)
+                seen[base] = k + 1
+                found.add(base if k == 0 else f"{base}-{k}")
+        cache[path] = found
+    return cache[path]
+
+
+def check(root: Path) -> list:
+    files = subprocess.run(["git", "ls-files", "*.md"], cwd=root, check=True, stdout=subprocess.PIPE, text=True).stdout
+    problems, cache = [], {}
+    for name in files.splitlines():
+        path = root / name
+        if path.is_symlink() or not path.is_file():
+            continue
+        for n, line in prose_lines(path):
+            line = CODE_SPAN.sub("", line)
+            for target in LINK.findall(line) + HREF.findall(line):
+                if SCHEME.match(target):
+                    continue
+                file_part, _, anchor = target.partition("#")
+                dest = (path.parent / file_part).resolve() if file_part else path
+                if not dest.exists():
+                    problems.append(f"{name}:{n}: broken link '{target}'")
+                elif anchor and dest.suffix == ".md" and anchor not in anchors(dest, cache):
+                    problems.append(f"{name}:{n}: broken anchor '{target}'")
+    return problems
+
+
+def main() -> int:
+    root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
+    problems = check(root.resolve())
+    for p in problems:
+        print(p, file=sys.stderr)
+    return 1 if problems else 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -16,5 +16,5 @@ echo "ok: scripts/check runs only the named step"
 
 # An unknown step stops it before any step runs, listing the steps.
 if err="$("$CHECK" syntax no-such-step 2>&1)"; then fail "scripts/check took an unknown step: $err"; fi
-case "$err" in "error: unknown step 'no-such-step' (steps: "*"syntax"*"glossary"*) ;; *) fail "an unknown step said: $err" ;; esac
+case "$err" in "error: unknown step 'no-such-step' (steps: "*"syntax"*"glossary"*"docs"*) ;; *) fail "an unknown step said: $err" ;; esac
 echo "ok: an unknown step is refused, naming the steps"

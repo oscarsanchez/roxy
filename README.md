@@ -408,7 +408,7 @@ One person or agent at a time drives the Target Devices. `scripts/deploy`, `scri
 ### Tests
 
 ```sh
-scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and Recordings against a fake mitmweb, the roxy CLI and install.sh against fake curl and rce in a temp HOME, the kit's example builds with and without its constant, the kit check against a fake device, compose config, the glossary lint and the test-import rule
+scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and Recordings against a fake mitmweb, the roxy CLI and install.sh against fake curl and rce in a temp HOME, the kit's example builds with and without its constant, the kit check against a fake device, compose config, the glossary lint, the docs link and anchor check, and the test-import rule
 scripts/check glossary syntax # only the named steps, in that order (each header names its step; an unknown name lists them)
 cd proxy && uv run pytest     # Seam A: the full addon chain, no network
 cd grid && uv run pytest      # grid verdict logic, its settings, batches, and its Cloud Device side against a fake rce; no devices
