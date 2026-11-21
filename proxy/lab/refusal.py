@@ -14,7 +14,7 @@ def refuse(flow, status, reason):
 
 def refused(flow):
     """True if the lab answered this flow with refuse(). The X-Lab-Blocked header is
-    for the client and the grid; an Origin or a scenario rule can send it too."""
+    for the client; an Origin or a scenario rule can send it too."""
     return "lab_refusal" in flow.metadata
 
 
