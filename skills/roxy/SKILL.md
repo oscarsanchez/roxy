@@ -51,6 +51,10 @@ status = 503
 - A request missing from the output went straight to its Origin: it was built outside the Charles hook or the kit (Prefix Routing guide, What the lab never sees).
 - Lab down: it says so and exits non-zero.
 
+## Checking the lab itself: the grid
+
+Only when the user asks whether the lab still works with its own Lab Apps. In the roxy checkout, with the lab started there, `scripts/grid <flavours> <device-kinds> <traffic-classes>` fills grid cells and prints a pass, fail or known-limit row for each. Each of the three takes one value, a comma list or `all` (`scripts/grid classic,rsg physical all`), and `--separator '/,/;'` runs each cell in both Prefixed URL forms. A batch ends with a table and a count, and exits 1 if any cell failed. Cloud Device cells bill: the grid prints their projected cost and asks once, so confirm with the user first. Full reference: README, Grid runner.
+
 ## Known limits
 
 - One lab per user: one App Profile per session and one set of active Scenarios, lab-wide. Deploys and launches take a per-user `devices` lock and refuse while someone else holds it, naming the holder; set `LAB_LOCK_OWNER` to your name, and `LAB_LOCK_WAIT=1` waits instead.

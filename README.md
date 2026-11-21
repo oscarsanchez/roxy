@@ -206,7 +206,13 @@ scripts/grid classic physical json
 scripts/grid rsg cloud hls   # through the running tunnel (roxy start --tunnel)
 scripts/grid classic physical json --ca-routing   # CA Routing (see CA Routing)
 scripts/grid classic physical hls --separator '/;'   # the Charles-style form
+scripts/grid classic,rsg physical all   # a batch: comma lists or all, in each of the three
+scripts/grid all physical,cloud json,hls --separator '/,/;'   # each cell in both forms
 ```
+
+A batch fills many cells in one call. Each of flavour, Target Device kind and traffic class takes one value, a comma list or `all`, and `--separator` takes `/`, `/;` or both (`'/,/;'`). The cells run one after another in a fixed order, under the one `devices` lock: Physical Device cells first, then by flavour, separator and class (in `grid/cells.toml`'s order). Each flavour is deployed once per Target Device, not once per cell. Each cell prints its lines as a single cell does; then the batch prints a table of every cell's row and a count (`N pass, N known-limit, N fail`), and exits 1 if any cell failed. A failing cell does not stop the batch; Ctrl-C does, after stopping a Run the grid started. A single cell prints no table.
+
+Cloud Device cells in a batch share one cost question and one Run: the grid prints the projected time and cost of all of them (one start-up, one deploy per flavour, two launches per cell), asks once, and starts one Run capped (`rce device start --max-runtime`) at that projection plus `rce_cap_margin_s` (`grid/cells.toml`), a backstop if the grid is killed outright. It keeps the Run across the cells and stops it after the last one. In a batch with both kinds, the Run is started only after the Physical Device cells.
 
 A Cloud Device cell launches with the running tunnel's public Proxy Base, as `roxy launch` does; a Physical Device cell, with the LAN Proxy Base. `--proxy-base URL` sends another.
 
@@ -381,7 +387,7 @@ One person or agent at a time drives the Target Devices. `scripts/deploy`, `scri
 ```sh
 scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and saved sessions against a fake mitmweb, the roxy CLI and install.sh against fake curl and rce in a temp HOME, the kit's example builds with and without its constant, compose config, the glossary lint and the test-import rule
 cd proxy && uv run pytest     # Seam A: the full addon chain, no network
-cd grid && uv run pytest      # grid verdict logic, its settings, and its Cloud Device side against a fake rce; no devices
+cd grid && uv run pytest      # grid verdict logic, its settings, batches, and its Cloud Device side against a fake rce; no devices
 ```
 
 No check reads your own settings: `scripts/check` points `ROXY_CONFIG_DIR` at a temp folder seeded from `settings.example/` (and the user data directory at another), and the pytest suites seed their own.
@@ -389,7 +395,7 @@ No check reads your own settings: `scripts/check` points `ROXY_CONFIG_DIR` at a 
 Live checks need the internet or a Target Device, so `scripts/check` leaves them out:
 
 ```sh
-scripts/grid ...              # one grid cell on a Target Device (see Grid runner)
+scripts/grid ...              # grid cells on Target Devices, one or a batch (see Grid runner)
 scripts/console <device> --launch <case>  # a Physical Device's console from connect to the run's result line, saved to out/console/ (instead of nc: no replay, no missed lines)
 scripts/check-tunnel-reuse    # requests to one Origin over a reused connection to the tunnel listener, as cloudflared sends them; fails if one hangs. Uses the running lab or starts one; no Cloud Device, cloudflared or RCE
 ```
