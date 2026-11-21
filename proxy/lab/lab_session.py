@@ -1,5 +1,5 @@
-"""The running Lab Session, through mitmweb's API: its state, its active Scenarios and its
-flows, for bin/roxy and scripts/launch (through proxy/cli.py).
+"""The running Lab Session, through mitmweb's API: its state, its active Scenarios, its
+flows and the flows each active Scenario rule acted on, for bin/roxy and scripts/launch (through proxy/cli.py).
 
 LabSession talks to mitmweb through a transport: get(path) and put(path, json), each
 returning (HTTP status, body bytes) and raising only LabDown when nothing answers.
@@ -9,8 +9,10 @@ HttpTransport is the running lab's; tests use one in memory.
 import json
 import random
 import time
+from collections import Counter
 from datetime import UTC, datetime
 from io import BytesIO
+from pathlib import Path
 from typing import NamedTuple
 from urllib.error import HTTPError
 from urllib.parse import quote
@@ -19,7 +21,7 @@ from urllib.request import Request, urlopen
 from mitmproxy import http, io
 
 from lab.refusal import refusal_reason
-from lab.scenarios import applied_rules, scenario_names, scenario_value
+from lab.scenarios import applied_rules, find_scenario, load_scenario, scenario_names, scenario_value
 from lab.target_devices import target_device
 from lab.throttle import paced_seconds
 
@@ -52,6 +54,18 @@ class LabState(NamedTuple):
     scenarios: list  # the active Scenarios' names, in order
     ca_routing: bool  # whether the lab is in CA Routing
     scenarios_dir: str  # the folder of the lab's own Scenarios
+
+
+class RuleFlows(NamedTuple):
+    scenario: str
+    rule: str
+    flows: int  # how many of the lab's flows the rule acted on
+
+
+class ScenarioRules(NamedTuple):
+    scenario: str  # an active Scenario's name
+    rules: list  # RuleFlows, in file order; empty when its file does not load
+    error: str | None  # why its file does not load, else None
 
 
 class HttpTransport:
@@ -133,6 +147,25 @@ class LabSession:
             if isinstance(f, http.HTTPFlow) and f.timestamp_created >= (since or 0)
         ]
         return [_summary(f) for f in flows[-limit if limit else None:]]
+
+    def scenario_rules(self, app_scenarios_dir, since=None):
+        """Each active Scenario, in order, with its rules and how many flows each acted on
+        (the flows' scenario_rules, SINCE as for flows), so a rule that acted on none shows.
+        Its file is found as the lab finds it (find_scenario): APP_SCENARIOS_DIR, the loaded
+        App Profile's Scenarios (None without one), else the lab's own."""
+        state = self.state()
+        acted = Counter(rule for flow in self.flows(since=since) for rule in flow["scenario_rules"])
+        found = []
+        for scenario in state.scenarios:
+            try:
+                rules = load_scenario(find_scenario(scenario, app_scenarios_dir, Path(state.scenarios_dir)))
+            except (ValueError, OSError) as e:
+                found.append(ScenarioRules(scenario, [], str(e)))
+                continue
+            found.append(ScenarioRules(scenario, [
+                RuleFlows(scenario, rule.name, acted[f"{scenario}/{rule.name}"]) for rule in rules
+            ], None))
+        return found
 
 
 def new_run_id():

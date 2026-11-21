@@ -136,7 +136,8 @@ if out="$("$ROXY" status 2>&1)"; then fail "status exited 0 with the lab down: $
 case "$out" in *"lab: down"*) ;; *) fail "status with the lab down said: $out" ;; esac
 echo "ok: status says when the lab is down"
 
-# status: the lab up (signed in) reports the Proxy IP, the Proxy Bases and the active Scenarios.
+# status: the lab up (signed in) reports the Proxy IP, the Proxy Bases and the active Scenarios,
+# each with its rules and the flows each acted on (none: the fake mitmweb has no flows).
 out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503,hls-404 "$ROXY" status)" \
   || fail "status with the lab up exited non-zero: $out"
 want="lab: up (mitmweb UI http://127.0.0.1:$MITMWEB_PORT)
@@ -145,7 +146,9 @@ LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888  (each takes t
 Public Proxy Base: https://tunnel.example/test-secret
 App Profile:       none
 Scenarios:         json-503  (lab)
-                   hls-404  (lab)"
+                     httpbin json fails  0 flows  (acted on nothing yet)
+                   hls-404  (lab)
+                     mux master playlist missing  0 flows  (acted on nothing yet)"
 [ "$out" = "$want" ] || fail "status with the lab up said:
 $out
 not:
@@ -155,13 +158,21 @@ for want in "Public Proxy Base: none" "Scenarios:         none"; do
   case "$out" in *"$want"*) ;; *) fail "status without a tunnel or Scenario lacks '$want':
 $out" ;; esac
 done
-echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenarios in order"
+out="$(lab_up "" json-503 "$ROXY" status --since 176363286012345)" || fail "status --since a run id: $out"
+case "$out" in *"httpbin json fails  0 flows"*) ;; *) fail "status --since a run id lacks the rule: $out" ;; esac
+if err="$(lab_up "" "" "$ROXY" status --since yesterday 2>&1)"; then fail "status took --since yesterday"; fi
+case "$err" in *"--since"*"yesterday"*) ;; *) fail "status --since yesterday said: $err" ;; esac
+echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenarios in order, with their rules"
 
 # status --json: the lab down says so on stderr; the lab up prints its state as one JSON object.
 if err="$("$ROXY" status --json 2>&1 >/dev/null)"; then fail "status --json exited 0 with the lab down"; fi
 case "$err" in *"lab: down"*) ;; *) fail "status --json with the lab down said: $err" ;; esac
+# App Profile app-x, with no Scenarios of its own: the active ones are the lab's.
+mkdir -p "$ROXY_CONFIG_DIR/apps/app-x/scenarios"
+echo '{"repo": "/repos/example", "origin_allowlist": []}' > "$ROXY_CONFIG_DIR/apps/app-x/profile.json"
 out="$(lab_up app-x json-503,hls-404 "$ROXY" status --json)" || fail "status --json with the lab up: $out"
-want="{\"app\": \"app-x\", \"scenarios\": [\"json-503\", \"hls-404\"], \"ca_routing\": false, \"scenarios_dir\": \"$LAB_SCENARIOS\"}"
+rm -r "$ROXY_CONFIG_DIR/apps/app-x"
+want="{\"app\": \"app-x\", \"scenarios\": [\"json-503\", \"hls-404\"], \"ca_routing\": false, \"scenarios_dir\": \"$LAB_SCENARIOS\", \"rules\": [{\"scenario\": \"json-503\", \"rule\": \"httpbin json fails\", \"flows\": 0}, {\"scenario\": \"hls-404\", \"rule\": \"mux master playlist missing\", \"flows\": 0}]}"
 [ "$out" = "$want" ] || fail "status --json with the lab up said:
 $out
 not:
@@ -311,7 +322,13 @@ for want in "App Profile:       app-a" "Scenarios:         empty-catalog  (App P
   case "$out" in *"$want"*) ;; *) fail "status with app-a lacks '$want':
 $out" ;; esac
 done
-echo "ok: status names the App Profile and each active Scenario's source"
+printf '[[rule]]\nname = "no filter"\nstatus = 500\n' > "$scenarios_a/broken.toml"
+out="$(lab_up app-a broken "$ROXY" status)" || fail "status with a Scenario that no longer loads exited non-zero: $out"
+case "$out" in *"broken  (App Profile app-a)
+                     cannot read its rules: rule 'no filter': needs a filter expression"*) ;;
+  *) fail "status with a Scenario that no longer loads does not say why: $out" ;; esac
+rm "$scenarios_a/broken.toml"
+echo "ok: status names the App Profile and each active Scenario's source, or why its rules do not load"
 
 # flows --json: the lab down says so; the lab up takes every option and prints a JSON array
 # (here empty: the fake mitmweb has no flows). test_lab_session.py covers the flows themselves.

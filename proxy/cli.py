@@ -14,9 +14,10 @@ passes them.
   cli.py scenario clear                  leave the running lab with no active Scenario
   cli.py resolve [--app NAME]            two lines, the App Profile to load and its repo (both
                                          empty for none); fails on a Scenario in both
-  cli.py status                          the lab line, then the App Profile and Scenarios lines
+  cli.py status [--since RUN|TIME]       the lab line, then the App Profile and Scenarios lines
                                          of roxy status; the lab down: its line, and exit 1
-  cli.py status --json                   the running lab's state (roxy status --help)
+  cli.py status --json [--since RUN|TIME]
+                                         the running lab's state (roxy status --help)
   cli.py flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
                                          the running lab's flows (roxy flows --help)
   cli.py run-id                          a fresh roxy launch run id
@@ -104,20 +105,39 @@ def resolve(args):
 
 
 def status(args):
-    if args.json:  # the lab down: main says so on stderr
-        print(json.dumps(LabSession(mitmweb()).state()._asdict()))
-        return
+    session, profiles = LabSession(mitmweb()), app_profiles()
     try:
-        state = LabSession(mitmweb()).state()
+        state = session.state()
+        rules = session.scenario_rules(app_scenarios_dir(profiles, state.app), since=args.since)
     except LabDown:
+        if args.json:
+            raise  # main says so on stderr
         print(lab_down())
         sys.exit(1)
-    app, scenarios = state.app, state.scenarios
-    profiles = app_profiles()
-    listed = [f"{scenario}  ({profiles.source(app, scenario)})" for scenario in scenarios] or ["none"]
+    if args.json:
+        print(json.dumps({**state._asdict(), "rules": [rule._asdict() for found in rules for rule in found.rules]}))
+        return
+    listed = []
+    for found in rules:
+        listed.append(f"{found.scenario}  ({profiles.source(state.app, found.scenario)})")
+        if found.error:
+            listed.append(f"  cannot read its rules: {found.error}")
+        listed += [f"  {rule.rule}  {acted_on(rule.flows)}" for rule in found.rules]
     print(f"lab: up (mitmweb UI {mitmweb().url})")
-    print(f"App Profile:       {app or 'none'}")
-    print("Scenarios:         " + "\n                   ".join(listed))
+    print(f"App Profile:       {state.app or 'none'}")
+    print("Scenarios:         " + ("\n                   ".join(listed) or "none"))
+
+
+def app_scenarios_dir(profiles, app):
+    """The Scenarios folder of the loaded App Profile APP, None without one."""
+    return profiles.profile(app).scenarios_dir if app else None
+
+
+def acted_on(flows):
+    """A rule's count of flows, flagged when it acted on none."""
+    if not flows:
+        return "0 flows  (acted on nothing yet)"
+    return f"{flows} flow{'' if flows == 1 else 's'}"
 
 
 def flows(args):
@@ -165,8 +185,9 @@ def main():
     resolve_parser = commands.add_parser("resolve")
     resolve_parser.add_argument("--app")
     resolve_parser.set_defaults(run=resolve)
-    status_parser = commands.add_parser("status")
+    status_parser = commands.add_parser("status", prog="roxy status")
     status_parser.add_argument("--json", action="store_true")
+    status_parser.add_argument("--since", type=since)
     status_parser.set_defaults(run=status)
     flows_parser = commands.add_parser("flows", prog="roxy flows")
     flows_parser.add_argument("--json", action="store_true", required=True)

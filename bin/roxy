@@ -32,12 +32,18 @@ Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI and the Pro
 EOF
     ;;
     status) cat <<'EOF'
-usage: roxy status [--json]
+usage: roxy status [--json] [--since RUN|TIME]
 Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
-and the active Scenarios in order, each with its source. Exits 1 when the lab is down.
-  --json  the running lab's state as one JSON object, for tools: its App Profile (app,
-          null for none), its active Scenarios in order (scenarios), whether it is in
-          CA Routing (ca_routing) and the folder of its own Scenarios (scenarios_dir)
+and the active Scenarios in order, each with its source and its rules, with how many
+flows each rule acted on: a rule that acted on none is flagged. Exits 1 when the lab
+is down. After a roxy launch, check roxy status --since <run>.
+  --json            the running lab's state as one JSON object, for tools: its App
+                    Profile (app, null for none), its active Scenarios in order
+                    (scenarios), whether it is in CA Routing (ca_routing), the folder of
+                    its own Scenarios (scenarios_dir), and the active Scenarios' rules in
+                    Scenario then file order (rules: [{"scenario", "rule", "flows"}])
+  --since RUN|TIME  count only flows since a roxy launch run id, or a time like
+                    2026-11-20T10:00:00Z
 EOF
     ;;
     scenario) cat <<'EOF'
@@ -92,17 +98,14 @@ EOF
   esac
 }
 
-# status : the lab, App Profile and Scenario lines from the Lab Session (proxy/cli.py), with
-# the Proxy IP and Proxy Bases lines after the first.
+# status [options] : the lab, App Profile and Scenario lines from the Lab Session
+# (proxy/cli.py, which checks the options), with the Proxy IP and Proxy Bases lines after
+# the first.
 status() {
-  case "$*" in
-    "") ;;
-    --json) proxy_cli status --json; return ;;
-    *) die "$(usage status | head -1)" ;;
-  esac
+  case " $* " in *" --json "*) proxy_cli status "$@"; return ;; esac
   local lab public
   load_env
-  lab="$(proxy_cli status)" || { [ -z "$lab" ] || echo "$lab"; exit 1; }
+  lab="$(proxy_cli status "$@")" || { [ -z "$lab" ] || echo "$lab"; exit 1; }
   public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"
   head -1 <<< "$lab"
   print_lan_addresses "$(lan_ip)"

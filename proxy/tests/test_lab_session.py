@@ -24,7 +24,9 @@ from lab.lab_session import (
     LabDown,
     LabSession,
     LabState,
+    RuleFlows,
     ScenarioRefused,
+    ScenarioRules,
     WrongPassword,
     new_run_id,
     parse_since,
@@ -320,6 +322,55 @@ def test_a_throttled_flow_is_timed_to_its_last_byte_at_the_client(scenarios):
     [timed] = LabSession(FakeMitmweb([flow])).flows()
 
     assert timed["duration_ms"] == pytest.approx(13_000, abs=100)  # then 10 s paced
+
+
+def test_each_active_scenarios_rules_count_the_flows_they_acted_on_in_scenario_then_file_order(recorded_flows):
+    session = LabSession(FakeMitmweb(recorded_flows, lab_scenario="hls-404,json-503"))
+
+    assert session.scenario_rules(app_scenarios_dir=None) == [
+        ScenarioRules("hls-404", [RuleFlows("hls-404", "mux master playlist missing", 0)], None),
+        ScenarioRules("json-503", [RuleFlows("json-503", "httpbin json fails", 1)], None),
+    ]
+
+
+def test_since_a_launch_a_rule_counts_only_the_flows_from_then_on(recorded_flows):
+    session = LabSession(FakeMitmweb(recorded_flows, lab_scenario="json-503"))
+
+    [after] = session.scenario_rules(None, since=parse_since("2025-11-20T10:02:00.001Z"))  # the 503 at 10:02
+
+    assert after.rules == [RuleFlows("json-503", "httpbin json fails", 0)]
+
+
+def test_a_rule_named_the_same_in_two_scenarios_is_counted_per_scenario(scenarios):
+    rule = '[[rule]]\nname = "json fails"\nfilter = "~u /json"\nstatus = {status}\n'
+    scenarios("first", rule.format(status=503))
+    options = {**scenarios("second", rule.format(status=500)), "lab_scenario": "second,first"}
+    flow = lab_flow("/https://httpbin.org/json")
+    with Lab(**{**options, "lab_scenario": "first"}) as lab:
+        lab.run(flow, origin(b"{}"))
+
+    rules = LabSession(FakeMitmweb([flow], **options)).scenario_rules(None)
+
+    assert [scenario.rules for scenario in rules] == [
+        [RuleFlows("second", "json fails", 0)], [RuleFlows("first", "json fails", 1)],
+    ]
+
+
+def test_an_active_scenario_whose_file_no_longer_loads_says_why_instead_of_its_rules(scenarios):
+    options = scenarios("broken", '[[rule]]\nname = "no filter"\nstatus = 503\n')
+
+    [broken] = LabSession(FakeMitmweb(**options)).scenario_rules(None)
+
+    assert (broken.scenario, broken.rules) == ("broken", [])
+    assert "'no filter': needs a filter expression" in broken.error
+
+
+def test_an_app_profiles_scenario_is_found_in_its_folder_before_the_labs(tmp_path):
+    (tmp_path / "catalog-fails.toml").write_text('[[rule]]\nname = "catalog 500"\nfilter = "~u /catalog"\nstatus = 500\n')
+
+    [found] = LabSession(FakeMitmweb(lab_app="example-app", lab_scenario="catalog-fails")).scenario_rules(tmp_path)
+
+    assert found.rules == [RuleFlows("catalog-fails", "catalog 500", 0)]
 
 
 def test_reading_the_flows_never_changes_the_lab(recorded_flows):
