@@ -12,6 +12,7 @@ set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
 usage="usage: scripts/deploy [--ca-routing] <device-name> <app-dir>"
+case "${1:-}" in -h|--help) sed -n '3,/^set /s/^# \{0,1\}//p' "$0" | sed '/^set /d'; exit 0 ;; esac
 ca_routing=false
 if [ "${1:-}" = "--ca-routing" ]; then
   ca_routing=true

@@ -302,9 +302,9 @@ def parse_args(argv: list[str], config: dict) -> argparse.Namespace:
     """The command line, with `cells`: every cell it names, in the order they run (Physical
     Device cells first, then by flavour, separator and traffic class)."""
     parser = argparse.ArgumentParser(prog="scripts/grid", description="Fill grid cells.")
-    parser.add_argument("flavour", type=values(list(config["flavours"])), help="comma list or all")
-    parser.add_argument("device_kind", type=values(list(DEVICE_KINDS)), help="comma list or all")
-    parser.add_argument("traffic_class", type=values(list(config["classes"])), help="comma list or all")
+    for name, choices in (("flavour", list(config["flavours"])), ("device_kind", list(DEVICE_KINDS)),
+                          ("traffic_class", list(config["classes"]))):
+        parser.add_argument(name, type=values(choices), help=f"{' | '.join(choices)}: one, a comma list or all")
     parser.add_argument("--proxy-base", help="Proxy Base to launch with (default: the LAN one for a Physical Device, "
                                              "the running tunnel's public one for a Cloud Device)")
     parser.add_argument("--ca-routing", action="store_true",

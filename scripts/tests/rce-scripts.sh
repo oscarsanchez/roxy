@@ -72,6 +72,13 @@ $expected"
 unzip -p "$ROXY_OUT_DIR/$(basename "$app").zip" manifest | grep -q '^lab_proxy_base=' || fail "the package has no baked Proxy Base"
 echo "ok: deploy sideloads through rce"
 
+# --help prints the usage and exits 0; a bad call still fails, with the usage.
+out="$("$SCRIPTS/deploy" --help 2>&1)" || fail "deploy --help failed: $out"
+case "$out" in "Usage: scripts/deploy [--ca-routing] <device-name> <app-dir>"*"--ca-routing:"*) ;; *) fail "deploy --help said: $out" ;; esac
+if err="$("$SCRIPTS/deploy" "$device" 2>&1)"; then fail "deploy took one argument: $err"; fi
+case "$err" in *"usage: scripts/deploy"*) ;; *) fail "a bad deploy call said: $err" ;; esac
+echo "ok: deploy --help prints the usage; a bad call fails with it"
+
 # A sideload rce refuses fails deploy.
 if err="$(FAKE_RCE_FAIL_ON=sideload FAKE_RCE_EXIT=4 "$SCRIPTS/deploy" "$device" "$app" 2>&1)"; then
   fail "deploy succeeded although rce refused the sideload: $err"

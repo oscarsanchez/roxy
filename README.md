@@ -76,18 +76,11 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 ```sh
 roxy start                           # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
 roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<secret>
-roxy start --replay <recording>.mitm # answer from a Recording (see Recording and replay)
-roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
-roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
 roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios and their rules
-roxy status --since <run>            # each active rule's flows since that launch only (see Scenarios)
-roxy status --json                   # for tools: {"app", "scenarios", "ca_routing", "scenarios_dir", "rules"}; the lab down: exit 1
-roxy status --show-secret            # the public Proxy Base with LAB_SECRET in it, to paste into a Cloud Device by hand (see Guards)
 roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
-roxy export --har                    # the newest Recording as a HAR file in this folder (see Export as HAR)
 ```
 
-`roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every Lab Session is saved as a Recording in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
+`roxy --help` lists the subcommands and `roxy <subcommand> --help` gives every option of one; the docs show examples only. `roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`). The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every Lab Session is saved as a Recording in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
 
 ### 4. Deploy and launch
 
@@ -203,8 +196,9 @@ alter_segments = { from = 2, uri = "missing.ts", duration = 1.5 }   # HLS: new U
 
 ### 6. Grid runner
 
+`scripts/grid --help` lists every flavour, Target Device kind, traffic class and option.
+
 ```sh
-scripts/grid <classic|rsg> <physical|cloud> <json|json_post|image|hls|dash|widevine|raf|raf_vmap> [--proxy-base URL] [--ca-routing] [--separator /|/;] [--device NAME]
 scripts/grid classic physical json
 scripts/grid classic physical json --device Bedroom   # another Physical Device, for this call only
 scripts/grid rsg cloud hls   # through the running tunnel (roxy start --tunnel)
