@@ -16,6 +16,9 @@ settle_s = 3        # after the result line, so in-flight flows reach the lab
 rce_start_s = 120  # a Run the grid starts: billed from the request, takes input after about 80 s
 rce_deploy_s = 60
 rce_usd_per_device_hour = 0.20  # list price that rk quotes
+# A Run the grid starts is capped (rce device start --max-runtime) at the projection plus this,
+# a backstop for a grid killed outright: a slow start or build must not end the Run mid-batch.
+rce_cap_margin_s = 300
 
 # Result-line fields that only Prefix Routing can satisfy (is the URL a Prefixed URL?).
 # A CA Routing cell leaves them out of ok: its Lab App calls Origin URLs directly.

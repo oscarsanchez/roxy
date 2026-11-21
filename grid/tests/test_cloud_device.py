@@ -43,11 +43,11 @@ def rce_log(tmp_path, monkeypatch):
 
 def test_starts_a_cloud_device_without_a_run_and_stops_it_after_the_cell(rce_log, monkeypatch):
     monkeypatch.setenv("FAKE_STATUS", "shutdown")
-    with cloud_run("player"):
+    with cloud_run("player", 600):
         assert rce_log()[-1] == ["started", "player"]
     assert rce_log() == [
         ["device", "status", "player", "--json"],
-        ["device", "start", "player"],
+        ["device", "start", "player", "--max-runtime", "600"],
         ["started", "player"],
         ["device", "status", "player", "--json"],
         ["device", "stop", "player", "--wait"],
@@ -57,7 +57,7 @@ def test_starts_a_cloud_device_without_a_run_and_stops_it_after_the_cell(rce_log
 
 def test_leaves_a_run_it_did_not_start_running(rce_log, monkeypatch):
     monkeypatch.setenv("FAKE_STATUS", "running")
-    with cloud_run("player"):
+    with cloud_run("player", 600):
         pass
     assert rce_log() == [["device", "status", "player", "--json"]]
 
@@ -65,7 +65,7 @@ def test_leaves_a_run_it_did_not_start_running(rce_log, monkeypatch):
 def test_stops_the_run_it_started_when_the_cell_fails(rce_log, monkeypatch):
     monkeypatch.setenv("FAKE_STATUS", "shutdown")
     with pytest.raises(KeyboardInterrupt):
-        with cloud_run("player"):
+        with cloud_run("player", 600):
             raise KeyboardInterrupt
     assert ["device", "stop", "player", "--wait"] in rce_log()
 
@@ -73,8 +73,8 @@ def test_stops_the_run_it_started_when_the_cell_fails(rce_log, monkeypatch):
 def test_a_refused_start_ends_the_cell_before_it_runs(rce_log, monkeypatch):
     monkeypatch.setenv("FAKE_STATUS", "shutdown")
     monkeypatch.setenv("FAKE_RCE_FAIL_ON", "device start")
-    with pytest.raises(SystemExit, match="rce device start player failed"):
-        with cloud_run("player"):
+    with pytest.raises(SystemExit, match="rce device start player --max-runtime 600 failed"):
+        with cloud_run("player", 600):
             pytest.fail("the cell ran without a Run")
     assert not [command for command in rce_log() if command[:2] == ["device", "stop"]]
 
@@ -86,7 +86,7 @@ def test_an_interrupt_during_the_start_stops_the_run_once_the_start_ends(rce_log
     monkeypatch.setenv("FAKE_START_S", "2")
     threading.Timer(0.5, os.kill, (os.getpid(), signal.SIGINT)).start()
     with pytest.raises(KeyboardInterrupt):
-        with cloud_run("player"):
+        with cloud_run("player", 600):
             pytest.fail("the cell ran after an interrupt")
     log = rce_log()
     assert log.index(["started", "player"]) < log.index(["device", "stop", "player", "--wait"])
@@ -99,7 +99,7 @@ def test_an_interrupted_start_that_stopped_its_own_run_stops_nothing(rce_log, mo
     monkeypatch.setenv("FAKE_START_STOPS_ITSELF", "1")
     threading.Timer(0.3, os.kill, (os.getpid(), signal.SIGINT)).start()
     with pytest.raises(KeyboardInterrupt):
-        with cloud_run("player"):
+        with cloud_run("player", 600):
             pytest.fail("the cell ran after an interrupt")
     assert ["started", "player"] in rce_log()
     assert not [command for command in rce_log() if command[:2] == ["device", "stop"]]
@@ -111,7 +111,7 @@ def test_an_interrupt_while_rce_ends_waits_for_it_and_raises(rce_log, monkeypatc
     monkeypatch.setenv("FAKE_STATUS_LINGERS_S", "1")
     threading.Timer(0.3, os.kill, (os.getpid(), signal.SIGINT)).start()
     with pytest.raises(KeyboardInterrupt):
-        with cloud_run("player"):
+        with cloud_run("player", 600):
             pytest.fail("the cell ran after an interrupt")
 
 
@@ -119,7 +119,7 @@ def test_a_run_still_going_after_its_stop_fails_the_cell(rce_log, monkeypatch):
     monkeypatch.setenv("FAKE_STATUS", "shutdown")
     monkeypatch.setenv("FAKE_STOP_FAILS", "1")
     with pytest.raises(SystemExit, match="stop it with `rce device stop player`"):
-        with cloud_run("player"):
+        with cloud_run("player", 600):
             pass
 
 

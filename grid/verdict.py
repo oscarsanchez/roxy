@@ -6,6 +6,7 @@ sums them up (README, Flows for agents), and the Lab App's result line
 """
 
 import re
+from collections import Counter
 from dataclasses import dataclass, field
 from fnmatch import fnmatch
 from urllib.parse import urlsplit
@@ -73,6 +74,18 @@ def row(cell: Cell, verdict: Verdict) -> str:
     device += f" ({cell.separator} form)" if cell.separator != "/" else ""
     cols = [cell.flavour, device, cell.traffic_class, verdict.outcome, verdict.reason]
     return "| " + " | ".join(c.replace("|", "\\|") for c in cols) + " |"
+
+
+def table(results: list[tuple[Cell, Verdict]]) -> str:
+    """A batch's cells as the evaluation grid (Markdown), then how many of each outcome."""
+    count = Counter(verdict.outcome for _, verdict in results)
+    return "\n".join([
+        "",
+        "| flavour | Target Device | traffic class | outcome | reason |",
+        "| --- | --- | --- | --- | --- |",
+        *(row(cell, verdict) for cell, verdict in results),
+        f"{count['pass']} pass, {count['known-limit']} known-limit, {count['fail']} fail",
+    ])
 
 
 ANSI = re.compile(r"\x1b\[[0-9;]*[A-Za-z]")
