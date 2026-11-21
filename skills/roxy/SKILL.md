@@ -55,6 +55,13 @@ status = 503
 
 Only when the user asks whether the lab still works with its own Lab Apps. In the roxy checkout, with the lab started there, `scripts/grid <flavours> <device-kinds> <traffic-classes>` fills grid cells and prints a pass, fail or known-limit row for each. Each of the three takes one value, a comma list or `all` (`scripts/grid classic,rsg physical all`), and `--separator '/,/;'` runs each cell in both Prefixed URL forms. A batch ends with a table and a count, and exits 1 if any cell failed. Cloud Device cells bill: the grid prints their projected cost and asks once, so confirm with the user first. Full reference: README, Grid runner.
 
+## A HAR file for a person or another tool
+
+Every Lab Session is saved as a Recording (a `.mitm` file). `roxy export --har [RECORDING] [--filter EXPR] [-o FILE]` writes one as a HAR file, for browser devtools, HAR viewers or a bug report: without RECORDING, the newest of all; without `-o`, `./<recording name>.har`. It reads the file only (the lab up or down) and never writes over an existing file. For your own reading, `roxy flows --json` stays the tool.
+
+- Request URLs are Origin URLs; response bodies are as the Target Device received them, so URLs inside them are Prefixed URLs.
+- The lab secret becomes `<secret>`, but the app's own headers, cookies and tokens stay in the file: check it, and tell the user so, before it is shared.
+
 ## Known limits
 
 - One lab per user: one App Profile per session and one set of active Scenarios, lab-wide. Deploys and launches take a per-user `devices` lock and refuse while someone else holds it, naming the holder; set `LAB_LOCK_OWNER` to your name, and `LAB_LOCK_WAIT=1` waits instead.

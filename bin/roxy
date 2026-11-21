@@ -17,6 +17,7 @@ The roxy lab from any terminal. roxy <subcommand> --help describes one.
   scenario   list the Scenarios, or set, add, remove or clear the active ones
   launch     launch the dev channel on a Target Device, with its Proxy Base
   flows      the running lab's flows as JSON, for agents (read-only)
+  export     a Recording as a HAR file, for HAR viewers and bug reports
   console    open a Target Device's debug console
   app        create or list App Profiles
 EOF
@@ -79,6 +80,22 @@ documents (Flows for agents). Read-only: it never holds or edits a flow.
   --filter EXPR     only flows matching a mitmproxy filter expression, e.g. '~d example.com'
   --since RUN|TIME  only flows since a roxy launch run id, or a time like 2026-11-20T10:00:00Z
   --limit N         only the last N flows
+EOF
+    ;;
+    export) cat <<'EOF'
+usage: roxy export --har [RECORDING] [--filter EXPR] [-o FILE]
+Write a Recording (.mitm) as a HAR file, one entry per HTTP flow, and print its path and
+number of entries. It reads the file only, so the lab can be up or down; a running lab's
+Recording exports the flows recorded so far. Request URLs are Origin URLs; response
+bodies are as the Target Device received them, so URLs inside them are Prefixed URLs.
+The lab secret becomes <secret> everywhere, but the HAR holds everything else the
+Recording held, the app's headers, cookies and tokens included: check it before sharing.
+  RECORDING         the Recording; without it, the newest of all in the Recordings root
+                    (~/.local/share/roxy/captures/: every App Profile's folder and
+                    no-profile)
+  --filter EXPR     only flows matching a mitmproxy filter expression, e.g. '~d example.com'
+  -o FILE           where to write it, never over an existing file (default:
+                    ./<recording name>.har)
 EOF
     ;;
     console) cat <<'EOF'
@@ -151,7 +168,7 @@ cmd="${1:-}"
 shift
 case "$cmd" in
   -h|--help) usage roxy; exit 0 ;;
-  start|status|scenario|launch|flows|console|app) ;;
+  start|status|scenario|launch|flows|export|console|app) ;;
   *) die "unknown subcommand '$cmd' (roxy --help lists them)" ;;
 esac
 case "${1:-}" in -h|--help) usage "$cmd"; exit 0 ;; esac
@@ -162,6 +179,7 @@ case "$cmd" in
   scenario) scenario "$@" ;;
   launch) exec "$SCRIPTS/launch" "$@" ;;
   flows) proxy_cli flows "$@" ;;
+  export) proxy_cli export "$@" ;;
   console) console "$@" ;;
   app) app "$@" ;;
 esac

@@ -1,7 +1,7 @@
-"""App Profiles, their Scenarios and the running Lab Session, for bin/roxy and the scripts,
-which run it through proxy_cli (scripts/lib.sh) in the caller's folder. Needs
-ROXY_CONFIG_DIR and LAB_WEB_PORT, and MITMWEB_PASSWORD for the Lab Session, as proxy_cli
-passes them.
+"""App Profiles, their Scenarios, the running Lab Session and Recordings, for bin/roxy and
+the scripts, which run it through proxy_cli (scripts/lib.sh) in the caller's folder. Needs
+ROXY_CONFIG_DIR and LAB_WEB_PORT, MITMWEB_PASSWORD for the Lab Session, and CAPTURES_ROOT
+and LAB_SECRET for export, as proxy_cli passes them.
 
   cli.py app new NAME                    create App Profile NAME for the git repo of this folder
   cli.py app list                        each App Profile and its repo
@@ -20,6 +20,8 @@ passes them.
                                          the running lab's state (roxy status --help)
   cli.py flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
                                          the running lab's flows (roxy flows --help)
+  cli.py export --har [RECORDING] [--filter EXPR] [-o FILE]
+                                         a Recording as a HAR file (roxy export --help)
   cli.py run-id                          a fresh roxy launch run id
 
 The scenario commands print the active Scenarios after the change, as
@@ -28,10 +30,15 @@ the `lab: down (...)` line instead.
 """
 
 import argparse
+import base64
 import json
 import os
 import sys
 from pathlib import Path
+
+from mitmproxy import flowfilter, io
+from mitmproxy.addons.savehar import SaveHar
+from mitmproxy.exceptions import FlowReadException
 
 from lab.app_profiles import AppProfileError, AppProfiles, ScenarioInBoth
 from lab.config import settings_root
@@ -39,6 +46,7 @@ from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError,
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
 
 REFUSED = "refused: in both (rename the profile's)"
+REDACTED_SECRET = "<secret>"
 
 
 def app_profiles():
@@ -145,6 +153,68 @@ def flows(args):
     print("[" + ",\n".join(json.dumps(flow) for flow in found) + "]")
 
 
+def export(args):
+    """A Recording's flows (those --filter matches, as save_stream_filter would) as a HAR,
+    through mitmproxy's own HAR writer (hardump's), with the lab secret redacted."""
+    recording = Path(args.recording) if args.recording else newest_recording()
+    flows = [flow for flow in recorded_flows(recording) if not args.filter or args.filter(flow)]
+    har = SaveHar().make_har(flows)
+    if secret := os.environ.get("LAB_SECRET"):
+        har = redacted(har, secret)
+    output = os.path.abspath(args.output or f"{recording.stem}.har")
+    try:
+        with open(output, "x") as f:
+            json.dump(har, f, indent=4)
+    except FileExistsError:
+        raise ExportRefused(f"{output} already exists (-o FILE picks another)") from None
+    entries = len(har["log"]["entries"])
+    print(f"wrote {output} ({entries} entr{'y' if entries == 1 else 'ies'})")
+
+
+class ExportRefused(Exception):
+    pass
+
+
+def recorded_flows(recording):
+    """The complete flows of RECORDING. A running lab's Recording can end in a flow cut
+    short, which is left out; a file whose first flow does not read is not a Recording."""
+    if not recording.is_file():
+        raise ExportRefused(f"no Recording at {recording}")
+    flows = []
+    with open(recording, "rb") as f:
+        try:
+            for flow in io.FlowReader(f).stream():
+                flows.append(flow)
+        except FlowReadException:
+            if not flows:
+                raise ExportRefused(f"{recording} is not a mitmproxy Recording (.mitm)") from None
+    return flows
+
+
+def redacted(value, secret):
+    """VALUE, a HAR or a part of one, with SECRET replaced by <secret> in every string,
+    base64-encoded bodies included."""
+    if isinstance(value, str):
+        return value.replace(secret, REDACTED_SECRET)
+    if isinstance(value, list):
+        return [redacted(item, secret) for item in value]
+    if not isinstance(value, dict):
+        return value
+    if value.get("encoding") == "base64":
+        body = base64.b64decode(value["text"]).replace(secret.encode(), REDACTED_SECRET.encode())
+        value = {**value, "text": base64.b64encode(body).decode()}
+    return {key: redacted(item, secret) for key, item in value.items()}
+
+
+def newest_recording():
+    """The newest Recording in the Recordings root (lib.sh's CAPTURES_ROOT), in any profile's folder."""
+    root = Path(os.environ["CAPTURES_ROOT"])
+    recordings = list(root.glob("*/*.mitm"))
+    if not recordings:
+        raise ExportRefused(f"no Recordings in {root} (roxy start records one)")
+    return max(recordings, key=lambda path: path.stat().st_mtime)
+
+
 def run_id(args):
     print(new_run_id())
 
@@ -152,6 +222,14 @@ def run_id(args):
 def since(value):
     try:
         return parse_since(value)
+    except ValueError as e:
+        raise argparse.ArgumentTypeError(str(e)) from None
+
+
+def flow_filter(value):
+    """A mitmproxy filter expression, as save_stream_filter (which hardump honours) parses it."""
+    try:
+        return flowfilter.parse(value)
     except ValueError as e:
         raise argparse.ArgumentTypeError(str(e)) from None
 
@@ -195,13 +273,19 @@ def main():
     flows_parser.add_argument("--since", type=since)
     flows_parser.add_argument("--limit", type=limit)
     flows_parser.set_defaults(run=flows)
+    export_parser = commands.add_parser("export", prog="roxy export")
+    export_parser.add_argument("--har", action="store_true", required=True)
+    export_parser.add_argument("recording", nargs="?")
+    export_parser.add_argument("--filter", type=flow_filter)
+    export_parser.add_argument("-o", dest="output")
+    export_parser.set_defaults(run=export)
     commands.add_parser("run-id").set_defaults(run=run_id)
     args = parser.parse_args()
     try:
         args.run(args)
     except LabDown:
         sys.exit(lab_down())
-    except (AppProfileError, LabSessionError) as e:
+    except (AppProfileError, LabSessionError, ExportRefused) as e:
         sys.exit("\n".join(f"error: {line}" for line in str(e).splitlines()))
 
 

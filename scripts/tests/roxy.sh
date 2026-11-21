@@ -120,7 +120,7 @@ lab_up() {
 }
 
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
-for args in "" start status scenario launch flows console app; do
+for args in "" start status scenario launch flows export console app; do
   # shellcheck disable=SC2086
   out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
   case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
@@ -340,6 +340,124 @@ out="$(lab_up "" "" "$ROXY" flows --json --filter '~u /json' --since 17636328601
 if err="$(lab_up "" "" "$ROXY" flows --json --since yesterday 2>&1)"; then fail "flows --json took --since yesterday"; fi
 case "$err" in *"--since"*"yesterday"*) ;; *) fail "flows --json --since yesterday said: $err" ;; esac
 echo "ok: flows --json says when the lab is down, and takes its options"
+
+# export --har, against its own user data directory. write_recording FILE [cut|secret] : a
+# Recording of known flows, GET https://example.com/one answered 200 "first body",
+# GET https://example.org/two answered 503 "second body", and a TCP flow; with cut, then
+# a third flow cut short, as a running lab's Recording can end; with secret, then two
+# flows holding Prefixed URLs with the lab secret (test-secret), in the URL, a header, a
+# text body and a binary one.
+export_data="$TMP/export-data"
+write_recording() {
+  mkdir -p "$(dirname "$1")"
+  "$REAL_UV" run --quiet --project "$REPO/proxy" python - "$@" <<'EOF'
+import sys
+from io import BytesIO
+from mitmproxy import io
+from mitmproxy.test import tflow, tutils
+
+
+def http(host, path, status, body):
+    request = tutils.treq(host=host, port=443, scheme=b"https", path=path)
+    return tflow.tflow(req=request, resp=tutils.tresp(status_code=status, content=body))
+
+
+with open(sys.argv[1], "wb") as f:
+    writer = io.FlowWriter(f)
+    writer.add(http("example.com", b"/one", 200, b"first body"))
+    writer.add(http("example.org", b"/two", 503, b"second body"))
+    writer.add(tflow.ttcpflow())
+    if sys.argv[2:] == ["cut"]:
+        third = BytesIO()
+        io.FlowWriter(third).add(http("example.net", b"/three", 200, b"third body"))
+        f.write(third.getvalue()[: len(third.getvalue()) // 2])
+    if sys.argv[2:] == ["secret"]:
+        prefixed = b"https://tunnel.example/test-secret/cloud-device"
+        flow = http("example.com", b"/next?from=" + prefixed, 200, b'{"next": "' + prefixed + b'/https://example.com/two"}')
+        flow.request.headers["Referer"] = prefixed.decode()
+        writer.add(flow)
+        writer.add(http("example.com", b"/blob", 200, bytes(range(8)) * 5 + prefixed))
+EOF
+}
+har_entries() { jq -c '[.log.entries[] | [.request.url, .response.status, .response.content.text]]' "$1"; }
+want_entries='[["https://example.com/one",200,"first body"],["https://example.org/two",503,"second body"]]'
+
+# A Recording exports to a HAR with one entry per HTTP flow: its Origin URL, status and body.
+write_recording "$TMP/recordings/known.mitm"
+out="$(XDG_DATA_HOME="$export_data" "$ROXY" export --har "$TMP/recordings/known.mitm" -o "$TMP/known.har")" \
+  || fail "export --har of a Recording: $out"
+[ "$(har_entries "$TMP/known.har")" = "$want_entries" ] || fail "export --har wrote: $(har_entries "$TMP/known.har")"
+[ "$out" = "wrote $TMP/known.har (2 entries)" ] || fail "export --har said: $out"
+echo "ok: export --har writes one HAR entry per HTTP flow, with its Origin URL, status and body"
+
+# Without RECORDING, the newest Recording across every profile folder; without -o, in the
+# current folder, named after the Recording.
+recordings_root="$export_data/roxy/captures"
+mkdir -p "$recordings_root/app-a" "$recordings_root/no-profile" "$recordings_root/app-b"
+: > "$recordings_root/app-a/20261101-090000.mitm"
+: > "$recordings_root/no-profile/20261102-090000.mitm"
+cp "$TMP/recordings/known.mitm" "$recordings_root/app-b/20261103-090000.mitm"
+touch -t 202611010900 "$recordings_root/app-a/20261101-090000.mitm"
+touch -t 202611020900 "$recordings_root/no-profile/20261102-090000.mitm"
+touch -t 202611030900 "$recordings_root/app-b/20261103-090000.mitm"
+mkdir -p "$TMP/exports"
+out="$(cd "$TMP/exports" && XDG_DATA_HOME="$export_data" "$ROXY" export --har)" || fail "export --har with no RECORDING: $out"
+[ "$out" = "wrote $(cd "$TMP/exports" && pwd -P)/20261103-090000.har (2 entries)" ] || fail "export --har with no RECORDING said: $out"
+[ "$(har_entries "$TMP/exports/20261103-090000.har")" = "$want_entries" ] || fail "export --har with no RECORDING exported the wrong one"
+echo "ok: export --har takes the newest Recording across profile folders, and writes to the current folder"
+
+# A running lab's Recording, its last flow cut short, exports the complete flows.
+write_recording "$TMP/recordings/running.mitm" cut
+out="$(XDG_DATA_HOME="$export_data" "$ROXY" export --har "$TMP/recordings/running.mitm" -o "$TMP/running.har")" \
+  || fail "export --har of a Recording cut short: $out"
+[ "$(har_entries "$TMP/running.har")" = "$want_entries" ] || fail "export --har of a Recording cut short wrote: $(har_entries "$TMP/running.har")"
+echo "ok: export --har of a Recording still being written exports its complete flows"
+
+# Refusals exit non-zero, say why, and write nothing: an existing FILE (kept as it was), a
+# missing RECORDING, a file that is not a Recording, and no Recording at all.
+# refused WANT ARGS... : export --har ARGS... in $TMP/exports exits non-zero saying WANT,
+# and leaves the folder as it was.
+refused() {
+  local want="$1" before err
+  shift
+  before="$(ls "$TMP/exports")"
+  if err="$(cd "$TMP/exports" && XDG_DATA_HOME="${data:-$export_data}" "$ROXY" export --har "$@" 2>&1)"; then
+    fail "export --har $* exited 0: $err"
+  fi
+  case "$err" in *"$want"*) ;; *) fail "export --har $* said: $err" ;; esac
+  [ "$(ls "$TMP/exports")" = "$before" ] || fail "export --har $* wrote $(ls "$TMP/exports")"
+}
+echo "someone's notes" > "$TMP/exports/taken.har"
+refused "taken.har already exists" "$TMP/recordings/known.mitm" -o taken.har
+[ "$(cat "$TMP/exports/taken.har")" = "someone's notes" ] || fail "export --har changed an existing FILE"
+refused "no Recording at $TMP/recordings/missing.mitm" "$TMP/recordings/missing.mitm"
+echo "not flows" > "$TMP/recordings/notes.txt"
+refused "$TMP/recordings/notes.txt is not a mitmproxy Recording" "$TMP/recordings/notes.txt"
+data="$TMP/no-data" refused "no Recordings in $TMP/no-data/roxy/captures"
+echo "ok: export --har refuses an existing FILE, a missing Recording, a file that is not one, and no Recordings"
+
+# --filter keeps only the flows a mitmproxy filter expression matches; a bad one is refused.
+out="$(XDG_DATA_HOME="$export_data" "$ROXY" export --har "$TMP/recordings/known.mitm" --filter '~d example.org' -o "$TMP/filtered.har")" \
+  || fail "export --har --filter: $out"
+[ "$(har_entries "$TMP/filtered.har")" = '[["https://example.org/two",503,"second body"]]' ] \
+  || fail "export --har --filter wrote: $(har_entries "$TMP/filtered.har")"
+refused "Invalid filter expression: '~nope'" "$TMP/recordings/known.mitm" --filter '~nope'
+echo "ok: export --har --filter keeps the matching flows, and refuses a bad expression"
+
+# The lab secret becomes <secret> everywhere in the HAR: URLs, headers, text and binary bodies.
+write_recording "$TMP/recordings/secret.mitm" secret
+out="$(XDG_DATA_HOME="$export_data" "$ROXY" export --har "$TMP/recordings/secret.mitm" -o "$TMP/secret.har")" \
+  || fail "export --har of a Recording holding the lab secret: $out"
+! grep -q test-secret "$TMP/secret.har" || fail "export --har left the lab secret in the HAR: $(grep -c test-secret "$TMP/secret.har") lines"
+redacted="https://tunnel.example/<secret>/cloud-device"
+[ "$(jq -r '.log.entries[2].request.url' "$TMP/secret.har")" = "https://example.com/next?from=$redacted" ] \
+  || fail "export --har redacted the URL as: $(jq -r '.log.entries[2].request.url' "$TMP/secret.har")"
+[ "$(jq -r '.log.entries[2].response.content.text' "$TMP/secret.har")" = "{\"next\": \"$redacted/https://example.com/two\"}" ] \
+  || fail "export --har redacted the text body as: $(jq -r '.log.entries[2].response.content.text' "$TMP/secret.har")"
+case "$(jq -r '.log.entries[3].response.content.text | @base64d' "$TMP/secret.har")" in
+  *"$redacted") ;; *) fail "export --har did not redact the binary body" ;;
+esac
+echo "ok: export --har replaces the lab secret with <secret> everywhere"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

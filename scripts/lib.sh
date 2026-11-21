@@ -8,9 +8,11 @@ export ROXY_CONFIG_DIR="${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rox
 SECRETS_FILE="$ROXY_CONFIG_DIR/secrets.env"
 DEVICES_FILE="$ROXY_CONFIG_DIR/devices.json"
 SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
-# Recordings: the user data directory, in the loaded App Profile's folder (LAB_APP, which
-# scripts/start-lab exports), or the one for sessions without a profile.
-CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-profile}"
+# Recordings: the Recordings root (CAPTURES_ROOT) in the user data directory, in the loaded
+# App Profile's folder (LAB_APP, which scripts/start-lab exports), or the one for Lab
+# Sessions without a profile.
+CAPTURES_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures"
+CAPTURES_DIR="$CAPTURES_ROOT/${LAB_APP:-no-profile}"
 
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
@@ -133,13 +135,14 @@ require_lab_settings() {
   [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }
 
-# proxy_cli ARG... : App Profiles, their Scenarios and the running Lab Session (proxy/cli.py
-# describes the commands), run in the caller's folder, which resolving and app new read. It
-# loads secrets.env first, when there is one, for MITMWEB_PASSWORD, and passes LAB_WEB_PORT.
+# proxy_cli ARG... : App Profiles, their Scenarios, the running Lab Session and Recordings
+# (proxy/cli.py describes the commands), run in the caller's folder, which resolving, app new
+# and export read. It loads secrets.env first, when there is one, for MITMWEB_PASSWORD and
+# LAB_SECRET, and passes LAB_WEB_PORT and CAPTURES_ROOT.
 # Refusals print error: ... and exit 1.
 proxy_cli() {
   [ ! -f "$SECRETS_FILE" ] || load_env
-  LAB_WEB_PORT="$LAB_WEB_PORT" uv run --quiet --project "$REPO_ROOT/proxy" python "$REPO_ROOT/proxy/cli.py" "$@"
+  LAB_WEB_PORT="$LAB_WEB_PORT" CAPTURES_ROOT="$CAPTURES_ROOT" uv run --quiet --project "$REPO_ROOT/proxy" python "$REPO_ROOT/proxy/cli.py" "$@"
 }
 
 # The Mac's address on the default-route interface.

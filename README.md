@@ -11,7 +11,7 @@ Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To repor
 ### Scope
 
 - Every kind of Outbound Traffic: JSON APIs, images, HLS, DASH, Widevine licenses, RAF ads (VAST, VAST wrappers, VMAP) and their beacons.
-- Inspection in mitmweb, and Manipulation: mocked or map-local responses, rewritten headers and bodies, injected faults (status, latency, drops), edited manifests, held-and-edited flows, and recorded sessions replayed.
+- Inspection in mitmweb, and Manipulation: mocked or map-local responses, rewritten headers and bodies, injected faults (status, latency, drops), edited manifests, held-and-edited flows, and Recordings replayed or exported as HAR files.
 - Two disposable Lab Apps (classic BrightScript/SceneGraph and RSG 2.0) exercise every traffic class and serve as the regression grid. Store apps and Roku OS's own traffic are out of scope.
 
 ### Routing
@@ -75,16 +75,17 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 ```sh
 roxy start                           # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
 roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
-roxy start --replay <recording>.mitm   # answer from a Recording (see Recording and replay)
+roxy start --replay <recording>.mitm # answer from a Recording (see Recording and replay)
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
 roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios and their rules
 roxy status --since <run>            # each active rule's flows since that launch only (see Scenarios)
 roxy status --json                   # for tools: {"app", "scenarios", "ca_routing", "scenarios_dir", "rules"}; the lab down: exit 1
 roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
+roxy export --har                    # the newest Recording as a HAR file in this folder (see Export as HAR)
 ```
 
-`roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every session is saved in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
+`roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`), and `roxy <subcommand> --help` describes each subcommand. The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every Lab Session is saved as a Recording in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
 
 ### 4. Deploy and launch
 
@@ -226,7 +227,7 @@ It fills one grid cell through the running native lab (`scripts/start-lab`, not 
 
 ### 7. Docker Compose
 
-The same addons, config, Scenarios and mitmweb flags (`scripts/run-mitmweb`), mounted from the repo; no Python or cloudflared to install. Settings and secrets come from the same settings root (mounted read-only; `ROXY_CONFIG_DIR` works here too), and sessions are saved in the same user data directory.
+The same addons, config, Scenarios and mitmweb flags (`scripts/run-mitmweb`), mounted from the repo; no Python or cloudflared to install. Settings and secrets come from the same settings root (mounted read-only; `ROXY_CONFIG_DIR` works here too), and Recordings are saved in the same user data directory.
 
 ```sh
 docker compose up                       # LAN listeners on :8080 and :8888, mitmweb UI on http://127.0.0.1:8081
@@ -352,9 +353,25 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 Every Lab Session is saved as a Recording in the Recordings folder, `~/.local/share/roxy/captures/<App Profile or no-profile>/<start time>.mitm`; open one with `mitmweb -r <file>`. With `--replay` (or `LAB_REPLAY` under Compose):
 
 - A recorded request gets its recorded response every time; the Origin is not contacted. Replay is offline: an unrecorded request gets an empty 404 from the lab (`server_replay_extra=404`) and never reaches its Origin.
-- Matching uses the Origin URL, so a session recorded from one Target Device replays to another; replayed URLs get the replaying client's Proxy Base.
+- Matching uses the Origin URL, so a Recording made on one Target Device replays to another; replayed URLs get the replaying client's Proxy Base.
 - Guards still apply: a refused request stays refused.
-- Record and replay in the same routing mode. A session recorded with Prefix Routing and replayed to a CA-routed client returns Prefixed URLs (Location, Set-Cookie paths, body URLs) of the recording client's Proxy Base: the lab adds no Proxy Base to CA-routed flows, so it does not undo them.
+- Record and replay in the same routing mode. A Recording made with Prefix Routing and replayed to a CA-routed client returns Prefixed URLs (Location, Set-Cookie paths, body URLs) of the recording client's Proxy Base: the lab adds no Proxy Base to CA-routed flows, so it does not undo them.
+
+### Export as HAR
+
+`roxy export --har` writes a Recording as a HAR file, for browser devtools, HAR viewers and bug reports, with one entry per HTTP flow. It reads the Recording file only, never mitmweb, so it works with the lab up or down; a running lab's Recording exports the flows recorded so far.
+
+```sh
+roxy export --har                                       # the newest Recording, in any App Profile's folder, to ./<recording name>.har
+roxy export --har <recording>.mitm -o bug-1234.har      # that Recording, to bug-1234.har
+roxy export --har --filter '~d example.com'             # only flows matching a mitmproxy filter expression
+```
+
+It prints the path written and its number of entries. It never writes over an existing file, and refuses a missing file, one that is not a Recording, and a bad filter expression.
+
+- Request URLs are Origin URLs. Response bodies are as the Target Device received them, so URLs inside them are Prefixed URLs: the lab keeps no body from before its rewriting.
+- The lab secret (`LAB_SECRET`) becomes `<secret>` everywhere in the file: URLs, headers and bodies, where a Cloud Device's Prefixed URLs carry it.
+- Everything else the Recording held is in the file, the app's own headers, cookies and tokens included. Check it before you share it.
 
 ### CA Routing (Physical Devices only)
 
