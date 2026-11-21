@@ -23,8 +23,6 @@ ORIGIN_URL="https://httpbin.org/json"
 SCREEN_TIMEOUT_S=40
 mismatches=0
 
-ecp_post() { curl -sS --fail -o /dev/null -X POST -d '' "http://$ip:8060/$1"; }
-
 # screen : the app's labels, one per line.
 screen() {
   curl -sS --fail "http://$ip:8060/query/app-ui" | grep -oE 'text="[^"]*"' | sed -E 's/^text="(.*)"$/\1/'
@@ -72,8 +70,8 @@ for example in $EXAMPLES; do
   echo "without proxyBase"
   sleep 1  # the flows since the next second leave out the launch with proxyBase
   since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
-  ecp_post exit-app/dev 2>/dev/null || true  # best effort, as scripts/launch does
-  ecp_post launch/dev || die "ECP launch on $device failed"
+  ecp_post "$ip" exit-app/dev 2>/dev/null || true  # best effort, as scripts/launch does
+  ecp_post "$ip" launch/dev || die "ECP launch on $device failed"
   expect "$ORIGIN_URL" "$since" 0
 done
 

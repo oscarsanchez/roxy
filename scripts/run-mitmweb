@@ -11,10 +11,10 @@
 #   Origin URLs that DNS sends here, and take their Origin from Host/SNI.
 #   LAB_LAN_SUBNETS: client subnets (CIDR, space-separated) allowed on the LAN listener,
 #   instead of lan_subnets in the settings root's settings.json. compose.yaml sets it.
-#   LAB_REPLAY: a Recording (relative to $CAPTURES_DIR, or absolute) to answer from
+#   LAB_REPLAY: a Recording (relative to $RECORDINGS_DIR, or absolute) to answer from
 #   with server replay instead of the Origins. Offline: a request it did not record gets
 #   an empty 404 from the lab and never reaches its Origin.
-# Every Lab Session is saved as a Recording, $CAPTURES_DIR/<start time>.mitm (scripts/lib.sh).
+# Every Lab Session is saved as a Recording, $RECORDINGS_DIR/<start time>.mitm (scripts/lib.sh).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 
@@ -37,12 +37,12 @@ for subnet in ${LAB_LAN_SUBNETS:-}; do
 done
 
 # A fixed name: a strftime pattern in save_stream_file would start a new file every second.
-mkdir -p "$CAPTURES_DIR"
-session="$CAPTURES_DIR/$(date +%Y%m%d-%H%M%S).mitm"
+mkdir -p "$RECORDINGS_DIR"
+session="$RECORDINGS_DIR/$(date +%Y%m%d-%H%M%S).mitm"
 echo "Recording to:      $session"
 replay_opts=()
 if [ -n "${LAB_REPLAY:-}" ]; then
-  replay="$(cd "$CAPTURES_DIR" && realpath "$LAB_REPLAY")" || die "no Recording at $LAB_REPLAY"
+  replay="$(cd "$RECORDINGS_DIR" && realpath "$LAB_REPLAY")" || die "no Recording at $LAB_REPLAY"
   [ -f "$replay" ] || die "no Recording at $LAB_REPLAY"
   echo "Replaying:         $replay"
   # reuse: the Lab App may run a case more than once. extra=404: unrecorded requests stay

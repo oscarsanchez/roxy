@@ -1,6 +1,6 @@
 """App Profiles, their Scenarios, the running Lab Session and Recordings, for bin/roxy and
 the scripts, which run it through proxy_cli (scripts/lib.sh) in the caller's folder. Needs
-ROXY_CONFIG_DIR and LAB_WEB_PORT, MITMWEB_PASSWORD for the Lab Session, and CAPTURES_ROOT
+ROXY_CONFIG_DIR and LAB_WEB_PORT, MITMWEB_PASSWORD for the Lab Session, and RECORDINGS_ROOT
 and LAB_SECRET for export, as proxy_cli passes them.
 
   cli.py app new NAME                    create App Profile NAME for the git repo of this folder
@@ -207,8 +207,8 @@ def redacted(value, secret):
 
 
 def newest_recording():
-    """The newest Recording in the Recordings root (lib.sh's CAPTURES_ROOT), in any profile's folder."""
-    root = Path(os.environ["CAPTURES_ROOT"])
+    """The newest Recording in the Recordings root (lib.sh's RECORDINGS_ROOT), in any profile's folder."""
+    root = Path(os.environ["RECORDINGS_ROOT"])
     recordings = list(root.glob("*/*.mitm"))
     if not recordings:
         raise ExportRefused(f"no Recordings in {root} (roxy start records one)")

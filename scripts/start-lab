@@ -14,7 +14,7 @@
 #   record get a 404 and never reach their Origin.
 # Settings and secrets come from the settings root (scripts/lib.sh); missing ones
 # stop the start, all named at once. Every Lab Session is saved as a Recording in the
-# user data directory (CAPTURES_DIR in scripts/lib.sh, by scripts/run-mitmweb).
+# user data directory (RECORDINGS_DIR in scripts/lib.sh, by scripts/run-mitmweb).
 set -euo pipefail
 . "$(dirname "$0")/lib.sh"
 

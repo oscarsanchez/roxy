@@ -45,11 +45,10 @@ if [ -n "$ip" ]; then  # Physical Device: ECP on the LAN
   for param in "${params[@]}"; do
     query="$query&$(uri_encode "${param%%=*}")=$(uri_encode "${param#*=}")"
   done
-  ecp_post() { curl -sS --fail -o /dev/null -X POST -d '' "http://$ip:8060/$1"; }
   # Best effort, quiet: ECP set to limited refuses exit-app (403), yet launch/dev still
   # restarts a running dev channel (seen on OS 16.0.4); a real fault resurfaces in launch_dev.
-  exit_app() { ecp_post exit-app/dev 2>/dev/null; }
-  launch_dev() { ecp_post "launch/dev?$query"; }
+  exit_app() { ecp_post "$ip" exit-app/dev 2>/dev/null; }
+  launch_dev() { ecp_post "$ip" "launch/dev?$query"; }
 elif [ -n "$rce_name" ]; then  # Cloud Device: ECP through the rce CLI, which encodes the params
   proxy_base="${proxy_base:-$(require_public_proxy_base)}"
   slug="$(device_field "$device" slug)"
