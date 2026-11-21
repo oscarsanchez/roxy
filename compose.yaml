@@ -23,7 +23,7 @@ services:
     environment:
       ROXY_CONFIG_DIR: /lab/settings
       XDG_DATA_HOME: /lab/data
-      LAB_REPLAY: ${LAB_REPLAY:-}  # replay mode: a saved session, relative to the saved-session folder
+      LAB_REPLAY: ${LAB_REPLAY:-}  # replay mode: a Recording, relative to the Recordings folder
       LAB_LOCAL_HOST: 0.0.0.0      # the ports below keep the UI and tunnel listener local
       # Docker Desktop's host address replaces the LAN subnets: on macOS every published-port
       # client arrives from 192.168.65.1 (README, Docker Compose).

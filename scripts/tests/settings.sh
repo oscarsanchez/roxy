@@ -86,7 +86,7 @@ out="$("$SCRIPTS/start-lab" 2>&1)" || fail "start-lab with every setting: $out"
 [ -e "$UV_LOG" ] || fail "mitmweb did not start: $out"
 session="$(sed -n 's/^save_stream_file=//p' "$UV_LOG")"
 case "$session" in "$XDG_DATA_HOME/roxy/captures/no-profile/"*.mitm) ;; *) fail "the session is saved to $session" ;; esac
-[ -d "$(dirname "$session")" ] || fail "the saved-session folder $(dirname "$session") does not exist"
+[ -d "$(dirname "$session")" ] || fail "the Recordings folder $(dirname "$session") does not exist"
 grep -qx 'web_password=test-password' "$UV_LOG" || fail "mitmweb did not get the password from secrets.env"
 echo "ok: a session is saved in the user data directory"
 

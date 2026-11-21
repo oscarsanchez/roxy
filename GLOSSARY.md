@@ -73,3 +73,7 @@ _Avoid_: app config, app settings
 **Lab Session**:
 One run of the lab, from the moment it starts until it stops. It loads at most one App Profile and has an ordered set of active Scenarios (possibly none); switching App Profile means a new Lab Session.
 _Avoid_: lab instance, proxy session
+
+**Recording**:
+The flows of one Lab Session, saved as it runs: what replay answers from and what export reads.
+_Avoid_: capture, saved session, HAR

@@ -1,7 +1,7 @@
-"""Recording and replay: a saved session gives the Lab App the same Origin responses again.
+"""Recording and replay: a Recording gives the Lab App the same Origin responses again.
 
 start-lab saves every session (mitmproxy's save_stream_file) and, in replay
-mode, serves a saved session with mitmproxy's server replay. These tests run
+mode, serves a Recording with mitmproxy's server replay. These tests run
 those built-ins after the lab chain, as mitmweb does.
 """
 

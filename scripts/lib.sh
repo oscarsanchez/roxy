@@ -8,7 +8,7 @@ export ROXY_CONFIG_DIR="${ROXY_CONFIG_DIR:-${XDG_CONFIG_HOME:-$HOME/.config}/rox
 SECRETS_FILE="$ROXY_CONFIG_DIR/secrets.env"
 DEVICES_FILE="$ROXY_CONFIG_DIR/devices.json"
 SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
-# Saved sessions: the user data directory, in the loaded App Profile's folder (LAB_APP, which
+# Recordings: the user data directory, in the loaded App Profile's folder (LAB_APP, which
 # scripts/start-lab exports), or the one for sessions without a profile.
 CAPTURES_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures/${LAB_APP:-no-profile}"
 

@@ -22,13 +22,14 @@ The roxy lab from any terminal. roxy <subcommand> --help describes one.
 EOF
     ;;
     start) cat <<'EOF'
-usage: roxy start [--app NAME] [--tunnel] [--ca-routing] [--replay SESSION]
+usage: roxy start [--app NAME] [--tunnel] [--ca-routing] [--replay RECORDING]
 Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI and the Proxy Bases.
   --app NAME        load the App Profile NAME; without it, the profile whose repo holds
                     the current folder, if any (roxy app list)
   --tunnel          also open the Public Endpoint, for Cloud Devices
   --ca-routing      also listen on ports 443 and 80 for CA Routing
-  --replay SESSION  answer from a saved session (.mitm) instead of the Origins
+  --replay RECORDING
+                    answer from a Recording (.mitm) instead of the Origins
 EOF
     ;;
     status) cat <<'EOF'

@@ -173,7 +173,7 @@ class Lab:
         return self
 
     def __exit__(self, *exc):
-        # As mitmweb does on shutdown: closes the saved session, and unhooks the
+        # As mitmweb does on shutdown: closes the Recording, and unhooks the
         # master's log handler, which would outlive this Lab's event loop.
         self._context.master.event_loop.run_until_complete(self._context.master.done())
         self._context.__exit__(*exc)

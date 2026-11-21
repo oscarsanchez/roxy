@@ -33,7 +33,7 @@ class TargetDevice(NamedTuple):
 
 def target_device(flow):
     """The TargetDevice that sent the flow; None if the lab has not seen its request."""
-    device = flow.metadata.get("lab_target_device")  # plain values: saved sessions keep it
+    device = flow.metadata.get("lab_target_device")  # plain values: Recordings keep it
     return device and TargetDevice(**device)
 
 

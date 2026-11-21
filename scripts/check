@@ -33,7 +33,7 @@ scripts/tests/lab-lock.sh >/dev/null
 step "Cloud Device scripts (fake rce)"
 scripts/tests/rce-scripts.sh >/dev/null
 
-step "settings and saved sessions (fake mitmweb)"
+step "settings and Recordings (fake mitmweb)"
 scripts/tests/settings.sh >/dev/null
 
 step "roxy CLI and install (fake curl and rce)"

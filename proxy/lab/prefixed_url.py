@@ -67,7 +67,7 @@ def device_slug(proxy_base):
 def remember_client(flow, parsed):
     """Keep the Proxy Base and separator of the PrefixedUrl `parsed` that `flow` arrived as.
 
-    Plain strings in flow.metadata, under keys saved sessions already hold.
+    Plain strings in flow.metadata, under keys Recordings already hold.
     """
     flow.metadata["proxy_base"] = parsed.proxy_base
     flow.metadata["separator"] = parsed.separator

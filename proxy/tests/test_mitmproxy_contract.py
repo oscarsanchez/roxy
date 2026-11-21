@@ -42,7 +42,7 @@ def lab_port(tmp_path):
     """The lab in mitmdump on a free loopback port, with the slow mock Scenario active.
 
     Its flags are scripts/run-mitmweb's that the lab's behaviour depends on (its other
-    flags are mitmweb's UI, its fixed ports and the saved session). The settings root is
+    flags are mitmweb's UI, its fixed ports and the Recording). The settings root is
     the test's temp one (conftest.py); the client is this Mac, so its LAN subnet is loopback.
     """
     scenarios = tmp_path / "scenarios"

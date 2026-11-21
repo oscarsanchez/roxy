@@ -75,7 +75,7 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 ```sh
 roxy start                           # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
 roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<LAB_SECRET>
-roxy start --replay <session>.mitm   # answer from a saved session (see Recording and replay)
+roxy start --replay <recording>.mitm   # answer from a Recording (see Recording and replay)
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
 roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios and their rules
@@ -233,12 +233,12 @@ docker compose up                       # LAN listeners on :8080 and :8888, mitm
 docker compose --profile tunnel up      # plus the quick tunnel, for Cloud Devices
 curl -s 127.0.0.1:20241/quicktunnel     # the tunnel's hostname: public Proxy Base https://<hostname>/<LAB_SECRET>
 docker compose --profile tunnel down    # stops both, closing the Public Endpoint
-LAB_REPLAY=<session>.mitm docker compose up    # replay (path relative to the saved-session folder)
+LAB_REPLAY=<recording>.mitm docker compose up    # replay (path relative to the Recordings folder)
 ```
 
 - `scripts/deploy` and `roxy launch` work as above with the LAN Proxy Base `http://<this machine's LAN IP>:8080`. The grid runner does not run under Compose.
 - Docker Desktop (macOS) hides the client IP: every LAN client shows as `192.168.65.1`. `compose.yaml` therefore sets `LAB_LAN_SUBNETS` (read by `scripts/run-mitmweb`, replacing `lan_subnets`) to `192.168.65.1/32`; the native lab's `lan_subnets` does not include it. The tradeoff: under Compose on macOS the LAN subnet guard lets in whatever can reach port 8080, and Physical Devices get no name. On Linux the real client IP shows: run `LAB_LAN_SUBNETS="<your LAN subnets>" docker compose up` instead.
-- Linux: the container runs as uid 1000, so the saved-session folder must be writable by it.
+- Linux: the container runs as uid 1000, so the Recordings folder must be writable by it.
 - cloudflared dials the unpublished tunnel listener (`mitmweb:8082`) over the Compose network, so a LAN client cannot pass for the tunnel. CA Routing is not wired into Compose.
 
 ## Reference
@@ -349,7 +349,7 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 
 ### Recording and replay
 
-Every session is saved in the saved-session folder, `~/.local/share/roxy/captures/<App Profile or no-profile>/<start time>.mitm`; open one with `mitmweb -r <file>`. With `--replay` (or `LAB_REPLAY` under Compose):
+Every Lab Session is saved as a Recording in the Recordings folder, `~/.local/share/roxy/captures/<App Profile or no-profile>/<start time>.mitm`; open one with `mitmweb -r <file>`. With `--replay` (or `LAB_REPLAY` under Compose):
 
 - A recorded request gets its recorded response every time; the Origin is not contacted. Replay is offline: an unrecorded request gets an empty 404 from the lab (`server_replay_extra=404`) and never reaches its Origin.
 - Matching uses the Origin URL, so a session recorded from one Target Device replays to another; replayed URLs get the replaying client's Proxy Base.
@@ -385,7 +385,7 @@ One person or agent at a time drives the Target Devices. `scripts/deploy`, `scri
 ### Tests
 
 ```sh
-scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and saved sessions against a fake mitmweb, the roxy CLI and install.sh against fake curl and rce in a temp HOME, the kit's example builds with and without its constant, compose config, the glossary lint and the test-import rule
+scripts/check                 # every check below, plus shell syntax, the lab lock, deploy and launch against a fake rce, settings and Recordings against a fake mitmweb, the roxy CLI and install.sh against fake curl and rce in a temp HOME, the kit's example builds with and without its constant, compose config, the glossary lint and the test-import rule
 cd proxy && uv run pytest     # Seam A: the full addon chain, no network
 cd grid && uv run pytest      # grid verdict logic, its settings, batches, and its Cloud Device side against a fake rce; no devices
 ```
