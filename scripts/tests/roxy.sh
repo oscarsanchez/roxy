@@ -137,13 +137,14 @@ case "$out" in *"lab: down"*) ;; *) fail "status with the lab down said: $out" ;
 echo "ok: status says when the lab is down"
 
 # status: the lab up (signed in) reports the Proxy IP, the Proxy Bases and the active Scenarios,
-# each with its rules and the flows each acted on (none: the fake mitmweb has no flows).
+# each with its rules and the flows each acted on (none: the fake mitmweb has no flows). The
+# public Proxy Base shows its secret segment as <secret>: the secret is nowhere in the output.
 out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503,hls-404 "$ROXY" status)" \
   || fail "status with the lab up exited non-zero: $out"
 want="lab: up (mitmweb UI http://127.0.0.1:$MITMWEB_PORT)
 Proxy IP:          192.0.2.10  (for an app's debug proxy setting)
 LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888  (each takes the / and /; forms)
-Public Proxy Base: https://tunnel.example/test-secret
+Public Proxy Base: https://tunnel.example/<secret>
 App Profile:       none
 Scenarios:         json-503  (lab)
                      httpbin json fails  0 flows  (acted on nothing yet)
@@ -153,6 +154,11 @@ Scenarios:         json-503  (lab)
 $out
 not:
 $want"
+out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" "" "$ROXY" status --show-secret)" || fail "status --show-secret: $out"
+case "$out" in *"Public Proxy Base: https://tunnel.example/test-secret"$'\n'*) ;; *) fail "status --show-secret does not show the secret:
+$out" ;; esac
+out="$("$ROXY" status --help)"
+case "$out" in *"--show-secret"*"secret"*) ;; *) fail "status --help does not describe --show-secret: $out" ;; esac
 out="$(lab_up "" "" "$ROXY" status)" || fail "status without a tunnel or Scenario exited non-zero: $out"
 for want in "Public Proxy Base: none" "Scenarios:         none"; do
   case "$out" in *"$want"*) ;; *) fail "status without a tunnel or Scenario lacks '$want':
@@ -162,7 +168,7 @@ out="$(lab_up "" json-503 "$ROXY" status --since 176363286012345)" || fail "stat
 case "$out" in *"httpbin json fails  0 flows"*) ;; *) fail "status --since a run id lacks the rule: $out" ;; esac
 if err="$(lab_up "" "" "$ROXY" status --since yesterday 2>&1)"; then fail "status took --since yesterday"; fi
 case "$err" in *"--since"*"yesterday"*) ;; *) fail "status --since yesterday said: $err" ;; esac
-echo "ok: status reports the Proxy IP, the Proxy Bases and the Scenarios in order, with their rules"
+echo "ok: status reports the Proxy IP, the Proxy Bases (the secret only with --show-secret) and the Scenarios in order, with their rules"
 
 # status --json: the lab down says so on stderr; the lab up prints its state as one JSON object.
 if err="$("$ROXY" status --json 2>&1 >/dev/null)"; then fail "status --json exited 0 with the lab down"; fi
@@ -170,7 +176,9 @@ case "$err" in *"lab: down"*) ;; *) fail "status --json with the lab down said: 
 # App Profile app-x, with no Scenarios of its own: the active ones are the lab's.
 mkdir -p "$ROXY_CONFIG_DIR/apps/app-x/scenarios"
 echo '{"repo": "/repos/example", "origin_allowlist": []}' > "$ROXY_CONFIG_DIR/apps/app-x/profile.json"
-out="$(lab_up app-x json-503,hls-404 "$ROXY" status --json)" || fail "status --json with the lab up: $out"
+# With a tunnel up: the object holds no secret (compared whole below).
+out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up app-x json-503,hls-404 "$ROXY" status --json)" \
+  || fail "status --json with the lab up: $out"
 rm -r "$ROXY_CONFIG_DIR/apps/app-x"
 want="{\"app\": \"app-x\", \"scenarios\": [\"json-503\", \"hls-404\"], \"ca_routing\": false, \"scenarios_dir\": \"$LAB_SCENARIOS\", \"rules\": [{\"scenario\": \"json-503\", \"rule\": \"httpbin json fails\", \"flows\": 0}, {\"scenario\": \"hls-404\", \"rule\": \"mux master playlist missing\", \"flows\": 0}]}"
 [ "$out" = "$want" ] || fail "status --json with the lab up said:
@@ -239,10 +247,13 @@ grep -q '/launch/dev?' "$CURL_LOG.urls" || fail "launch on a device with limited
 case "$out" in *"curl:"*) fail "launch printed curl's refused exit-app: $out" ;; esac
 echo "ok: launch on a device with limited ECP launches quietly"
 
-# launch on a Cloud Device: through rce, with the running tunnel's public Proxy Base plus the slug.
+# launch on a Cloud Device: through rce, with the running tunnel's public Proxy Base plus the
+# slug. What it prints (here with a Scenario set first) never holds the secret.
 : > "$RCE_LOG"
-out="$(FAKE_TUNNEL_HOST=tunnel.example "$ROXY" launch "Cloud Device" case=json_get 'separator=/;')" \
-  || fail "launch on a Cloud Device: $out"
+out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" "" "$ROXY" launch --scenario json-503 "Cloud Device" \
+  case=json_get 'separator=/;' 2>&1)" || fail "launch on a Cloud Device: $out"
+case "$out" in *test-secret*) fail "launch on a Cloud Device printed the secret:
+$out" ;; esac
 run="$(sed -n 's/^run=//p' <<< "$out")"
 want="$(printf '%q ' launch player --param "proxyBase=https://tunnel.example/test-secret/cloud-device" \
   --param case=json_get --param 'separator=/;' --param "run=$run")"
@@ -294,6 +305,18 @@ out="$(start_in "$repo_a/src/nested")" || fail "start in app-a's repo: $out"
 [ "$(started_app)" = app-a ] || fail "start in a folder of app-a's repo loaded '$(started_app)'"
 case "$out" in *"App Profile:       app-a  ($root_a)"*) ;; *) fail "start in app-a's repo does not say so: $out" ;; esac
 echo "ok: start loads the current repo's App Profile"
+
+# start --tunnel prints the public Proxy Base with its secret segment as <secret>: the secret
+# is nowhere in what it prints. A fake cloudflared stands in for the tunnel (its log, empty,
+# still goes to out/cloudflared.log).
+printf '#!/usr/bin/env bash\n' > "$TMP/bin/cloudflared"
+chmod +x "$TMP/bin/cloudflared"
+out="$(FAKE_TUNNEL_HOST=tunnel.example start_in "$TMP" --tunnel)" || fail "start --tunnel: $out"
+case "$out" in *"Public Proxy Base: https://tunnel.example/<secret>  "*) ;; *) fail "start --tunnel lacks the public Proxy Base:
+$out" ;; esac
+case "$out" in *test-secret*) fail "start --tunnel printed the secret:
+$out" ;; esac
+echo "ok: start --tunnel prints the public Proxy Base without its secret"
 
 # The session is saved in the user data directory, under the loaded App Profile's name.
 saved="$(ls "$XDG_DATA_HOME/roxy/captures/app-a/"*.mitm 2>/dev/null)" || true

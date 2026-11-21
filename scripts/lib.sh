@@ -182,6 +182,12 @@ public_proxy_base() {
   echo "https://$host/$LAB_SECRET"
 }
 
+# redact_secret TEXT : TEXT with LAB_SECRET shown as <secret>, for what roxy prints: the
+# secret reaches Cloud Devices, never a terminal (roxy status --show-secret aside). Needs load_env.
+redact_secret() {
+  if [ -n "${LAB_SECRET:-}" ]; then echo "${1//"$LAB_SECRET"/<secret>}"; else echo "$1"; fi
+}
+
 # require_public_proxy_base : public_proxy_base, loading secrets.env; fails saying how to
 # start the tunnel when none is up.
 require_public_proxy_base() {

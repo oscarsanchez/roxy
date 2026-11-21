@@ -34,11 +34,12 @@ Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI and the Pro
 EOF
     ;;
     status) cat <<'EOF'
-usage: roxy status [--json] [--since RUN|TIME]
+usage: roxy status [--json] [--since RUN|TIME] [--show-secret]
 Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
 and the active Scenarios in order, each with its source and its rules, with how many
 flows each rule acted on: a rule that acted on none is flagged. Exits 1 when the lab
-is down. After a roxy launch, check roxy status --since <run>.
+is down. After a roxy launch, check roxy status --since <run>. The public Proxy Base
+shows its secret segment as <secret>.
   --json            the running lab's state as one JSON object, for tools: its App
                     Profile (app, null for none), its active Scenarios in order
                     (scenarios), whether it is in CA Routing (ca_routing), the folder of
@@ -46,6 +47,8 @@ is down. After a roxy launch, check roxy status --since <run>.
                     Scenario then file order (rules: [{"scenario", "rule", "flows"}])
   --since RUN|TIME  count only flows since a roxy launch run id, or a time like
                     2026-11-20T10:00:00Z
+  --show-secret     print the real public Proxy Base, to paste into a Cloud Device by
+                    hand: the output then holds the lab's secret
 EOF
     ;;
     scenario) cat <<'EOF'
@@ -117,14 +120,19 @@ EOF
 }
 
 # status [options] : the lab, App Profile and Scenario lines from the Lab Session
-# (proxy/cli.py, which checks the options), with the Proxy IP and Proxy Bases lines after
-# the first.
+# (proxy/cli.py, which checks the other options), with the Proxy IP and Proxy Bases lines
+# after the first; --show-secret keeps the secret in the public Proxy Base.
 status() {
+  local lab public show_secret=false arg args=()
+  for arg in "$@"; do
+    if [ "$arg" = --show-secret ]; then show_secret=true; else args+=("$arg"); fi
+  done
+  set -- ${args[@]+"${args[@]}"}
   case " $* " in *" --json "*) proxy_cli status "$@"; return ;; esac
-  local lab public
   load_env
   lab="$(proxy_cli status "$@")" || { [ -z "$lab" ] || echo "$lab"; exit 1; }
   public="$(public_proxy_base)" || public="none (no tunnel; roxy start --tunnel)"
+  $show_secret || public="$(redact_secret "$public")"
   head -1 <<< "$lab"
   print_lan_addresses "$(lan_ip)"
   echo "Public Proxy Base: $public"

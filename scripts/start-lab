@@ -5,7 +5,7 @@
 #   current folder, if any (proxy/cli.py resolve); a Scenario in both the profile's and
 #   the lab's stops the start.
 #   --tunnel also opens a Cloudflare quick tunnel to the listener (the Public
-#   Endpoint, for Cloud Devices) and prints the public Proxy Base. Stopping the
+#   Endpoint, for Cloud Devices) and prints the public Proxy Base, its secret as <secret>. Stopping the
 #   lab (Ctrl-C) closes the tunnel too.
 #   --ca-routing also listens on ports 443 and 80 for CA Routing (phase 2,
 #   Physical Devices behind the CA Routing router; see README, CA Routing).
@@ -88,7 +88,7 @@ if $tunnel; then
     >"$tunnel_log" 2>&1 &
   pids="$pids $!"
   host="$(quick_tunnel_host)" || die "the quick tunnel did not come up (see $tunnel_log)"
-  echo "Public Proxy Base: https://$host/$LAB_SECRET  (Cloud Devices; scripts/launch adds the device slug; DNS can take a few seconds)"
+  echo "Public Proxy Base: $(redact_secret "https://$host/$LAB_SECRET")  (Cloud Devices; scripts/launch adds the device slug; roxy status --show-secret shows the secret; DNS can take a few seconds)"
 fi
 
 wait "$mitmweb_pid"
