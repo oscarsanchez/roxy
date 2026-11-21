@@ -15,7 +15,7 @@ from collections.abc import Sequence  # what mitmproxy's --set parser matches li
 from mitmproxy import ctx
 from mitmproxy.exceptions import OptionsError
 
-from lab.clients import ip_address, through_tunnel, tunnel_client_ip
+from lab.clients import from_rce_egress_ip, ip_address, rce_egress_ips, through_tunnel
 from lab.config import load_config, load_settings
 from lab.prefixed_url import client_proxy_base, secret_segment
 from lab.refusal import refuse
@@ -51,7 +51,6 @@ class Guards:
     def __init__(self, app_profile):
         self.app_profile = app_profile  # its allowlist joins the lab's own on the Public Endpoint
         self.lan_subnets = []
-        self.rce_egress_ips = set()
 
     def load(self, loader):
         loader.add_option(
@@ -83,13 +82,13 @@ class Guards:
                 raise OptionsError(f"lab_lan_subnets: {e}") from e
         if "lab_rce_egress_ips" in updated:
             try:
-                self.rce_egress_ips = {ip_address(ip) for ip in ctx.options.lab_rce_egress_ips}
+                rce_egress_ips()  # each must be an IP
             except ValueError as e:
                 raise OptionsError(f"lab_rce_egress_ips: {e}") from e
 
     def _client_allowed(self, flow):
         if through_tunnel(flow):
-            return tunnel_client_ip(flow) in self.rce_egress_ips
+            return from_rce_egress_ip(flow)
         client = ip_address(flow.client_conn.peername[0])
         return any(client in subnet for subnet in self.lan_subnets)
 

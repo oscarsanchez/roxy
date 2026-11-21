@@ -23,6 +23,7 @@ from mitmproxy import ctx, exceptions, flowfilter
 
 from lab.refusal import refused
 from lab.scenario_actions import ACTIONS
+from lab.target_devices import annotate
 
 DEFAULT_SCENARIOS_DIR = Path(__file__).resolve().parent.parent / "scenarios"
 
@@ -37,23 +38,6 @@ class Rule:
 def applied_rules(flow):
     """The Scenario rules that acted on this flow, as `<scenario>/<rule>`, in the order they first did."""
     return flow.metadata.get("lab_scenario_rules", [])
-
-
-def show_applied_rules(flow):
-    """Show in mitmweb the Scenario rules that acted on this flow: after its comment (the
-    device label), as `<device> | <scenario>/<rule>, ...`, and a marker unless it has one
-    (a refusal keeps its own)."""
-    applied = applied_rules(flow)
-    if not applied:
-        return
-    flow.metadata.setdefault("lab_comment_before_rules", flow.comment)
-    flow.comment = " | ".join(filter(None, [comment_before_rules(flow), ", ".join(applied)]))
-    flow.marked = flow.marked or ":test_tube:"
-
-
-def comment_before_rules(flow):
-    """The flow's comment without the rules show_applied_rules added: its device label."""
-    return flow.metadata.get("lab_comment_before_rules", flow.comment)
 
 
 def scenario_names(value):
@@ -179,8 +163,8 @@ class Scenarios:
     async def _dispatch(self, hook, flow):
         if not refused(flow):  # a guard's answer must stay visible
             await self._apply(hook, flow)
-        if hook != "before_guards":  # by now the device labels have named the flow
-            show_applied_rules(flow)
+        if hook != "before_guards":  # by now the flow has its Target Device
+            annotate(flow, applied_rules(flow))
 
     async def _apply(self, hook, flow):
         for scenario in self.active:

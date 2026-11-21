@@ -1,7 +1,8 @@
 """Seam A harness: run a flow through the full lab addon chain, as mitmweb does.
 
 Tests assert only on what reaches the Origin (the forwarded request) and what
-reaches the client (flow.response, and when its bytes arrived: Lab.received).
+reaches the client (flow.response, and when its bytes arrived: Lab.received),
+or on what the lab records on a flow for mitmweb and roxy flows (target_device).
 No network: Origin responses are fixtures.
 """
 
@@ -18,6 +19,7 @@ from mitmproxy.proxy.mode_specs import ProxyMode
 from mitmproxy.test import taddons, tflow, tutils
 
 from lab import addon_chain, clock, throttle
+from lab.target_devices import target_device  # noqa: F401 (for tests: the flow's Target Device)
 
 LAN_PROXY_BASE_HOST = "192.0.2.10:8080"
 LAN_PROXY_BASE = f"http://{LAN_PROXY_BASE_HOST}"

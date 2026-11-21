@@ -247,6 +247,14 @@ def test_a_flow_the_lab_refused_carries_its_refusal_reason(recorded_flows):
     assert (refused["device"], refused["status"], refused["refusal"]) == ("Bedroom", 403, "origin-address")
 
 
+def test_a_flow_from_a_client_nothing_names_has_no_device():
+    flow = lab_flow("/https://httpbin.org/json", peer=("192.0.2.10", 51000))  # the Mac's own curl
+    with Lab() as lab:
+        lab.run(flow, origin(b"{}"))
+
+    assert LabSession(FakeMitmweb([flow])).flows()[0]["device"] is None
+
+
 def test_a_filter_expression_keeps_only_the_flows_mitmweb_matches(recorded_flows):
     flows = LabSession(FakeMitmweb(recorded_flows)).flows(filter='~d httpbin.org & ~comment "Living Room"')
 

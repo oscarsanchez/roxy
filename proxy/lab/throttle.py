@@ -26,7 +26,7 @@ import math
 from mitmproxy import ctx
 
 from lab import clock
-from lab.clients import target_device
+from lab.target_devices import target_device
 
 TICK = 0.1  # seconds of bandwidth sent at a time
 
@@ -57,7 +57,7 @@ class Throttle:
             return
         writer = client_writer(flow)
         if writer is not None:
-            key = flow.id if self.per_request else target_device(flow)
+            key = flow.id if self.per_request else target_device(flow).key
             PacedWriter.take_over(writer, self.buckets, key, flow)
 
 

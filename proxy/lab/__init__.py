@@ -2,13 +2,13 @@
 
 from lab.app_profile import AppProfile
 from lab.body_rewriting import BodyRewriter
-from lab.device_labels import DeviceLabels
 from lab.guards import Guards
 from lab.origin_decoder import OriginDecoder
 from lab.refusal import KeepRefusals
 from lab.request_headers import RequestHeaderCleanup
 from lab.response_headers import ResponseHeaderRewriter
 from lab.scenarios import Scenarios, ScenariosBeforeGuards
+from lab.target_devices import TargetDevices
 
 
 def addon_chain():
@@ -20,7 +20,7 @@ def addon_chain():
         app_profile,  # first: the others read the loaded profile when they configure
         OriginDecoder(app_profile),
         ScenariosBeforeGuards(scenarios),  # Origin swaps (map_remote), judged by the guards
-        DeviceLabels(guards),  # before the guards: refused flows are labelled too
+        TargetDevices(),  # before the guards and the Scenarios' request actions
         guards,
         KeepRefusals(),  # before the response rewriters
         RequestHeaderCleanup(),
