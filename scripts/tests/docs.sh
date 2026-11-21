@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # scripts/check-docs on temp trees: relative links and #anchors resolve, a symlinked doc is
-# checked as its target, external URLs and code are skipped.
+# checked as its target, external URLs and code are skipped; the changelog has the plugin version.
 # Usage: scripts/tests/docs.sh   (run by scripts/check)
 set -euo pipefail
 CHECK_DOCS="$(cd "$(dirname "$0")/.." && pwd)/check-docs"
@@ -38,6 +38,9 @@ EOF
   ln -s ../docs "$t/skill/docs"
   ln -s ../README.md "$t/skill/README.md"
   printf '[Guide](docs/guide.md#step-one)\n' > "$t/skill/SKILL.md"
+  mkdir -p "$t/.claude-plugin"
+  printf '{"name": "lab", "version": "1.2.0"}\n' > "$t/.claude-plugin/plugin.json"
+  printf '# Changelog\n\n## [Unreleased]\n\n## [1.2.0] - 2026-01-01\n' > "$t/CHANGELOG.md"
   git -C "$t" init -q && git -C "$t" add -A
   echo "$t"
 }
@@ -69,3 +72,8 @@ t="$(tree broken-through-symlink)"
 printf '[Gone](docs/guide.md#gone)\n' >> "$t/skill/SKILL.md"
 expect_fail "$t" "skill/SKILL.md:2: broken anchor 'docs/guide.md#gone'"
 echo "ok: a link through a symlinked folder is checked"
+
+t="$(tree version-bump)"
+printf '{"name": "lab", "version": "1.3.0"}\n' > "$t/.claude-plugin/plugin.json"
+expect_fail "$t" "CHANGELOG.md: no '## [1.3.0]' section"
+echo "ok: a plugin version with no changelog section fails, naming the version"

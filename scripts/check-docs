@@ -1,12 +1,15 @@
 #!/usr/bin/env python3
-"""Fail on a relative link or #anchor that does not resolve, in tracked Markdown.
+"""Fail on a relative link or #anchor that does not resolve, in tracked Markdown,
+and on a plugin version with no CHANGELOG.md section.
 
 Usage: scripts/check-docs [ROOT]   (run by scripts/check; ROOT defaults to the repo, a git checkout)
 - Links: inline [text](target) and <a href="target">, outside code. External URLs (any scheme) are skipped.
 - A target resolves from the real file the link lives in: a symlinked doc is checked once, as its target.
 - Anchors: GitHub heading slugs (duplicates get -1, -2...) and <a id/name="..."> in the target file.
+- Version: .claude-plugin/plugin.json's "version" is the one source; CHANGELOG.md needs "## [<version>]".
 """
 
+import json
 import re
 import subprocess
 import sys
@@ -54,7 +57,7 @@ def anchors(path: Path, cache: dict) -> set:
     return cache[path]
 
 
-def check(root: Path) -> list:
+def check_links(root: Path) -> list:
     files = subprocess.run(["git", "ls-files", "*.md"], cwd=root, check=True, stdout=subprocess.PIPE, text=True).stdout
     problems, cache = [], {}
     for name in files.splitlines():
@@ -75,9 +78,19 @@ def check(root: Path) -> list:
     return problems
 
 
+def check_changelog(root: Path) -> list:
+    version = json.loads((root / ".claude-plugin" / "plugin.json").read_text())["version"]
+    changelog = root / "CHANGELOG.md"
+    text = changelog.read_text(encoding="utf-8") if changelog.is_file() else ""
+    if not re.search(rf"^## \[{re.escape(version)}\]", text, re.M):
+        return [f"CHANGELOG.md: no '## [{version}]' section for .claude-plugin/plugin.json's version"]
+    return []
+
+
 def main() -> int:
     root = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parent.parent
-    problems = check(root.resolve())
+    root = root.resolve()
+    problems = check_links(root) + check_changelog(root)
     for p in problems:
         print(p, file=sys.stderr)
     return 1 if problems else 0

@@ -81,7 +81,7 @@ step_glossary() {
 }
 
 step_docs() {
-  echo "== docs: links and anchors in the Markdown"
+  echo "== docs: links and anchors in the Markdown, the changelog has the plugin version"
   scripts/tests/docs.sh >/dev/null
   (cd proxy && uv run --quiet python ../scripts/check-docs)
 }

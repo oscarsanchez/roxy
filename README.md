@@ -2,7 +2,7 @@
 
 A mitmproxy/mitmweb lab on your Mac for inspecting and manipulating the traffic of Roku apps, on Physical Devices and on Roku Cloud Emulator (Cloud Devices). The app calls Prefixed URLs (`<Proxy Base>/<Origin URL>`), so no device proxy setting or CA is needed.
 
-Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](CODING_STANDARDS.md).
+Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](CODING_STANDARDS.md). Changes: [CHANGELOG.md](CHANGELOG.md).
 
 Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To report a security problem, see [SECURITY.md](SECURITY.md). Licence: [MIT](LICENSE).
 
