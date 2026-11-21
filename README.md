@@ -78,8 +78,9 @@ roxy start --tunnel                  # plus the Public Endpoint for Cloud Device
 roxy start --replay <session>.mitm   # answer from a saved session (see Recording and replay)
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
-roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios
-roxy status --json                   # for tools: {"app", "scenarios", "ca_routing", "scenarios_dir"}; the lab down: exit 1
+roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios and their rules
+roxy status --since <run>            # each active rule's flows since that launch only (see Scenarios)
+roxy status --json                   # for tools: {"app", "scenarios", "ca_routing", "scenarios_dir", "rules"}; the lab down: exit 1
 roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
 ```
 
@@ -132,7 +133,11 @@ roxy scenario clear                                     # none active
 roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then launch (repeat --scenario for several; '' clears them)
 ```
 
-Each prints the active Scenarios after the change (`scenario=json-503,image-404`); an unknown name is refused and leaves them as they were. Or edit `lab_scenario` in mitmweb's Options: the active names in order, comma-separated. Editing an active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
+Each prints the active Scenarios after the change (`scenario=json-503,image-404`); an unknown name is refused and leaves them as they were. Or edit `lab_scenario` in mitmweb's Options: the active names in order, comma-separated. Editing an active file reloads it on the next request; a broken edit is logged and the last good rules stay.
+
+A rule whose filter matches nothing fails silently: the check passes while the Manipulation never happened (the CDN moved hosts, a throttle matched no segment). After a launch, check `roxy status --since <run>` (the `run=<id>` that `roxy launch` prints): under each active Scenario it lists every rule with the flows it acted on since then, and flags a rule that acted on none, such as `slow segments  0 flows  (acted on nothing yet)`. Without `--since` it counts every flow of the Lab Session. A Scenario file that no longer loads shows why instead of its rules. `roxy status --json` adds the same counts as `rules: [{"scenario", "rule", "flows"}]`, in Scenario then file order.
+
+Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
 
 In mitmweb, a flow a rule acted on is marked 🧪 (unless the lab refused it: ⛔) and its comment lists the rules after the Target Device's name, `Living Room | json-503/httpbin json fails`; filter `~comment json-503/` for one Scenario's flows.
 
