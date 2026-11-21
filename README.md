@@ -30,7 +30,7 @@ Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To repor
 mitmweb runs in mitmproxy's `reverse` mode. Its UI listens on `127.0.0.1` only, needs a password, and is never tunnelled. The lab's addons, in order:
 
 1. **Origin decoding**: recovers the Origin and the client's Proxy Base from the Prefixed URL path, or from Host/SNI in CA Routing.
-2. **Device labels**: names the Target Device that sent the flow.
+2. **Target Devices**: decides once which Target Device sent the flow: the throttle shares bandwidth per Target Device, and mitmweb and `roxy flows` show its name (see [Target Device names](#target-device-names)).
 3. **Guards**: refuse anything but an allowed client and a public Origin address, and on the Public Endpoint an allowlisted Origin host (see [Guards](#guards)).
 4. **Request header cleanup**: `Host` is the Origin's, `Referer` and `Origin` are decoded back, tunnel headers are stripped.
 5. **Response header and body rewriting**: URLs in headers and in HLS, DASH, VAST/XML and JSON bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests come back through the lab.
@@ -79,6 +79,7 @@ roxy start --replay <session>.mitm   # answer from a saved session (see Recordin
 roxy start --ca-routing              # also listens on 443/80 (see CA Routing)
 roxy start --app <name>              # load that App Profile; without --app, the one whose repo you are in, if any
 roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios
+roxy status --json                   # for tools: {"app", "scenarios", "ca_routing", "scenarios_dir"}; the lab down: exit 1
 roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see Flows for agents)
 ```
 
@@ -133,7 +134,7 @@ roxy launch --scenario json-503 "Living Room" case=json_get   # set it, then lau
 
 Each prints the active Scenarios after the change (`scenario=json-503,image-404`); an unknown name is refused and leaves them as they were. Or edit `lab_scenario` in mitmweb's Options: the active names in order, comma-separated. Editing an active file reloads it on the next request; a broken edit is logged and the last good rules stay. Shipped: `json-503`, `image-404`, `hls-404`, `dash-404`, `dash-absolute` (absolute `<BaseURL>`), `hls-lowest-variant`, `widevine-license-fail` (`state=error errorCode=-6 license=403`), `raf-ad-tag-drop` (`outcome=no_ads` for `raf` and `raf_vmap`; a status override alone is not enough, RAF reads a 503's VAST body).
 
-In mitmweb, a flow a rule acted on is marked 🧪 (unless the lab refused it: ⛔) and its comment lists the rules after the device label, `Living Room | json-503/httpbin json fails`; filter `~comment json-503/` for one Scenario's flows.
+In mitmweb, a flow a rule acted on is marked 🧪 (unless the lab refused it: ⛔) and its comment lists the rules after the Target Device's name, `Living Room | json-503/httpbin json fails`; filter `~comment json-503/` for one Scenario's flows.
 
 Each rule has a `name`, a mitmproxy `filter` expression and exactly one action. Every matching rule applies, in file order. Flows the lab refused itself are never touched.
 
@@ -206,10 +207,10 @@ A Cloud Device cell launches with the running tunnel's public Proxy Base, as `ro
 
 `--separator '/;'` runs the cell in the Charles-style form: the Lab App gets the `separator=/;` launch param and builds every Prefixed URL as `<Proxy Base>/;<Origin URL>`, and the row says `(/; form)`. The default `/` is the lab's own form. Quote `/;`: in a shell, `;` ends the command. CA Routing has no Prefixed URLs, so it takes no `--separator`. Outside the grid, `roxy launch "Living Room" case=hls 'separator=/;'` does the same.
 
-It fills one grid cell through the running native lab (`scripts/start-lab`, not Compose), on the Target Device that `grid_devices` in your `settings.json` names for that kind: it deploys the flavour, launches the case with the cell's Manipulation Scenario and then with none (so the lab ends with no Scenario), and prints one row: pass, fail or known-limit, with a reason. Each launch's console and flows are kept in `out/grid/` as evidence for the verdict. Cells live in `grid/cells.toml`: per traffic class, the case, the Scenario, the expected Origin hosts and the result fields that mean success. A Cloud Device cell prints the projected RCE time and cost (about 5.3 min, $0.018, start-up included) and asks before it touches RCE. It then starts the Cloud Device if it has no Run, reads its console with `rce console`, and stops it after the cell, also when the cell fails or on Ctrl-C or a kill (during the start too), then confirms with `rce device status` that the Run ended; a Run that was already going is left running.
+It fills one grid cell through the running native lab (`scripts/start-lab`, not Compose), on the Target Device that `grid_devices` in your `settings.json` names for that kind: it deploys the flavour, launches the case with the cell's Manipulation Scenario and then with none (so the lab ends with no Scenario), and prints one row: pass, fail or known-limit, with a reason. It reads the lab through `roxy status --json` (the lab must be this checkout's, and in CA Routing for a CA Routing cell) and, once each launch settles, `roxy flows --json --since <its run id>`, keeping the flows whose `device` is the cell's Target Device. Each launch's console and flows are kept in `out/grid/` as evidence for the verdict. Cells live in `grid/cells.toml`: per traffic class, the case, the Scenario, the expected Origin hosts and the result fields that mean success. A Cloud Device cell prints the projected RCE time and cost (about 5.3 min, $0.018, start-up included) and asks before it touches RCE. It then starts the Cloud Device if it has no Run, reads its console with `rce console`, and stops it after the cell, also when the cell fails or on Ctrl-C or a kill (during the start too), then confirms with `rce device status` that the Run ended; a Run that was already going is left running.
 
 - **Pass:** the run without a Scenario succeeded, every expected Origin host showed up in that run's flows from the Target Device, the lab refused nothing, and the Scenario changed the result line.
-- **Leaks** can only be inferred, since traffic that bypasses the lab never reaches mitmweb: an expected host is missing although the Lab App reports success, or the console prints an absolute URL that is not a Prefixed URL. A bypassing request to a host outside the expected hosts, one the result does not depend on (a beacon, a prefetch), and Roku OS traffic go unseen.
+- **Leaks** can only be inferred, since traffic that bypasses the lab never reaches it: an expected host is missing although the Lab App reports success, or the console prints an absolute URL that is not a Prefixed URL. A bypassing request to a host outside the expected hosts, one the result does not depend on (a beacon, a prefetch), and Roku OS traffic go unseen.
 - No result line before the timeout: rerun the cell (an RSG launch crash is possible). A `raf` or `raf_vmap` baseline of `no_ads` is a known flake of Google's sample ad server: rerun. If a run errors part-way, its Scenario stays active: clear it with `--scenario ''`.
 
 ### 7. Docker Compose
@@ -225,7 +226,7 @@ LAB_REPLAY=<session>.mitm docker compose up    # replay (path relative to the sa
 ```
 
 - `scripts/deploy` and `roxy launch` work as above with the LAN Proxy Base `http://<this machine's LAN IP>:8080`. The grid runner does not run under Compose.
-- Docker Desktop (macOS) hides the client IP: every LAN client shows as `192.168.65.1`. `compose.yaml` therefore sets `LAB_LAN_SUBNETS` (read by `scripts/run-mitmweb`, replacing `lan_subnets`) to `192.168.65.1/32`; the native lab's `lan_subnets` does not include it. The tradeoff: under Compose on macOS the LAN subnet guard lets in whatever can reach port 8080, and Physical Devices get no device label. On Linux the real client IP shows: run `LAB_LAN_SUBNETS="<your LAN subnets>" docker compose up` instead.
+- Docker Desktop (macOS) hides the client IP: every LAN client shows as `192.168.65.1`. `compose.yaml` therefore sets `LAB_LAN_SUBNETS` (read by `scripts/run-mitmweb`, replacing `lan_subnets`) to `192.168.65.1/32`; the native lab's `lan_subnets` does not include it. The tradeoff: under Compose on macOS the LAN subnet guard lets in whatever can reach port 8080, and Physical Devices get no name. On Linux the real client IP shows: run `LAB_LAN_SUBNETS="<your LAN subnets>" docker compose up` instead.
 - Linux: the container runs as uid 1000, so the saved-session folder must be writable by it.
 - cloudflared dials the unpublished tunnel listener (`mitmweb:8082`) over the Compose network, so a LAN client cannot pass for the tunnel. CA Routing is not wired into Compose.
 
@@ -278,9 +279,9 @@ URLs in response headers (Location, Content-Location, Link, Refresh) and bodies 
 - VAST / generic XML (`application/xml`, `text/xml`, `+xml`, `.xml`): every absolute http(s) URL in text, CDATA or attributes. Namespace names and schema locations are kept. A generic XML type yields to a format the URL extension names (a `.mpd` served as `text/xml` gets the DASH rewriter).
 - Text (`text/*`, `application/javascript`): every absolute http(s) URL in HTML, JS, plain text or any other text type no format above claims; root-relative and relative URLs are left alone. Off unless the loaded App Profile's `profile.json` has `"rewrite_text": true` (restart the lab after changing it), for an app whose pages or scripts name the URLs it fetches next. Binary bodies are never touched.
 
-### Device labels
+### Target Device names
 
-Each flow's comment names its Target Device (mitmweb comment column; filter `~comment "Living Room"`). A Physical Device is named by its `ip` in your `devices.json`. A Cloud Device is named by the device slug in its Proxy Base, `https://<tunnel-host>/<secret>/<slug>`: `roxy launch` appends the device's `slug` from `devices.json` to the public Proxy Base. A tunnel request without a known slug whose `CF-Connecting-IP` is an RCE egress IP is labelled `Cloud Device`. Other clients get no label.
+Each flow's comment names its Target Device (mitmweb comment column; filter `~comment "Living Room"`), and so does its `device` in `roxy flows --json`. A Physical Device is named by its `ip` in your `devices.json`. A Cloud Device is named by the device slug in its Proxy Base, `https://<tunnel-host>/<secret>/<slug>`: `roxy launch` appends the device's `slug` from `devices.json` to the public Proxy Base. A tunnel request without a known slug whose `CF-Connecting-IP` is an RCE egress IP is named `Cloud Device`. Other clients get no name.
 
 ### Agents
 
@@ -326,7 +327,7 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 | --- | --- |
 | `id` | mitmweb's flow id |
 | `time` | when the flow started, ISO 8601 UTC with milliseconds |
-| `device` | its device label (Device labels), `null` for none |
+| `device` | its Target Device's name (Target Device names), `null` for none |
 | `method` | the request method |
 | `url` | the Origin URL; for a request the lab could not decode (`not-prefixed`), the dummy reverse target |
 | `status` | the status the client got, `null` without a response (dropped, failed) |

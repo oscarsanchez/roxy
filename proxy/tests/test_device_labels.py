@@ -1,4 +1,4 @@
-"""Device labels: every flow in mitmweb names the Target Device that sent it."""
+"""Target Device names: every flow in mitmweb names the Target Device that sent it."""
 
 import json
 
