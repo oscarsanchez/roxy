@@ -66,6 +66,7 @@ def events(settings, tmp_path, monkeypatch):
         fake.chmod(0o755)
     monkeypatch.setattr(run_cell, "SCRIPTS", scripts)
     monkeypatch.setattr(run_cell, "REPO", tmp_path)
+    monkeypatch.setattr(run_cell, "ROXY", bin_dir / "roxy")
     monkeypatch.setenv("PATH", f"{bin_dir}{os.pathsep}{os.environ['PATH']}")
 
     # The Physical Devices' console: a loopback port that takes the connection and stays quiet.
@@ -119,8 +120,7 @@ def test_a_failing_cell_does_not_stop_the_rest_and_the_batch_ends_with_a_table(e
 
 def test_a_batch_of_known_limits_exits_0(events, monkeypatch, capfd):
     """Without result lines every cell fails; rsg's image and raf cells in CA Routing are known limits."""
-    roxy = run_cell.REPO / "bin" / "roxy"
-    roxy.write_text(roxy.read_text().replace('"ca_routing": false', '"ca_routing": true'))
+    run_cell.ROXY.write_text(run_cell.ROXY.read_text().replace('"ca_routing": false', '"ca_routing": true'))
     assert main(["rsg", "physical", "image,raf", "--ca-routing"]) == 0
     assert capfd.readouterr().out.endswith("0 pass, 2 known-limit, 0 fail\n")
     assert [e for e in events() if e[0] == "deploy"] == [

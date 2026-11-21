@@ -16,11 +16,12 @@ def lab_state(tmp_path, monkeypatch):
     state of this checkout's lab, not in CA Routing)."""
     (tmp_path / "bin").mkdir()
     monkeypatch.setattr(run_cell, "REPO", tmp_path)
+    monkeypatch.setattr(run_cell, "ROXY", tmp_path / "bin" / "roxy")
 
     def answer(**state):
         state = {"app": None, "scenarios": [], "ca_routing": False,
                  "scenarios_dir": str(tmp_path / "proxy" / "scenarios"), **state}
-        roxy = tmp_path / "bin" / "roxy"
+        roxy = run_cell.ROXY
         roxy.write_text(f"#!/usr/bin/env bash\n[ \"$*\" = 'status --json' ] && echo '{json.dumps(state)}'\n")
         roxy.chmod(0o755)
 

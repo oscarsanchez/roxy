@@ -36,6 +36,7 @@ from verdict import (
 GRID = Path(__file__).resolve().parent
 REPO = GRID.parent
 SCRIPTS = REPO / "scripts"
+ROXY = REPO / "bin" / "roxy"
 CONSOLE_PORT = 8085  # BrightScript console: print output of every thread, one client at a time
 LAUNCH_S = 5  # projected time of one scripts/launch call
 
@@ -57,7 +58,7 @@ def lab(snippet: str) -> str:
 def roxy(*args: str):
     """The running lab's answer to a roxy command, parsed from its JSON (the lab down: roxy
     says so, and the cell ends)."""
-    return json.loads(output([str(REPO / "bin" / "roxy"), *args]))
+    return json.loads(output([str(ROXY), *args]))
 
 
 def save_log(text: str, *parts: str) -> Path:
@@ -185,13 +186,13 @@ def confirm_ours(state: dict) -> None:
     ours = str(REPO / "proxy" / "scenarios")
     if state["scenarios_dir"] != ours:
         sys.exit(f"error: the running lab is not this checkout's (its scenarios: {state['scenarios_dir']}). "
-                 f"Start it from here: {REPO / 'bin' / 'roxy'} start")
+                 f"Start it from here: {ROXY} start")
 
 
 def confirm_ca_routing(state: dict) -> None:
     """Stop unless the running lab is in CA Routing: otherwise it refuses every Origin URL."""
     if not state["ca_routing"]:
-        sys.exit(f"error: the lab is not in CA Routing. Start it with {REPO / 'bin' / 'roxy'} start --ca-routing")
+        sys.exit(f"error: the lab is not in CA Routing. Start it with {ROXY} start --ca-routing")
 
 
 def confirm_rce_cost(config: dict, cells: list[Cell]) -> int:
