@@ -81,13 +81,12 @@ mitmweb_pid=$!
 pids="$mitmweb_pid"
 
 if $tunnel; then
-  mkdir -p "$REPO_ROOT/out"
-  tunnel_log="$REPO_ROOT/out/cloudflared.log"
+  mkdir -p "$(dirname "$CLOUDFLARED_LOG")"
   # The tunnel dials its own listener (loopback only): that is how the lab tells tunnel requests apart.
   cloudflared tunnel --no-autoupdate --metrics "$TUNNEL_METRICS" --url "http://127.0.0.1:$LAB_TUNNEL_PORT" \
-    >"$tunnel_log" 2>&1 &
+    >"$CLOUDFLARED_LOG" 2>&1 &
   pids="$pids $!"
-  host="$(quick_tunnel_host)" || die "the quick tunnel did not come up (see $tunnel_log)"
+  host="$(quick_tunnel_host)" || die "the quick tunnel did not come up (see $CLOUDFLARED_LOG)"
   echo "Public Proxy Base: $(redact_secret "https://$host/$LAB_SECRET")  (Cloud Devices; scripts/launch adds the device slug; roxy status --show-secret shows the secret; DNS can take a few seconds)"
 fi
 

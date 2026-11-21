@@ -307,11 +307,19 @@ case "$out" in *"App Profile:       app-a  ($root_a)"*) ;; *) fail "start in app
 echo "ok: start loads the current repo's App Profile"
 
 # start --tunnel prints the public Proxy Base with its secret segment as <secret>: the secret
-# is nowhere in what it prints. A fake cloudflared stands in for the tunnel (its log, empty,
-# still goes to out/cloudflared.log).
+# is nowhere in what it prints. A fake cloudflared stands in for the tunnel; its log goes to
+# CLOUDFLARED_LOG, never to the checkout's out/cloudflared.log (a live tunnel's log, which may
+# grow meanwhile but must not appear or shrink).
 printf '#!/usr/bin/env bash\n' > "$TMP/bin/cloudflared"
 chmod +x "$TMP/bin/cloudflared"
-out="$(FAKE_TUNNEL_HOST=tunnel.example start_in "$TMP" --tunnel)" || fail "start --tunnel: $out"
+checkout_log_size() { if [ -e "$REPO/out/cloudflared.log" ]; then wc -c < "$REPO/out/cloudflared.log"; else echo -1; fi; }
+before="$(checkout_log_size)"
+out="$(FAKE_TUNNEL_HOST=tunnel.example CLOUDFLARED_LOG="$TMP/cloudflared.log" start_in "$TMP" --tunnel)" \
+  || fail "start --tunnel: $out"
+after="$(checkout_log_size)"
+[ -e "$TMP/cloudflared.log" ] || fail "start --tunnel did not log to CLOUDFLARED_LOG"
+if [ "$before" -lt 0 ]; then [ "$after" -lt 0 ]; else [ "$after" -ge "$before" ]; fi \
+  || fail "start --tunnel touched the checkout's out/cloudflared.log (size $before, then $after)"
 case "$out" in *"Public Proxy Base: https://tunnel.example/<secret>  "*) ;; *) fail "start --tunnel lacks the public Proxy Base:
 $out" ;; esac
 case "$out" in *test-secret*) fail "start --tunnel printed the secret:

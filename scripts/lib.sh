@@ -21,6 +21,7 @@ LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reacha
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
 TUNNEL_METRICS="127.0.0.1:20241"  # cloudflared's local metrics server: readiness and the quick tunnel hostname
+CLOUDFLARED_LOG="${CLOUDFLARED_LOG:-$REPO_ROOT/out/cloudflared.log}"  # the tunnel's log; CLOUDFLARED_LOG overrides it (tests)
 
 LAB_LOCK_DIR="${LAB_LOCK_DIR:-$HOME/.cache/roxy/locks}"  # per user, shared by every checkout
 
