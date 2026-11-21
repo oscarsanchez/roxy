@@ -41,11 +41,24 @@ CONSOLE_PORT = 8085  # BrightScript console: print output of every thread, one c
 LAUNCH_S = 5  # projected time of one scripts/launch call
 
 
+class CellFailed(Exception):
+    """Something went wrong in one cell: it fails, with this reason, and the batch goes on."""
+
+
+class CommandFailed(SystemExit):
+    """A command failed, and said why on stderr. Inside a cell it fails that cell (fill);
+    outside one it ends the grid with the command's exit status."""
+
+    def __init__(self, command: list[str], returncode: int):
+        super().__init__(returncode)
+        self.reason = f"{' '.join([Path(command[0]).name, *command[1:2]])} failed (exit {returncode}, see above)"
+
+
 def output(command: list[str]) -> str:
-    """The command's output. Its error, which says what is wrong, ends the cell."""
+    """The command's output. Its error, which says what is wrong, raises CommandFailed."""
     done = subprocess.run(command, stdout=subprocess.PIPE, text=True)
     if done.returncode:
-        sys.exit(done.returncode)
+        raise CommandFailed(command, done.returncode)
     return done.stdout.strip()
 
 
@@ -241,16 +254,21 @@ def launch_once(session: Session, scenario: str) -> Run:
          f"case={cell.case}", f"separator={cell.separator}"],
         check=True, stdout=subprocess.PIPE, text=True,
     ).stdout
-    run_id = next(line[4:] for line in out.splitlines() if line.startswith("run="))
+    run_id = next((line[4:] for line in out.splitlines() if line.startswith("run=")), None)
+    if not run_id:
+        raise CellFailed("scripts/launch printed no run id")
 
     deadline = time.time() + config["run_timeout_s"]
-    result = None
-    while time.time() < deadline:
+    while True:
+        ended = console.ended  # read before the text: once ended, the text is whole
         text = console.text[mark:]
         result = result_line(text, cell.case, run_id)
-        if result or any(m in text for m in CRASH_MARKERS):
+        crashed = any(m in text for m in CRASH_MARKERS)
+        if result or crashed or ended or time.time() >= deadline:
             break
         time.sleep(0.5)
+    if ended and not (result or crashed):
+        raise CellFailed(f"{device}'s console closed before a result line")
     time.sleep(config["settle_s"])
     # Before the next launch: since this run id, the lab holds this run's flows only.
     flows = device_flows(roxy("flows", "--json", "--since", run_id), device)
@@ -351,12 +369,19 @@ def describe(cell: Cell, target: Target) -> str:
 
 def fill(session: Session) -> Verdict:
     """The cell's verdict from its two launches: with its scenario first, then without, so
-    the lab ends with no scenario active. A launch that fails fails the cell, not the batch."""
+    the lab ends with no scenario active. An error in either fails the cell, not the batch;
+    Ctrl-C (KeyboardInterrupt) still ends the batch."""
     try:
         manipulated = launch_once(session, session.cell.scenario)
         baseline = launch_once(session, "")
     except subprocess.CalledProcessError as error:
         return Verdict("fail", f"scripts/launch failed (exit {error.returncode}, see above)")
+    except CommandFailed as error:
+        return Verdict("fail", error.reason)
+    except CellFailed as error:
+        return Verdict("fail", str(error))
+    except Exception as error:  # anything else that goes wrong in the cell: its row names it
+        return Verdict("fail", f"{type(error).__name__}: {error}")
     return judge(session.cell, baseline, manipulated, session.proxy_base)
 
 

@@ -19,8 +19,12 @@ from run_cell import main
 FAKE_SCRIPT = """#!/usr/bin/env bash
 printf '%q ' "$(basename "$0")" "$@" >> "$EVENTS"; echo >> "$EVENTS"
 case "$(basename "$0") $*" in
+  launch*" case=${FAKE_LAUNCH_CLOSES_CONSOLE_ON:-none} "*) touch "$EVENTS.console-closed"; sleep 0.5 ;;
+esac
+case "$(basename "$0") $*" in
   launch*" case=${FAKE_LAUNCH_FAILS_ON:-none} "*) exit 3 ;;
   launch*" case=${FAKE_LAUNCH_INTERRUPTS_ON:-none} "*) kill -INT "$PPID"; sleep 1 ;;
+  launch*" case=${FAKE_LAUNCH_PRINTS_NO_RUN_ON:-none} "*) exit 0 ;;
 esac
 [ "$(basename "$0")" = launch ] || exit 0
 n=$(( $(cat "$EVENTS.runs" 2>/dev/null || echo 0) + 1 )); echo "$n" > "$EVENTS.runs"; echo "run=$n"
@@ -31,7 +35,7 @@ case "$1 $2" in
   "device status") echo "{\\"status\\": \\"$(cat "$EVENTS.rce" 2>/dev/null || echo "$FAKE_STATUS")\\"}" ;;
   "device start") echo running > "$EVENTS.rce" ;;
   "device stop") echo shutdown > "$EVENTS.rce" ;;
-  "console "*) exec sleep 30 ;;
+  "console "*) until [ -e "$EVENTS.console-closed" ]; do sleep 0.1; done ;;
 esac
 """
 
@@ -116,6 +120,38 @@ def test_a_failing_cell_does_not_stop_the_rest_and_the_batch_ends_with_a_table(e
         "with hls-404: no result line before the timeout |",
         "0 pass, 0 known-limit, 2 fail",
     ]
+
+
+def table_rows(out: str) -> list[str]:
+    """The rows of the batch's final table."""
+    return out[out.index("| --- |"):].splitlines()[1:-1]
+
+
+def test_a_failed_flows_read_fails_its_cell_and_the_batch_goes_on(events, capfd):
+    run_cell.ROXY.write_text(run_cell.ROXY.read_text().replace(
+        "|| echo '[]'", "|| { echo 'error: mitmweb refused the password' >&2; exit 1; }"))
+    assert main(["classic", "physical", "json,hls", "--proxy-base", "http://192.0.2.10:8080"]) == 1
+    assert [e[-2] for e in events() if e[0] == "launch"] == ["case=json_get", "case=hls"]
+    assert table_rows(capfd.readouterr().out) == [
+        "| classic | Physical Device | json | fail | roxy flows failed (exit 1, see above) |",
+        "| classic | Physical Device | hls | fail | roxy flows failed (exit 1, see above) |",
+    ]
+
+
+def test_any_other_error_in_a_cell_fails_it_with_the_error_and_the_batch_goes_on(events, capfd):
+    run_cell.ROXY.write_text(run_cell.ROXY.read_text().replace("|| echo '[]'", "|| echo 'not json'"))
+    assert main(["classic", "physical", "json,hls", "--proxy-base", "http://192.0.2.10:8080"]) == 1
+    assert [e[-2] for e in events() if e[0] == "launch"] == ["case=json_get", "case=hls"]
+    assert table_rows(capfd.readouterr().out)[1] == (
+        "| classic | Physical Device | hls | fail | JSONDecodeError: Expecting value: line 1 column 1 (char 0) |")
+
+
+def test_a_launch_that_prints_no_run_id_fails_its_cell_and_the_batch_goes_on(events, monkeypatch, capfd):
+    monkeypatch.setenv("FAKE_LAUNCH_PRINTS_NO_RUN_ON", "json_get")
+    assert main(["classic", "physical", "json,hls", "--proxy-base", "http://192.0.2.10:8080"]) == 1
+    assert [e[-2] for e in events() if e[0] == "launch"] == ["case=json_get", "case=hls", "case=hls"]
+    assert table_rows(capfd.readouterr().out)[0] == (
+        "| classic | Physical Device | json | fail | scripts/launch printed no run id |")
 
 
 def test_a_batch_of_known_limits_exits_0(events, monkeypatch, capfd):
@@ -218,6 +254,18 @@ def test_an_interrupt_ends_the_batch_after_stopping_the_run(events, answers, mon
     launches = [i for i, e in enumerate(log) if e[0] == "launch"]
     assert len(launches) == 1
     assert log[launches[0] + 1:] == [STATUS, STOP, STATUS]
+
+
+def test_a_console_that_closes_fails_the_cells_and_the_batch_goes_on(events, answers, monkeypatch, capfd):
+    monkeypatch.setenv("FAKE_LAUNCH_CLOSES_CONSOLE_ON", "json_get")
+    assert main(["classic", "cloud", "json,hls", "--proxy-base", "https://203.0.113.5/s3cret"]) == 1
+    log = events()
+    assert [e[-2] for e in log if e[0] == "launch"] == ["case=json_get", "case=hls"]
+    assert table_rows(capfd.readouterr().out) == [
+        "| classic | Cloud Device | json | fail | Cloud Device's console closed before a result line |",
+        "| classic | Cloud Device | hls | fail | Cloud Device's console closed before a result line |",
+    ]
+    assert log[-3:] == [STATUS, STOP, STATUS]
 
 
 def test_a_mixed_batch_runs_the_physical_cells_before_the_run(events, answers):

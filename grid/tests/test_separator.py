@@ -2,6 +2,7 @@
 `/` (the lab's own, the default) or `/;` (the Charles-style form)."""
 
 import shlex
+import threading
 
 import pytest
 
@@ -32,7 +33,7 @@ def launches(tmp_path, monkeypatch):
 
 
 def launch(cell: Cell) -> None:
-    console = Console(iter(()), lambda: None)
+    console = Console(iter(threading.Event().wait, True), lambda: None)  # open and quiet
     config = {"run_timeout_s": 0, "settle_s": 0}
     launch_once(Session("Den", cell, PROXY_BASE, console, config), "json-503")
 
