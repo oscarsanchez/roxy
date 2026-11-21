@@ -17,7 +17,7 @@ def addon_chain():
     guards = Guards(app_profile)
     scenarios = Scenarios(app_profile)
     return [
-        app_profile,  # first: the others read the loaded profile when they configure
+        app_profile,  # first: the others ask it about the loaded profile when they configure
         OriginDecoder(app_profile),
         ScenariosBeforeGuards(scenarios),  # Origin swaps (map_remote), judged by the guards
         TargetDevices(),  # before the guards and the Scenarios' request actions

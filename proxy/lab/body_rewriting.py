@@ -10,7 +10,8 @@ format has a mitmproxy option, lab_rewrite_<name> (e.g. lab_rewrite_json), that
 lists its content types, structured-syntax suffixes ("+json") and URL extensions.
 FORMATS holds the defaults.
 
-An opt-in format (text) is off unless the loaded App Profile turns it on (lab.app_profile).
+An opt-in format (text) is off unless the loaded App Profile turns it on (lab.app_profile's
+rewrites_text, False with no profile).
 """
 
 from collections.abc import Sequence  # what mitmproxy's --set parser matches list options by
@@ -116,7 +117,7 @@ def lab_link(flow):
 
 class BodyRewriter:
     def __init__(self, app_profile):
-        self.app_profile = app_profile  # its rewrite_text turns the opt-in formats on
+        self.app_profile = app_profile  # its rewrites_text turns the opt-in formats on
         self.by_content_type, self.by_extension = {}, {}
 
     def load(self, loader):
@@ -132,9 +133,7 @@ class BodyRewriter:
 
     def configure(self, updated):
         if "lab_app" in updated or any(body_format.option in updated for body_format in FORMATS):
-            profile = self.app_profile.profile
-            opted_in = profile is not None and profile.rewrite_text
-            formats = [f for f in FORMATS if not f.opt_in or opted_in]
+            formats = [f for f in FORMATS if not f.opt_in or self.app_profile.rewrites_text]
             self.by_content_type, self.by_extension = _format_tables(formats)
 
     def body_format_for(self, content_type, url):

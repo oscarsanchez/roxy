@@ -3,7 +3,8 @@
 A request is forwarded only if every guard passes; otherwise the lab answers
 it with a 403 and the failing guard's reason. Defaults come from
 config/guards.json and the user's settings (LAN subnets), and can be changed
-live as mitmproxy options.
+live as mitmproxy options. The loaded App Profile's allowlist (lab.app_profile,
+empty with none) joins the lab's own on the Public Endpoint.
 """
 
 import asyncio
@@ -94,8 +95,7 @@ class Guards:
 
     def _origin_allowlist(self):
         """The lab's own Public Endpoint allowlist, then the loaded App Profile's."""
-        profile = self.app_profile.profile
-        return [*ctx.options.lab_origin_allowlist, *(profile.origin_allowlist if profile else [])]
+        return [*ctx.options.lab_origin_allowlist, *self.app_profile.origin_allowlist]
 
     def _secret_given(self, flow):
         secret = ctx.options.lab_secret

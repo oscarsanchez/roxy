@@ -7,6 +7,7 @@ from Host, else SNI.
 A fallback Origin (the loaded App Profile's fallback_origin): a bare path on a LAN
 listener, which names no Origin, is taken as Prefixed with that Origin and the
 client's Proxy Base, in the "/;" form, when the profile's path regex matches it.
+lab.app_profile gives that Origin URL, or None (no profile, no fallback, no match).
 """
 
 from mitmproxy import ctx
@@ -51,9 +52,7 @@ class OriginDecoder:
 
     def _fallback_origin_url(self, flow):
         """The Origin URL the loaded App Profile's fallback Origin gives this bare path, or None."""
-        profile = self.app_profile.profile
-        fallback = profile and profile.fallback_origin
-        return fallback and fallback.origin_url(flow.request.path)
+        return self.app_profile.fallback_origin_url(flow.request.path)
 
     @staticmethod
     def _ca_routed_host(flow):
