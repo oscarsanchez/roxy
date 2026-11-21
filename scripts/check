@@ -14,7 +14,7 @@ cd "$REPO_ROOT"
 mkdir -p "$ROXY_CONFIG_DIR"
 cp -R settings.example/. "$ROXY_CONFIG_DIR"
 
-STEPS=(proxy grid syntax lock rce settings roxy kit compose glossary imports out steps)
+STEPS=(proxy grid syntax lock rce settings roxy kit kit-check compose glossary imports out steps)
 
 # step_NAME: one step; its first line is its header, == NAME: what it checks.
 step_proxy() {
@@ -59,6 +59,11 @@ step_roxy() {
 step_kit() {
   echo "== kit: kit builds (example apps, with and without the kit)"
   scripts/tests/kit-build.sh >/dev/null
+}
+
+step_kit-check() {
+  echo "== kit-check: the kit check on a Physical Device (fake device, deploy and roxy)"
+  scripts/tests/kit-check.sh >/dev/null
 }
 
 step_compose() {

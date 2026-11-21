@@ -1,0 +1,84 @@
+#!/usr/bin/env bash
+# Check the kit on a Physical Device through the running lab (Seam B): each kit example,
+# built with the kit (ROXY_KIT=1), launched with proxyBase and then without.
+#   With proxyBase (roxy launch): the app requests <LAN Proxy Base>/;https://httpbin.org/json,
+#   shows status=200, and the lab has the request's flow from the device.
+#   Without (a plain ECP launch): the app requests the Origin URL itself, shows status=200,
+#   and the lab has no flow of it from the device.
+# The oracles are the app's screen (ECP query/app-ui) and the lab's flows (roxy flows), not
+# the console, which replays recent history on connect.
+# Usage: scripts/kit-check <device-name>      e.g. scripts/kit-check "Living Room"
+#   Needs roxy start running. Prints each check; exits 1 if any did not match.
+set -euo pipefail
+. "$(dirname "$0")/lib.sh"
+
+[ $# -eq 1 ] || die "usage: scripts/kit-check <device-name>"
+device="$1"
+ip="$(device_field "$device" ip)"
+[ -n "$ip" ] || die "'$device' has no ip: the kit check is for Physical Devices"
+lab_lock devices  # deploy and roxy launch inherit it
+
+EXAMPLES="kit/example-classic kit/example-rsg"
+ORIGIN_URL="https://httpbin.org/json"
+SCREEN_TIMEOUT_S=40
+mismatches=0
+
+ecp_post() { curl -sS --fail -o /dev/null -X POST -d '' "http://$ip:8060/$1"; }
+
+# screen : the app's labels, one per line.
+screen() {
+  curl -sS --fail "http://$ip:8060/query/app-ui" | grep -oE 'text="[^"]*"' | sed -E 's/^text="(.*)"$/\1/'
+}
+
+# wait_screen URL : the screen once it shows the request of URL and a result, or as it is
+# after SCREEN_TIMEOUT_S.
+wait_screen() {
+  local shown=""
+  for _ in $(seq "$SCREEN_TIMEOUT_S"); do
+    shown="$(screen || true)"
+    if grep -qxF "GET $1" <<< "$shown" && grep -q '^status=' <<< "$shown"; then break; fi
+    sleep 1
+  done
+  echo "$shown"
+}
+
+# check WHAT TRUE-OR-FALSE : print the check; count a mismatch.
+check() {
+  if [ "$2" = true ]; then echo "  ok: $1"; else echo "  MISMATCH: $1"; mismatches=$((mismatches + 1)); fi
+}
+
+# expect URL SINCE FLOWS : the launch's screen shows the request of URL and status=200, and
+# the lab has FLOWS flows from the device to the Origin since SINCE (a run id or a time).
+# The screen shows the result only once the request is done, so its flow is in the lab.
+expect() {
+  local shown flows
+  shown="$(wait_screen "$1")"
+  echo "  screen: $(tr '\n' '|' <<< "$shown")"
+  check "the app requests $1" "$(grep -qxF "GET $1" <<< "$shown" && echo true || echo false)"
+  check "the app shows status=200" "$(grep -q '^status=200 ' <<< "$shown" && echo true || echo false)"
+  flows="$("$REPO_ROOT/bin/roxy" flows --json --since "$2" \
+    | jq --arg d "$device" --arg u "$ORIGIN_URL" '[.[] | select(.device == $d and .url == $u)] | length')"
+  check "$flows flows from $device to httpbin.org since $2 (expected $3)" "$([ "$flows" = "$3" ] && echo true || echo false)"
+}
+
+for example in $EXAMPLES; do
+  echo "== $example"
+  ROXY_KIT=1 "$REPO_ROOT/scripts/deploy" "$device" "$REPO_ROOT/$example"
+
+  echo "with proxyBase"
+  run="$("$REPO_ROOT/bin/roxy" launch "$device" | sed -n 's/^run=//p')"
+  expect "$(lan_proxy_base)/;$ORIGIN_URL" "$run" 1
+
+  echo "without proxyBase"
+  sleep 1  # the flows since the next second leave out the launch with proxyBase
+  since="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+  ecp_post exit-app/dev 2>/dev/null || true  # best effort, as scripts/launch does
+  ecp_post launch/dev || die "ECP launch on $device failed"
+  expect "$ORIGIN_URL" "$since" 0
+done
+
+if [ "$mismatches" -gt 0 ]; then
+  echo "$mismatches checks did not match"
+  exit 1
+fi
+echo "every check matched"

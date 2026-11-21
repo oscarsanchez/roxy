@@ -149,3 +149,5 @@ roxy launch "<device>"                                      # sends proxyBase=<L
 - With `proxyBase`, mitmweb shows `GET http://<proxy-ip>:8080/;https://httpbin.org/json`, and the app shows the URL and `status=200`.
 - Launched without it (`curl -d '' "http://<roku-ip>:8060/launch/dev"`), the request goes straight to httpbin.org: the app shows the Origin URL, and mitmweb shows no new flow.
 - Without `ROXY_KIT=1` the app is the release build: it never uses the lab, whatever the launch param.
+
+`scripts/kit-check "<device>"` runs both examples through these steps on a Physical Device and checks the app's screen and the lab's flows each time; it exits 1 on a mismatch.
