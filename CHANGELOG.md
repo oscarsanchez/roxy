@@ -7,6 +7,14 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 ### Added
 
 - `scripts/check docs`: every relative link and `#anchor` in the Markdown resolves, and this changelog has a section for the plugin's version.
+- `docs/troubleshooting.md`: symptom, cause and fix for every known failure, the `X-Lab-Blocked` refusals first.
+- `scripts/deploy --help`; `scripts/grid --help` lists every flavour, Target Device kind and traffic class.
+- GitHub issue forms: a bug report that asks for `roxy status --json` and warns against pasting secrets, Recordings or HAR files; security reports go to private reporting.
+
+### Changed
+
+- The README is a landing page with a one-path quickstart, starting with a Prefixed URL sent from the Mac; every other section moved to a page in `docs/`, indexed by kind in `docs/README.md`.
+- The `roxy` skill reaches `docs/` through one link and points to the new pages.
 
 ## [0.1.0] - 2026-11-22
 
