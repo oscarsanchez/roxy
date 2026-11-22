@@ -18,7 +18,7 @@ JSON_CELL = Cell(
 
 
 def flow(host, status=200, refusal=None, device="Living Room"):
-    """A flow as `roxy flows --json` sums it up (the README's Flows for agents), trimmed to
+    """A flow as `roxy flows --json` sums it up (docs/agent-setup.md, Flows for agents), trimmed to
     what the verdict reads."""
     return {"device": device, "url": f"https://{host}/x", "status": status, "refusal": refusal}
 

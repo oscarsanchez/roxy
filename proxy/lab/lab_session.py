@@ -134,7 +134,7 @@ class LabSession:
         return self.set_scenarios([other for other in active if other != name])
 
     def flows(self, filter=None, since=None, limit=None):
-        """The lab's flows, oldest first, each summed up in the shape the README documents
+        """The lab's flows, oldest first, each summed up in the shape docs/agent-setup.md documents
         (Flows for agents). FILTER: a mitmproxy filter expression, which mitmweb applies;
         then SINCE (Unix seconds, parse_since) drops older flows, and LIMIT keeps the last
         LIMIT. Read-only: it never holds or edits a flow."""

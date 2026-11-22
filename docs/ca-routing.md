@@ -73,7 +73,7 @@ scripts/deploy --ca-routing "<device>" apps/classic  # a Lab App's CA Routing bu
 roxy launch "<device>" case=json_get                 # the build ignores the Proxy Base
 ```
 
-- **The lab** (`--ca-routing`): a request that is not a Prefixed URL takes its Origin from `Host`, or from the TLS SNI without one. Every guard still applies, and Scenarios apply as usual. The lab adds no Proxy Base to these flows: URLs in headers and bodies stay Origin URLs, since DNS already brings them back. Without the flag a non-Prefixed request is refused with `not-prefixed`.
+- **The lab** (`--ca-routing`): a request that is not a Prefixed URL takes its Origin from `Host`, or from the TLS SNI without one. Every guard still applies, and Scenarios apply as usual. The lab adds no Proxy Base to these flows: URLs in headers and bodies stay Origin URLs, since DNS already brings them back. Without the flag a non-Prefixed request is refused with `not-prefixed`, unless the App Profile's [fallback Origin](settings.md#app-profiles) takes it; with the flag the fallback Origin never applies.
 - **Check the lab from the Mac**, with no router involved:
   ```
   curl --cacert ~/.mitmproxy/mitmproxy-ca-cert.pem --resolve api.example:443:192.0.2.10 https://api.example/
@@ -121,6 +121,7 @@ The kit (`docs/prefix-routing.md`, The kit) also covers CA Routing, behind the s
 - **RSG 2.0 Poster:** it uses the app's default agent, which the SDK cannot set, so a Poster image from a rewritten host fails TLS. Leave image hosts out of the rewrites, or use Prefix Routing for them.
 - **RSG 2.0 Ads:** the SDK's `<Ads>` task (`@roku-sdk/ads`) owns its RAF instance and exposes neither RAF setting, so the ad break cannot trust the lab's CA. Leave the ad hosts out of the rewrites to let ads play directly.
 - **RSG 2.0 roots** are the build's (certifi), not the device's, and age with the build.
+- The grid runner marks the cells these limits break as known-limit (`grid/cells.toml`, `known_limits`).
 - **Other apps and Roku OS** do not trust the lab's CA: rewrite only the hosts of the app you are working on, only for its Roku.
 - **Physical Devices only.** A Cloud Device's DNS cannot be pointed at your router; use Prefix Routing there.
 - **Docker Compose** does not wire CA Routing (see `compose.yaml`).

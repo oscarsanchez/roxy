@@ -9,7 +9,7 @@
 #   separator and class. Each flavour is deployed once per Target Device. It ends with a table
 #   of every cell's row and a count of each outcome. A failing cell does not stop it; Ctrl-C does.
 #   --ca-routing: the cells in CA Routing, on the Physical Device behind the CA Routing router
-#   (README, CA Routing); needs scripts/start-lab --ca-routing.
+#   (docs/ca-routing.md); needs scripts/start-lab --ca-routing.
 #   --separator '/;': the Lab App builds Charles-style Prefixed URLs (its separator launch
 #   param); the default / is the lab's own form; '/,/;' runs each cell in both. Quote it:
 #   ; ends a shell command.

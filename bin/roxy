@@ -79,7 +79,7 @@ EOF
     ;;
     flows) cat <<'EOF'
 usage: roxy flows --json [--filter EXPR] [--since RUN|TIME] [--limit N]
-The running lab's flows, oldest first, as one JSON array in the shape the README
+The running lab's flows, oldest first, as one JSON array in the shape docs/agent-setup.md
 documents (Flows for agents). Read-only: it never holds or edits a flow.
   --filter EXPR     only flows matching a mitmproxy filter expression, e.g. '~d example.com'
   --since RUN|TIME  only flows since a roxy launch run id, or a time like 2026-11-20T10:00:00Z

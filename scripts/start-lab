@@ -8,7 +8,7 @@
 #   Endpoint, for Cloud Devices) and prints the public Proxy Base, its secret as <secret>. Stopping the
 #   lab (Ctrl-C) closes the tunnel too.
 #   --ca-routing also listens on ports 443 and 80 for CA Routing
-#   (Physical Devices behind the CA Routing router; see README, CA Routing).
+#   (Physical Devices behind the CA Routing router; see docs/ca-routing.md).
 #   --replay RECORDING answers requests from a Recording (a .mitm file) with
 #   mitmproxy's server replay instead of asking the Origin; requests it did not
 #   record get a 404 and never reach their Origin.
@@ -68,7 +68,7 @@ else
   echo "App Profile:       none"
 fi
 if [ "$LAB_CA_ROUTING" = true ]; then
-  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $ip; point lab Origins here in DNS (README, CA Routing)"
+  echo "CA Routing:        ports $LAB_CA_ROUTING_PORTS on $ip; point lab Origins here in DNS (docs/ca-routing.md)"
 fi
 
 # mitmweb and the tunnel stop together, whichever way the lab stops.

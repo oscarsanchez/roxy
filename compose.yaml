@@ -26,7 +26,7 @@ services:
       LAB_REPLAY: ${LAB_REPLAY:-}  # replay mode: a Recording, relative to the Recordings folder
       LAB_LOCAL_HOST: 0.0.0.0      # the ports below keep the UI and tunnel listener local
       # Docker Desktop's host address replaces the LAN subnets: on macOS every published-port
-      # client arrives from 192.168.65.1 (README, Docker Compose).
+      # client arrives from 192.168.65.1 (docs/compose.md).
       LAB_LAN_SUBNETS: ${LAB_LAN_SUBNETS:-192.168.65.1/32}
       PYTHONUNBUFFERED: "1"        # mitmweb's log shows in `docker compose logs` as it happens
     ports:

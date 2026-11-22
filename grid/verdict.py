@@ -1,7 +1,7 @@
 """A grid cell's verdict from its two runs. Pure: no devices, no network.
 
 Oracles (spec, Testing Decisions, Seam B): the lab's recorded flows, as `roxy flows --json`
-sums them up (README, Flows for agents), and the Lab App's result line
+sums them up (docs/agent-setup.md, Flows for agents), and the Lab App's result line
 `LABRESULT <case> run=<id> <key>=<value>...` from the debug console.
 """
 

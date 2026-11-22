@@ -308,7 +308,7 @@ def parse_args(argv: list[str], config: dict) -> argparse.Namespace:
     parser.add_argument("--proxy-base", help="Proxy Base to launch with (default: the LAN one for a Physical Device, "
                                              "the running tunnel's public one for a Cloud Device)")
     parser.add_argument("--ca-routing", action="store_true",
-                        help="CA Routing, on the Physical Device behind the CA Routing router (README, CA Routing)")
+                        help="CA Routing, on the Physical Device behind the CA Routing router (docs/ca-routing.md)")
     parser.add_argument("--separator", type=values(["/", "/;"]), default=["/"],
                         help="the Prefixed URL form the Lab App builds: / (the lab's own), /; (Charles-style) "
                              "or both ('/,/;')")
