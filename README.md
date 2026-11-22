@@ -14,53 +14,94 @@ Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To repor
 
 ## How it works
 
+```mermaid
+flowchart LR
+  PD["Physical Device"] -- "Prefixed URL, over the LAN" --> LAN
+  CD["Cloud Device (RCE)"] -- "Prefixed URL, behind the secret" --> CF["cloudflared quick tunnel (Public Endpoint)"]
+  CF --> TUN
+  subgraph Mac["Your Mac: mitmweb"]
+    LAN["LAN listeners :8080 and :8888"]
+    TUN["tunnel listener :8082, loopback only"]
+    CHAIN["Origin decoding, Target Device, Guards, header cleanup, header and body rewriting, Scenarios"]
+    UI["mitmweb UI, 127.0.0.1:8081 only"]
+    LAN --> CHAIN
+    TUN --> CHAIN
+  end
+  CHAIN --> O["Origin"]
+```
+
 The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>` (or `<Proxy Base>/;<Origin URL>`, as a Charles-enabled build does): this is Prefix Routing, and it works on every Target Device. The lab recovers the Origin, applies its guards, rewrites URLs in responses so follow-up requests come back through it, then applies the active Scenarios. CA Routing, for Physical Devices only, uses DNS and the lab's CA instead. The full picture: [How it works](docs/how-it-works.md).
 
 ## Quickstart
 
+From a clone to a Scenario making an Origin fail on your Roku. Each step says what you should see; when one doesn't match, see [Troubleshooting](docs/troubleshooting.md).
+
 ### 1. Prerequisites
 
 - macOS with [uv](https://docs.astral.sh/uv/) (installs the pinned mitmproxy 12.3.1 into `proxy/.venv`) and `brew install jq`.
-- A Roku in developer mode on the same LAN as the Mac.
+- For steps 5 and 6, a Roku in developer mode on the same LAN as the Mac.
 
 Cloud Devices, the RSG 2.0 Lab App and Docker Compose need more: [Cloud Devices](docs/cloud-devices.md), [Lab Apps](docs/lab-apps.md), [Docker Compose](docs/compose.md).
 
-### 2. Install and settings
+### 2. Install
 
 ```sh
-git clone <roxy's repository URL> roxy && cd roxy
-./install.sh                               # links roxy into ~/.local/bin (put that on your PATH); seeds missing settings
-git config core.hooksPath .githooks        # pre-commit hook: runs scripts/check (see docs/tests.md)
+git clone https://github.com/oscarsanchez/roxy.git && cd roxy
+./install.sh
 ```
 
-`install.sh` links `bin/roxy` from this checkout, so `git pull` updates it, and `roxy` works from any terminal, Cursor's included. Run it again whenever you like: it refreshes the link and never overwrites a setting. It refuses, changing nothing, when `~/.local/bin/roxy` exists and is not a link. For an agent in an app's repo, add the plugin and a pointer too: [Agents](docs/agent-setup.md).
+You should see `linked ~/.local/bin/roxy -> .../bin/roxy`, one `seeded <file>: fill it in` line per settings file, and `git hooks on: .githooks`. Put `~/.local/bin` on your PATH if it says so. `roxy` then works from any terminal, and `git pull` updates it. Run `./install.sh` again whenever you like: it never overwrites a setting.
 
-The install seeds your **settings root**, `~/.config/roxy/`, from `settings.example/`, and never overwrites a setting. Fill in `secrets.env`, `devices.json` and `settings.json`: [Settings and App Profiles](docs/settings.md).
+### 3. Fill in your settings
 
-### 3. Start the lab
+Your settings live in the **settings root**, `~/.config/roxy/`, never in the repo. Fill in what the install seeded ([every field](docs/settings.md)):
+
+- `secrets.env`: `MITMWEB_PASSWORD`, the mitmweb UI's password; `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD`, your Roku's developer login.
+- `settings.json`: `lan_subnets`, your LAN in CIDR, such as `["192.0.2.0/24"]`, which must hold the Mac and the Roku.
+- `devices.json`: your Roku by name, `{"Living Room": {"ip": "<its IP>"}}`. This guide uses `Living Room`.
+
+### 4. Start the lab and send one request
 
 ```sh
-roxy start                           # mitmweb UI http://127.0.0.1:8081; prints the Proxy IP and both LAN Proxy Bases
-roxy start --tunnel                  # plus the Public Endpoint for Cloud Devices: prints https://<random>.trycloudflare.com/<secret>
-roxy status                          # from another terminal: up or down (exit 1); Proxy IP, Proxy Bases, App Profile, active Scenarios and their rules
-roxy flows --json --limit 20         # the last 20 flows as JSON, for agents (see docs/agent-setup.md)
+roxy start
 ```
 
-`roxy --help` lists the subcommands and `roxy <subcommand> --help` gives every option of one; the docs show examples only. `roxy` is a thin dispatcher over `scripts/` (`roxy start` runs `scripts/start-lab`). The lab runs in the foreground: there is no daemon and no `stop`. Ctrl-C stops mitmweb and the tunnel together. Every Lab Session is saved as a Recording in your user data directory, `~/.local/share/roxy/captures/<App Profile>/<start time>.mitm`, or `captures/no-profile/` without one (`$XDG_DATA_HOME/roxy/...` if you set that). The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
+You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP` and two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`. A missing setting stops it before mitmweb starts, naming the setting. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
 
-### 4. Deploy and launch
-
-Device names come from your `devices.json`; these examples use the example names.
+From another terminal, send a Prefixed URL from the Mac itself, no Roku needed:
 
 ```sh
-scripts/deploy "Living Room" apps/classic                # classic (BrightScript) Lab App
-roxy launch "Living Room" case=json_get                  # prints run=<id>; the result line is on the debug console
-roxy console "Living Room" --launch json_get             # the console from connect to the run's result line, saved to out/console/
+curl -i http://<mac-ip>:8080/https://httpbin.org/json   # HTTP/1.1 200 OK, and httpbin's JSON
+roxy flows --json --limit 1                             # [{... "url": "https://httpbin.org/json", "status": 200, ...}]
 ```
 
-`roxy launch <device> [key=value...]` launches the dev channel with `proxyBase`, your launch params, and a fresh `run` id; it never builds or sideloads. `proxyBase` goes by kind of Target Device: the LAN Proxy Base for a Physical Device, the running tunnel's public Proxy Base plus the device slug for a Cloud Device. `--proxy-base URL` sends another. The Lab Apps read `case`; a Product App reads whatever params it takes.
+The flow is in mitmweb too. `roxy --help` lists the subcommands, and `roxy <subcommand> --help` every option of one.
 
-Cases and result lines: [Lab Apps](docs/lab-apps.md). On a Cloud Device: [Cloud Devices](docs/cloud-devices.md).
+### 5. Launch the Lab App on your Roku
+
+```sh
+scripts/deploy "Living Room" apps/classic                # packages the classic Lab App and sideloads it
+roxy console "Living Room" --launch json_get             # launches case json_get, waits for its result line
+```
+
+You should see `LABRESULT json_get run=<id> status=200 bytes=<n> fp=<hex>`, and in `roxy flows --json` the same request with `"device": "Living Room"`. Every case and result field: [Lab Apps](docs/lab-apps.md).
+
+### 6. Make the Origin fail
+
+```sh
+roxy console "Living Room" --launch json_get --scenario json-503
+roxy status --since <id>                                 # the run=<id> from the result line
+roxy scenario clear
+```
+
+You should see `status=503` in the result line, and under `json-503` in `roxy status`: `httpbin json fails  1 flow`. A rule that acted on nothing says so (`acted on nothing yet`), so a Scenario never fails silently. `roxy scenario clear` leaves the lab with none active.
+
+### Next
+
+- [Scenarios](docs/scenarios.md): write your own, with mocks, throttles and manifest edits.
+- [Prefix Routing guide](docs/prefix-routing.md): route a Product App, with its Charles hook or the kit.
+- [Cloud Devices](docs/cloud-devices.md): the same on Roku Cloud Emulator.
+- [Agents](docs/agent-setup.md): let Claude Code or Cursor drive the lab.
 
 ## Documentation
 

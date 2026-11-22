@@ -20,5 +20,6 @@ rce device stop player                                   # billing ends here
 
 ## Notes
 
+- The tunnel hostname changes on every start; its log is `out/cloudflared.log`.
 - Cloudflare's terms require paid services to serve video through its network, and quick tunnels are for testing only (200 in-flight requests). Keep video over the Public Endpoint small and runs short.
 - RCE costs about $0.20 per device-hour, Widevine is L3 only, and devices cannot be deleted.

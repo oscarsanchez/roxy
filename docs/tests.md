@@ -20,4 +20,4 @@ scripts/kit-check <device>     # both kit examples on a Physical Device, launche
 scripts/check-tunnel-reuse    # requests to one Origin over a reused connection to the tunnel listener, as cloudflared sends them; fails if one hangs. Uses the running lab or starts one; no Cloud Device, cloudflared or RCE
 ```
 
-The pre-commit hook (`git config core.hooksPath .githooks`, once per clone) runs `scripts/check`. The glossary lint fails on any `_Avoid_` term of [GLOSSARY.md](../GLOSSARY.md); a legitimate use goes in `scripts/glossary-allow.txt` with its reason, or carries `glossary-ok` on its line.
+The pre-commit hook, which `install.sh` turns on (`core.hooksPath .githooks`), runs `scripts/check`. The glossary lint fails on any `_Avoid_` term of [GLOSSARY.md](../GLOSSARY.md); a legitimate use goes in `scripts/glossary-allow.txt` with its reason, or carries `glossary-ok` on its line.

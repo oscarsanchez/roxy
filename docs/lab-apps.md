@@ -2,6 +2,10 @@
 
 The two disposable Lab Apps, classic BrightScript/SceneGraph (`apps/classic`) and RSG 2.0 (`apps/rsg`): their prerequisites, cases and result lines. Vocabulary: [GLOSSARY.md](../GLOSSARY.md).
 
+## Launch
+
+`roxy launch <device> [key=value...]` launches the dev channel with `proxyBase`, your launch params, and a fresh `run` id; it never builds or sideloads. `proxyBase` goes by kind of Target Device: the LAN Proxy Base for a Physical Device, the running tunnel's public Proxy Base plus the device slug for a Cloud Device. `--proxy-base URL` sends another. The Lab Apps read `case`; a Product App reads whatever params it takes. `roxy console <device> --launch <case>` connects to the debug console first, launches, and stops at that run's result line, saved to `out/console/`.
+
 ## RSG 2.0 prerequisites
 
 Node 24+ (`brew install node@24`; `scripts/deploy` puts it first on PATH), pnpm 11, `brew install squashfs`.
