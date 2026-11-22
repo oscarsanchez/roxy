@@ -62,6 +62,10 @@ Every Lab Session is saved as a Recording (a `.mitm` file). `roxy export --har [
 - Request URLs are Origin URLs; response bodies are as the Target Device received them, so URLs inside them are Prefixed URLs.
 - The lab secret becomes `<secret>`, but the app's own headers, cookies and tokens stay in the file: check it, and tell the user so, before it is shared.
 
+## When something fails
+
+A refusal (`X-Lab-Blocked`), a Scenario that acted on nothing, a missing result line, a held lock: find the symptom in [Troubleshooting](docs/troubleshooting.md) and suggest its fix.
+
 ## Known limits
 
 - One lab per user: one App Profile per session and one set of active Scenarios, lab-wide. Deploys and launches take a per-user `devices` lock and refuse while someone else holds it, naming the holder; set `LAB_LOCK_OWNER` to your name, and `LAB_LOCK_WAIT=1` waits instead.

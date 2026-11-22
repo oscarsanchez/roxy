@@ -4,6 +4,7 @@ New to roxy? Start with the [Quickstart](../README.md#quickstart). Vocabulary: [
 
 ## How-to
 
+- [Troubleshooting](troubleshooting.md): symptom, cause and fix, refusal by refusal.
 - [Prefix Routing guide](prefix-routing.md): wire an app, with its Charles hook or with the kit.
 - [CA Routing guide](ca-routing.md): route by DNS and the lab's CA instead, Physical Devices only.
 - [Cloud Devices](cloud-devices.md): run an app on Roku Cloud Emulator through the Public Endpoint.
