@@ -10,8 +10,8 @@
 # Under Compose it would need LAB_CA_ROUTING=true, ports 443 and 80 published, and a
 # persistent mitmproxy confdir volume (/home/mitmproxy/.mitmproxy): the container
 # makes a new CA each time otherwise, and the CA Routing build ships that CA.
-# Proxy Routing is not wired here either: its listener, 8090, is not published; it runs
-# with scripts/start-lab.
+# Proxy Routing is not reachable here: run-mitmweb starts its listener, 8090, in the
+# container, but it is not published, so no Mobile Device reaches it; use scripts/start-lab.
 name: roxy
 
 services:
@@ -36,7 +36,7 @@ services:
       - "8888:8888"            # second LAN listener: Charles's port, which client hooks hardcode
       - "127.0.0.1:8081:8081"  # mitmweb UI, localhost only
       # 8082, the tunnel listener, is not published: only cloudflared reaches it.
-      # 8090, the Proxy Routing listener, is not published: Proxy Routing is native only.
+      # 8090, the Proxy Routing listener, runs but is not published: Proxy Routing is native only.
     volumes:
       - ./proxy:/lab/proxy:ro
       - ./scripts:/lab/scripts:ro

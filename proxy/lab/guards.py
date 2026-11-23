@@ -106,8 +106,9 @@ class Guards:
         return bool(secret) and hmac.compare_digest(given.encode(), secret.encode())
 
     def http_connect(self, flow):
-        """A CONNECT, on the Proxy Routing listener: no tunnel for a client the LAN guard
-        refuses, or it could relay raw TCP that no request hook ever sees."""
+        """A CONNECT: no tunnel for a client the LAN guard refuses, or it could relay raw
+        TCP that no request hook ever sees. Only a `regular` mode listener takes CONNECT,
+        and the Proxy Routing listener is the lab's only one; the others are `reverse`."""
         if not self._client_allowed(flow):
             refuse(flow, 403, "client-ip")
 
