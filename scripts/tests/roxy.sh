@@ -25,7 +25,7 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 # Fakes on PATH. curl logs the URL of each call to $CURL_LOG.urls and answers for
 # cloudflared's metrics (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP; with http_proxy
 # set it fails as through a dead proxy, unless the call has --noproxy. rce logs one line
-# of shell-quoted arguments per call.
+# of shell-quoted arguments per call; with FAKE_RCE_NO_TOKEN set, `rce token status` fails.
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
 # command (proxy/cli.py runs Python) goes to the real uv.
@@ -56,6 +56,7 @@ cat > "$TMP/bin/rce" <<'EOF'
 #!/usr/bin/env bash
 printf '%q ' "$@" >> "$RCE_LOG"
 echo >> "$RCE_LOG"
+[ -z "${FAKE_RCE_NO_TOKEN:-}" ] || [ "$*" != "token status" ] || { echo "no RCE token" >&2; exit 2; }
 EOF
 cat > "$TMP/bin/uv" <<'EOF'
 #!/usr/bin/env bash
@@ -685,6 +686,22 @@ for args in "--roku-password hunter2" "--roku-password=hunter2" "--trusted-netwo
 done
 case "$(setup --roku-password hunter2 2>&1)" in *"never a flag"*) ;; *) fail "setup --roku-password said: $(setup --roku-password hunter2 2>&1)" ;; esac
 echo "ok: setup with no terminal generates the mitmweb password, allows this Mac, takes the Roku password from stdin only"
+
+# setup --cloud, cloudflared on the PATH beside the fake rce: the lab secret generated once,
+# never printed; an RCE token rce does not take is a warning for the user, not a failure.
+mkdir -p "$TMP/cloud-bin"
+printf '#!/usr/bin/env bash\n' > "$TMP/cloud-bin/cloudflared"
+chmod +x "$TMP/cloud-bin/cloudflared"
+out="$(PATH="$TMP/cloud-bin:$PATH" setup --cloud < /dev/null 2>&1)" || fail "setup --cloud: $out"
+lab_secret="$(secret LAB_SECRET)"
+[ ${#lab_secret} -ge 16 ] || fail "setup --cloud did not generate a lab secret"
+case "$out" in *"$lab_secret"*) fail "setup --cloud printed the lab secret" ;; esac
+grep -qxF "rce and cloudflared installed, and rce token status works" <<< "$out" || fail "setup --cloud said: $out"
+out="$(PATH="$TMP/cloud-bin:$PATH" FAKE_RCE_NO_TOKEN=1 setup --cloud < /dev/null 2>&1)" || fail "setup --cloud, no token: $out"
+[ "$(secret LAB_SECRET)" = "$lab_secret" ] || fail "setup --cloud, run again, replaced the lab secret"
+grep -qxF "warning: rce token status fails: the user runs rce token set (pbpaste | rce token set)" <<< "$out" \
+  || fail "setup --cloud did not warn of the RCE token: $out"
+echo "ok: setup --cloud generates the lab secret once and warns of an RCE token rce does not take"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

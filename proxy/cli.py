@@ -11,7 +11,7 @@ and LAB_SECRET for export, as proxy_cli passes them.
   cli.py device remove NAME              unregister the Target Device NAME
   cli.py device discover                 the Rokus on the LAN, with an add line for each
                                          one not registered (roxy device --help)
-  cli.py setup [--trusted-network | --this-mac-only] [--roku-user USER]
+  cli.py setup [--trusted-network | --this-mac-only] [--cloud] [--roku-user USER]
                                          fill the settings root for this Mac (roxy setup --help)
   cli.py scenario list [--app NAME]      the Scenarios of NAME (else the profile resolve
                                          finds) and the lab's own, each once with its source
@@ -55,7 +55,7 @@ from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
 from lab.settings_root import CLOUD_DEVICE, SettingsRoot, SettingsRootError, ecp_device_info, rce_knows
-from lab.settings_root import new_secret, ssdp_rokus, this_mac
+from lab.settings_root import has_tool, new_secret, rce_token_works, ssdp_rokus, this_mac
 
 REFUSED = "refused: in both (rename the profile's)"
 REDACTED_SECRET = "<secret>"
@@ -98,6 +98,8 @@ def settings():
         this_mac=this_mac,
         new_secret=new_secret,
         ssdp_rokus=ssdp_rokus,
+        has_tool=has_tool,
+        rce_token_works=rce_token_works,
     )
 
 
@@ -158,7 +160,9 @@ def setup(args):
             sys.exit("\nsetup stopped: nothing changed")
     else:
         roku_password = sys.stdin.readline().rstrip("\r\n")
-    change = root.setup(trusted_network=trusted_network, roku_user=roku_user, roku_password=roku_password or None)
+    change = root.setup(
+        trusted_network=trusted_network, roku_user=roku_user, roku_password=roku_password or None, cloud=args.cloud
+    )
     print_change(change)
 
 
@@ -386,6 +390,7 @@ def main():
     network = setup_parser.add_mutually_exclusive_group()
     network.add_argument("--trusted-network", dest="trusted_network", action="store_const", const=True)
     network.add_argument("--this-mac-only", dest="trusted_network", action="store_const", const=False)
+    setup_parser.add_argument("--cloud", action="store_true")
     setup_parser.add_argument("--roku-user")
     setup_parser.set_defaults(run=setup)
     scenario = commands.add_parser("scenario").add_subparsers(required=True)

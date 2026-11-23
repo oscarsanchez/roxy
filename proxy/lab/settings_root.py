@@ -11,8 +11,9 @@ Writes keep every key and entry they don't own (grid_devices, unknown keys); sec
 keeps its other lines and comments, and stays private to the user. A secret is never in
 what a change says. The outside world comes in through ports passed to SettingsRoot: a
 Roku's ECP device-info answer, `rce device resolve`, this Mac's address, the random
-source and the SSDP search for Rokus; ecp_device_info, rce_knows, this_mac, new_secret and
-ssdp_rokus, below, are the real ones.
+source, the SSDP search for Rokus, the tools on the PATH and `rce token status`;
+ecp_device_info, rce_knows, this_mac, new_secret, ssdp_rokus, has_tool and rce_token_works,
+below, are the real ones.
 """
 
 import json
@@ -20,6 +21,7 @@ import os
 import re
 import secrets
 import shlex
+import shutil
 import socket
 import subprocess
 import time
@@ -37,6 +39,7 @@ PROXIED_KINDS = ("proxied", "mobile")  # "mobile": as roxy 0.2.0 wrote it
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SSDP_GROUP = "239.255.255.250:1900"  # every SSDP device on the LAN; ROXY_SSDP_ADDRESS overrides it (tests)
 SSDP_SECONDS = 3  # how long Rokus get to answer
+RCE_CLI = "https://github.com/oscarsanchez/rce-cli"  # the rce CLI, which the lab runs Cloud Devices through
 
 
 class SettingsRootError(Exception):
@@ -99,12 +102,15 @@ class FoundRoku(NamedTuple):
 
 
 class SettingsRoot:
-    def __init__(self, root, *, ecp_device_info, rce_knows, this_mac, new_secret, ssdp_rokus):
+    def __init__(
+        self, root, *, ecp_device_info, rce_knows, this_mac, new_secret, ssdp_rokus, has_tool, rce_token_works
+    ):
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
         fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
         `rce device resolve` knows it; THIS_MAC(), this Mac's address and netmask (None: it
         is on no network); NEW_SECRET(), a new random secret; SSDP_ROKUS(), the IPs
-        answering an SSDP search for roku:ecp on the LAN."""
+        answering an SSDP search for roku:ecp on the LAN; HAS_TOOL(command), whether COMMAND
+        is on the PATH; RCE_TOKEN_WORKS(), whether `rce token status` works."""
         self.devices_file = Path(root) / "devices.json"
         self.settings_file = Path(root) / "settings.json"
         self.secrets_file = Path(root) / "secrets.env"
@@ -113,6 +119,8 @@ class SettingsRoot:
         self.this_mac = this_mac
         self.new_secret = new_secret
         self.ssdp_rokus = ssdp_rokus
+        self.has_tool = has_tool
+        self.rce_token_works = rce_token_works
 
     def devices(self):
         """The registered Target Devices, in file order."""
@@ -167,13 +175,14 @@ class SettingsRoot:
         self._save(registry, settings)
         return Change(notes, [])
 
-    def setup(self, *, trusted_network=None, roku_user=None, roku_password=None):
+    def setup(self, *, trusted_network=None, roku_user=None, roku_password=None, cloud=False):
         """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
         when there is none; lan_subnets for the network this Mac is on, when there are
         none, they are the examples', or TRUSTED_NETWORK (True: the Mac's whole subnet;
         False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default: the
         examples') and ROKU_PASSWORD, each when given. A Roku password there is none of is
-        a warning: only the user can give it. Returns the Change."""
+        a warning: only the user can give it. With CLOUD, for Cloud Devices too: a new
+        LAB_SECRET when there is none. Returns the Change."""
         settings, notes, warnings = self._lan_setup(trusted_network)
         if settings is not None:
             _write(self.settings_file, settings)
@@ -198,8 +207,30 @@ class SettingsRoot:
             warnings.append(
                 "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
             )
+        if cloud and not env.get("LAB_SECRET"):
+            changes["LAB_SECRET"] = self.new_secret()
+            notes.append(f"generated LAB_SECRET (in {self.secrets_file}; the Public Endpoint's secret path segment)")
+        elif cloud:
+            notes.append("kept LAB_SECRET")
         _write_env(self.secrets_file, changes)
+        if cloud:
+            missing = self._cloud_tools_missing()
+            warnings += missing
+            if not missing:
+                notes.append("rce and cloudflared installed, and rce token status works")
         return Change(notes, warnings)
+
+    def _cloud_tools_missing(self):
+        """A warning for each tool Cloud Devices need that is not installed, and for an RCE
+        token rce does not take (asked only of an installed rce), with what installs it."""
+        missing = []
+        if not self.has_tool("rce"):
+            missing.append(f"rce is not installed: install it as its README says, {RCE_CLI}")
+        elif not self.rce_token_works():
+            missing.append("rce token status fails: the user runs rce token set (pbpaste | rce token set)")
+        if not self.has_tool("cloudflared"):
+            missing.append("cloudflared is not installed: brew install cloudflared (the Public Endpoint is its tunnel)")
+        return missing
 
     def setup_values(self):
         """What setup would keep, for a person to confirm or change: the lan_subnets (None:
@@ -338,6 +369,19 @@ def rce_knows(rce_device_name):
     """Whether `rce device resolve` knows RCE_DEVICE_NAME (False without rce on the PATH)."""
     try:
         return not subprocess.run(["rce", "device", "resolve", rce_device_name], capture_output=True).returncode
+    except FileNotFoundError:
+        return False
+
+
+def has_tool(command):
+    """Whether COMMAND is on the PATH."""
+    return shutil.which(command) is not None
+
+
+def rce_token_works():
+    """Whether `rce token status` works: rce has a token RCE takes."""
+    try:
+        return not subprocess.run(["rce", "token", "status"], capture_output=True).returncode
     except FileNotFoundError:
         return False
 

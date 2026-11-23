@@ -2,7 +2,8 @@
 root, as `roxy device add`, `list` and `remove` and `roxy setup` change them, and the Rokus
 `roxy device discover` finds. Against the temp settings root (conftest's `settings`, seeded from
 the examples: lan_subnets 192.0.2.0/24), with a Roku's ECP answer, `rce device resolve`, this
-Mac's address, the random source and the SSDP search faked."""
+Mac's address, the random source, the SSDP search, the tools on the PATH and
+`rce token status` faked."""
 
 import itertools
 import json
@@ -40,7 +41,19 @@ def ssdp():
 
 
 @pytest.fixture
-def ports(ecp, rce, mac, ssdp):
+def on_path():
+    """The tools Cloud Devices need that are on the PATH."""
+    return {"rce", "cloudflared"}
+
+
+@pytest.fixture
+def rce_token():
+    """Whether `rce token status` works, as rce_token[0]."""
+    return [True]
+
+
+@pytest.fixture
+def ports(ecp, rce, mac, ssdp, on_path, rce_token):
     """SettingsRoot's ports, faked; new_secret gives secret-1, secret-2, ..."""
     secrets = (f"secret-{n}" for n in itertools.count(1))
     return {
@@ -48,6 +61,8 @@ def ports(ecp, rce, mac, ssdp):
         "rce_knows": rce.__contains__,
         "this_mac": lambda: mac[0],
         "new_secret": lambda: next(secrets),
+        "has_tool": on_path.__contains__,
+        "rce_token_works": lambda: rce_token[0],
         "ssdp_rokus": lambda: ssdp,
     }
 
@@ -430,6 +445,66 @@ def test_setup_gives_the_roku_user_its_default_when_there_is_none(root, settings
     root.setup()
 
     assert secrets_env(settings)["ROKU_DEV_USER"] == "rokudev"
+
+
+def test_setup_for_cloud_devices_generates_the_lab_secret_and_never_says_it(root, settings):
+    change = root.setup(cloud=True)
+
+    assert secrets_env(settings)["LAB_SECRET"] == "secret-2"
+    assert "secret-2" not in said(change)
+    assert "generated LAB_SECRET" in said(change)
+
+
+def test_a_rerun_for_cloud_devices_keeps_the_lab_secret(root, settings):
+    root.setup(cloud=True)
+
+    change = root.setup(cloud=True)
+
+    assert secrets_env(settings)["LAB_SECRET"] == "secret-2"
+    assert "kept LAB_SECRET" in change.notes
+
+
+CLOUDFLARED_MISSING = "cloudflared is not installed: brew install cloudflared (the Public Endpoint is its tunnel)"
+RCE_MISSING = "rce is not installed: install it as its README says, https://github.com/oscarsanchez/rce-cli"
+RCE_TOKEN_FAILS = "rce token status fails: the user runs rce token set (pbpaste | rce token set)"
+
+
+@pytest.mark.parametrize(
+    "missing, warnings",
+    [
+        ({"cloudflared"}, [CLOUDFLARED_MISSING]),
+        ({"rce token"}, [RCE_TOKEN_FAILS]),
+        ({"rce", "rce token"}, [RCE_MISSING]),
+        ({"rce", "rce token", "cloudflared"}, [RCE_MISSING, CLOUDFLARED_MISSING]),
+    ],
+)
+def test_setup_for_cloud_devices_warns_of_each_missing_tool_or_token_and_still_sets_up(
+    root, settings, on_path, rce_token, missing, warnings
+):
+    on_path -= missing
+    rce_token[0] = "rce token" not in missing
+    root.setup(roku_password="first")
+
+    change = root.setup(cloud=True)
+
+    assert change.warnings == warnings
+    assert secrets_env(settings)["LAB_SECRET"] == "secret-2"
+
+
+def test_setup_for_cloud_devices_says_their_tools_and_token_are_there(root):
+    change = root.setup(cloud=True)
+
+    assert "rce and cloudflared installed, and rce token status works" in change.notes
+
+
+def test_setup_without_cloud_devices_says_nothing_of_them(root, settings, on_path, rce_token):
+    on_path.clear()
+    rce_token[0] = False
+
+    change = root.setup()
+
+    assert secrets_env(settings)["LAB_SECRET"] == ""
+    assert not [line for line in change.notes + change.warnings if any(w in line for w in ("LAB_SECRET", "rce", "cloudflared"))]
 
 
 def test_the_values_setup_would_keep_show_no_secret_and_no_example(root, settings):

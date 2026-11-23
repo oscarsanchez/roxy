@@ -149,7 +149,7 @@ a running lab to use a change.
 EOF
     ;;
     setup) cat <<'EOF'
-usage: roxy setup [--trusted-network | --this-mac-only] [--roku-user USER]
+usage: roxy setup [--trusted-network | --this-mac-only] [--cloud] [--roku-user USER]
 Fill your roxy settings for this Mac, keeping what is there: run it again any time. It
 generates the mitmweb password (MITMWEB_PASSWORD in secrets.env, which the mitmweb UI
 asks for), allows this Mac in lan_subnets, and takes your Roku developer login (one for
@@ -163,6 +163,10 @@ setup says so. Restart a running lab to use a change.
                      there are none yet): on a shared network, such as work, no one
                      else can relay through your lab. Either flag replaces lan_subnets,
                      keeping each registered device's IP/32
+  --cloud            for Cloud Devices too: generates the lab secret (LAB_SECRET in
+                     secrets.env, the Public Endpoint's secret path segment) and checks
+                     that rce and cloudflared are installed and rce token status works,
+                     warning with what to do when not
   --roku-user USER   the Roku developer web server's user (default: rokudev)
 EOF
     ;;
