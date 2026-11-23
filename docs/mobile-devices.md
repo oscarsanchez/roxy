@@ -79,6 +79,7 @@ Restart the lab: its flows are then named `Phone` in mitmweb's comment column (f
 
 - **Scenarios** act on them as on any flow: filter on the Origin (`~d api.example.com`) to reach both your Roku's and the Mobile Device's requests. A rule with `{proxy_base}` placeholders leaves them alone, as they have no Proxy Base ([Scenarios](scenarios.md)).
 - **No rewriting**: the lab never rewrites URLs in their headers or bodies; the app sees each response as the Origin sent it.
+- **Throttle**: a Mobile Device's HTTPS flows are usually HTTP/2, which a `throttle` rule leaves unpaced (the mitmweb event log says so); plain HTTP flows are paced. A `latency` rule slows both ([Scenarios](scenarios.md)).
 - **Guards**: the LAN's. The client must be on `lan_subnets`, a private Origin is refused `origin-address`, and any public Origin is allowed: the Origin allowlist is the Public Endpoint's only ([Guards](guards.md)).
 - **Native only**: the listener is never reachable through the Public Endpoint, and Docker Compose does not publish it ([Docker Compose](compose.md)).
 
@@ -95,7 +96,10 @@ The iOS Simulator has no proxy setting of its own: it uses the Mac's.
    networksetup -setwebproxy Wi-Fi 127.0.0.1 8090
    networksetup -setsecurewebproxy Wi-Fi 127.0.0.1 8090
    ```
-   Keep `127.0.0.1` and `localhost` under "Bypass proxy settings for these hosts & domains", so mitmweb and `roxy` reach the lab directly: through the proxy they would be refused `origin-address`.
+   Add `127.0.0.1` and `localhost` to "Bypass proxy settings for these hosts & domains" (macOS's default list holds only `*.local` and `169.254/16`), so mitmweb and `roxy` reach the lab directly: through the proxy they would be refused `origin-address`, which `roxy` reports as a wrong password. From a terminal:
+   ```sh
+   networksetup -setproxybypassdomains Wi-Fi '*.local' 169.254/16 127.0.0.1 localhost
+   ```
 2. Trust the lab's CA in the booted iOS Simulator:
    ```sh
    xcrun simctl keychain booted add-root-cert ~/.mitmproxy/mitmproxy-ca-cert.pem
