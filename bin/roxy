@@ -21,7 +21,7 @@ The roxy lab from any terminal. roxy <subcommand> --help describes one.
   export     a Recording as a HAR file, for HAR viewers and bug reports
   console    open a Target Device's debug console
   app        create or list App Profiles
-  device     register, list or remove Target Devices
+  device     register, list or remove Target Devices, or discover Rokus
 EOF
     ;;
     start) cat <<'EOF'
@@ -123,7 +123,7 @@ EOF
     ;;
     device) cat <<'EOF'
 usage: roxy device add NAME (--ip IP [--proxied] | --rce DEVICE_NAME [--slug SLUG])
-       roxy device list | remove NAME
+       roxy device list | remove NAME | discover
 The Target Devices in your roxy settings (devices.json), which name each flow, and the
 LAN subnets allowed to use the lab (lan_subnets in settings.json), kept in step. Restart
 a running lab to use a change.
@@ -142,6 +142,9 @@ a running lab to use a change.
   list                 each device with its IP or rce Device Name, and its kind
   remove NAME          unregister NAME; drops its IP/32 from lan_subnets unless
                        another device has that IP (a wider subnet is never touched)
+  discover             the Rokus on this network (SSDP, about 3 s), each with its IP,
+                       own name, model, developer mode and registered name, and the
+                       roxy device add line for each one not registered; adds nothing
 EOF
     ;;
   esac
@@ -208,6 +211,7 @@ device() {
     "add "*) proxy_cli device "$@" ;;
     "list 1") proxy_cli device list ;;
     "remove 2") proxy_cli device remove -- "$2" ;;
+    "discover 1") proxy_cli device discover ;;
     *) die "$(usage device | head -2)" ;;
   esac
 }

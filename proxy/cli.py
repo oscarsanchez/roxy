@@ -9,6 +9,8 @@ and LAB_SECRET for export, as proxy_cli passes them.
                                          register a Target Device (roxy device --help)
   cli.py device list                     each Target Device, its address and its kind
   cli.py device remove NAME              unregister the Target Device NAME
+  cli.py device discover                 the Rokus on the LAN, with an add line for each
+                                         one not registered (roxy device --help)
   cli.py scenario list [--app NAME]      the Scenarios of NAME (else the profile resolve
                                          finds) and the lab's own, each once with its source
   cli.py scenario set NAME...            make NAMEs the running lab's active Scenarios, in that
@@ -111,6 +113,21 @@ def device_remove(args):
     change = settings().remove_device(args.name)
     print(f"removed '{args.name}'")
     print_change(change)
+
+
+def device_discover(args):
+    found = settings().discover()
+    if not found:
+        print(
+            "no Roku answered (a network can block discovery): a Roku shows its IP in"
+            " Settings → Network → About; then roxy device add NAME --ip IP"
+        )
+    for roku in found:
+        mode = {True: "developer mode", False: "not in developer mode", None: "did not answer ECP"}[roku.developer_mode]
+        registered = f"registered as '{roku.registered_as}'" if roku.registered_as else "not registered"
+        print(f"{roku.ip:<16} {roku.name or '?':<24} {roku.model or '?':<20} {mode:<22} {registered}")
+        if roku.add_command:
+            print(f"  {roku.add_command}")
 
 
 def device_address(device):
@@ -320,6 +337,7 @@ def main():
     device_remove_parser = device.add_parser("remove")
     device_remove_parser.add_argument("name")
     device_remove_parser.set_defaults(run=device_remove)
+    device.add_parser("discover").set_defaults(run=device_discover)
     scenario = commands.add_parser("scenario").add_subparsers(required=True)
     scenario_list_parser = scenario.add_parser("list")
     scenario_list_parser.add_argument("--app")

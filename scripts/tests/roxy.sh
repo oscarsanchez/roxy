@@ -9,8 +9,8 @@ set -euo pipefail
 REPO="$(cd "$(dirname "$0")/../.." && pwd)"
 ROXY="$REPO/bin/roxy"
 TMP="$(mktemp -d)"
-mitmweb_pid=""
-trap '[ -z "$mitmweb_pid" ] || kill "$mitmweb_pid"; rm -rf "$TMP"' EXIT
+mitmweb_pid="" ssdp_pid=""
+trap '[ -z "$mitmweb_pid" ] || kill "$mitmweb_pid"; [ -z "$ssdp_pid" ] || kill "$ssdp_pid"; rm -rf "$TMP"' EXIT
 export LAB_LOCK_DIR="$TMP/locks" ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data" ROXY_OUT_DIR="$TMP/out"
 unset LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER MITMWEB_PASSWORD LAB_SECRET
 
@@ -48,7 +48,7 @@ case "$url" in
     || { echo "curl: (22) The requested URL returned error: 403" >&2; exit 22; } ;;
   # A Roku in developer mode, unless FAKE_ECP_DOWN is set: then it does not answer.
   *:8060/query/device-info) [ -z "${FAKE_ECP_DOWN:-}" ] || { echo "curl: (28) Connection timed out" >&2; exit 28; }
-    printf '<device-info><model-name>Roku Ultra</model-name><developer-enabled>true</developer-enabled></device-info>\n' ;;
+    printf '<device-info><user-device-name>Kitchen</user-device-name><model-name>Roku Ultra</model-name><developer-enabled>true</developer-enabled></device-info>\n' ;;
 esac
 EOF
 cat > "$TMP/bin/rce" <<'EOF'
@@ -388,6 +388,40 @@ refuses_device "usage: roxy device" add Hall
 refuses_device "usage: roxy device" explode
 case "$(device add --help)" in "usage: roxy device add NAME (--ip IP"*) ;; *) fail "device add --help printed: $(device add --help)" ;; esac
 echo "ok: device add, list and remove each kind of Target Device, keeping lan_subnets in step"
+
+# device discover, its SSDP search sent to a fake Roku on loopback (ROXY_SSDP_ADDRESS)
+# that answers roku:ecp; ECP is asked, never through a proxy. It changes nothing.
+# proxy/tests/test_settings_root.py covers registered Rokus and the add line's quoting.
+"$REAL_UV" run --quiet --project "$REPO/proxy" python - "$TMP/ssdp.port" <<'EOF' &
+import os, socket, sys
+
+roku = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+roku.bind(("127.0.0.1", 0))
+with open(sys.argv[1] + ".tmp", "w") as f:
+    f.write(str(roku.getsockname()[1]))
+os.rename(sys.argv[1] + ".tmp", sys.argv[1])
+while True:
+    search, sender = roku.recvfrom(4096)
+    if b"ST: roku:ecp" in search:
+        roku.sendto(b"HTTP/1.1 200 OK\r\nST: roku:ecp\r\nLOCATION: http://127.0.0.1:8060/\r\n\r\n", sender)
+EOF
+ssdp_pid=$!
+until [ -s "$TMP/ssdp.port" ]; do sleep 0.1; done
+before="$(cat "$ROXY_CONFIG_DIR/devices.json" "$ROXY_CONFIG_DIR/settings.json")"
+: > "$CURL_LOG.urls"
+out="$(ROXY_SSDP_ADDRESS="127.0.0.1:$(cat "$TMP/ssdp.port")" http_proxy=http://127.0.0.1:9 device discover 2>&1)" \
+  || fail "device discover: $out"
+kill "$ssdp_pid"; ssdp_pid=""
+grep -qx "127.0.0.1  *Kitchen  *Roku Ultra  *developer mode  *not registered" <<< "$out" \
+  && grep -qx '  roxy device add "Kitchen" --ip 127.0.0.1' <<< "$out" || fail "device discover said: $out"
+grep -qx "http://127.0.0.1:8060/query/device-info" "$CURL_LOG.urls" || fail "device discover did not ask ECP: $(cat "$CURL_LOG.urls")"
+# No Roku answers: where to read a Roku's IP instead.
+out="$(ROXY_SSDP_ADDRESS="127.0.0.1:$(cat "$TMP/ssdp.port")" device discover 2>&1)" || fail "device discover, none: $out"
+[ "$out" = "no Roku answered (a network can block discovery): a Roku shows its IP in Settings → Network → About; then roxy device add NAME --ip IP" ] \
+  || fail "device discover, none, said: $out"
+[ "$(cat "$ROXY_CONFIG_DIR/devices.json" "$ROXY_CONFIG_DIR/settings.json")" = "$before" ] || fail "device discover changed the settings"
+case "$(device discover --help)" in *"discover "*) ;; *) fail "device --help lacks discover" ;; esac
+echo "ok: device discover lists the Rokus that answer, with an add line, and says where to look when none do"
 
 # App Profiles, in a temp app repo: one smoke check per command. proxy/tests/test_app_profiles.py
 # covers resolution, refusals and clashes at AppProfiles' interface.
