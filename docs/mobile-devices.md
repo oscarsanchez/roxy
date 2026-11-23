@@ -10,6 +10,8 @@ The flows keep their Origin URLs: there is no Proxy Base and no Prefixed URL, so
 
 The addresses in this guide are documentation examples: Mac `192.0.2.10`, LAN `192.0.2.0/24`. Use your own.
 
+For an iOS Simulator or Android Emulator on the Mac that runs the lab, see [iOS Simulator and Android Emulator on this Mac](#ios-simulator-and-android-emulator-on-this-mac).
+
 ## Before you start
 
 - The Mobile Device and the Mac are on the same LAN, and that LAN is in `lan_subnets` in your `settings.json` ([Settings](settings.md)). A client outside it is refused `client-ip`.
@@ -71,3 +73,34 @@ Open the app. Its requests show in mitmweb (`http://127.0.0.1:8081`) and in `rox
 - **No rewriting**: the lab never rewrites URLs in their headers or bodies; the app sees each response as the Origin sent it.
 - **Guards**: the LAN's. The client must be on `lan_subnets`, a private Origin is refused `origin-address`, and any public Origin is allowed: the Origin allowlist is the Public Endpoint's only ([Guards](guards.md)).
 - **Native only**: the listener is never reachable through the Public Endpoint, and Docker Compose does not publish it ([Docker Compose](compose.md)).
+
+## iOS Simulator and Android Emulator on this Mac
+
+An iOS Simulator or Android Emulator on the Mac that runs the lab reaches the Proxy Routing listener from loopback, `127.0.0.1:8090`. The lab allows loopback on this listener only (the 8080 and 8888 listeners still refuse it `client-ip`), and names its flows `This Mac`, with no `devices.json` entry and no `lan_subnets` change.
+
+### iOS Simulator
+
+The iOS Simulator has no proxy setting of its own: it uses the Mac's.
+
+1. Set the Mac's web proxies to the lab: System Settings → Network → the active service (Wi-Fi) → Details → Proxies → turn on Web proxy (HTTP) and Secure web proxy (HTTPS), each with server `127.0.0.1`, port `8090`. Or from a terminal:
+   ```sh
+   networksetup -setwebproxy Wi-Fi 127.0.0.1 8090
+   networksetup -setsecurewebproxy Wi-Fi 127.0.0.1 8090
+   ```
+   Keep `127.0.0.1` and `localhost` under "Bypass proxy settings for these hosts & domains", so mitmweb and `roxy` reach the lab directly: through the proxy they would be refused `origin-address`.
+2. Trust the lab's CA in the booted iOS Simulator:
+   ```sh
+   xcrun simctl keychain booted add-root-cert ~/.mitmproxy/mitmproxy-ca-cert.pem
+   ```
+   Or open `http://mitm.it` in its Safari and follow the iOS steps above, full trust included.
+
+Every app on the Mac now goes through the lab, and its flows are named `This Mac` too. Turn the proxies off when you are done (`networksetup -setwebproxystate Wi-Fi off` and `-setsecurewebproxystate Wi-Fi off`): with the lab stopped, the Mac has no web access through them.
+
+### Android Emulator
+
+1. Start the Android Emulator with the lab as its HTTP proxy (the Android SDK at Android Studio's default location):
+   ```sh
+   ~/Library/Android/sdk/emulator/emulator -avd <avd-name> -http-proxy 127.0.0.1:8090
+   ```
+   Or, while it runs: Extended controls (⋯) → Settings → Proxy → Manual proxy configuration, host `127.0.0.1`, port `8090` → Apply. `127.0.0.1` here is the Mac: the Android Emulator itself makes the proxy connection.
+2. Install and trust the lab's CA as on an Android device (step 2, Android, above): open `http://mitm.it` in its Chrome, install the CA certificate, and let the debug build trust user CAs.
