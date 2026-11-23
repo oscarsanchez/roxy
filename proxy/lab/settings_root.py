@@ -1,28 +1,35 @@
-"""The Settings Root: the user's Target Devices and the LAN subnets allowed to use the lab,
-as `roxy device` changes them, and the Rokus on the LAN it could add. The one place that
-writes them:
+"""The Settings Root: the user's Target Devices, the LAN subnets allowed to use the lab and
+the secrets, as `roxy device` and `roxy setup` change them, and the Rokus on the LAN
+`roxy device discover` could add. The one place that writes them:
 
     <settings root>/devices.json   {"<name>": {"ip": ...} | {"ip": ..., "kind": "proxied"}
                                               | {"rce_device_name": ..., "slug": ...}, ...}
     <settings root>/settings.json  {"lan_subnets": ["<CIDR>", ...], ...}
+    <settings root>/secrets.env    NAME=value lines, which the lab's scripts source
 
-Writes keep every key and entry they don't own (grid_devices, unknown keys). The outside
-world comes in through ports passed to SettingsRoot: a Roku's ECP device-info answer,
-`rce device resolve` and the SSDP search for Rokus; ecp_device_info, rce_knows and
+Writes keep every key and entry they don't own (grid_devices, unknown keys); secrets.env
+keeps its other lines and comments, and stays private to the user. A secret is never in
+what a change says. The outside world comes in through ports passed to SettingsRoot: a
+Roku's ECP device-info answer, `rce device resolve`, this Mac's address, the random
+source and the SSDP search for Rokus; ecp_device_info, rce_knows, this_mac, new_secret and
 ssdp_rokus, below, are the real ones.
 """
 
 import json
 import os
 import re
+import secrets
+import shlex
 import socket
 import subprocess
 import time
-from ipaddress import ip_address, ip_network
+from ipaddress import ip_address, ip_interface, ip_network
 from pathlib import Path
 from typing import NamedTuple
 from xml.etree import ElementTree
 
+# The examples install.sh seeded a settings root with: their values are no settings.
+EXAMPLES = Path(__file__).resolve().parents[2] / "settings.example"
 PHYSICAL_DEVICE = "Physical Device"
 CLOUD_DEVICE = "Cloud Device"
 PROXIED_DEVICE = "Proxied Device"
@@ -64,6 +71,14 @@ class Change(NamedTuple):
     warnings: list
 
 
+class SetupValues(NamedTuple):
+    lan_subnets: list | None
+    this_mac_only: str | None
+    this_mac_network: str | None
+    roku_user: str | None
+    roku_password_set: bool
+
+
 class FoundRoku(NamedTuple):
     """A Roku discover found: its own name, model and developer mode, from its ECP
     device-info (None each when it did not answer), and the Target Device with its IP."""
@@ -84,15 +99,19 @@ class FoundRoku(NamedTuple):
 
 
 class SettingsRoot:
-    def __init__(self, root, *, ecp_device_info, rce_knows, ssdp_rokus):
+    def __init__(self, root, *, ecp_device_info, rce_knows, this_mac, new_secret, ssdp_rokus):
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
         fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
-        `rce device resolve` knows it; SSDP_ROKUS(), the IPs answering an SSDP search for
-        roku:ecp on the LAN."""
+        `rce device resolve` knows it; THIS_MAC(), this Mac's address and netmask (None: it
+        is on no network); NEW_SECRET(), a new random secret; SSDP_ROKUS(), the IPs
+        answering an SSDP search for roku:ecp on the LAN."""
         self.devices_file = Path(root) / "devices.json"
         self.settings_file = Path(root) / "settings.json"
+        self.secrets_file = Path(root) / "secrets.env"
         self.ecp_device_info = ecp_device_info
         self.rce_knows = rce_knows
+        self.this_mac = this_mac
+        self.new_secret = new_secret
         self.ssdp_rokus = ssdp_rokus
 
     def devices(self):
@@ -147,6 +166,89 @@ class SettingsRoot:
         settings, notes = self._disallowing(ip) if ip and not shared else (None, [])
         self._save(registry, settings)
         return Change(notes, [])
+
+    def setup(self, *, trusted_network=None, roku_user=None, roku_password=None):
+        """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
+        when there is none; lan_subnets for the network this Mac is on, when there are
+        none, they are the examples', or TRUSTED_NETWORK (True: the Mac's whole subnet;
+        False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default: the
+        examples') and ROKU_PASSWORD, each when given. A Roku password there is none of is
+        a warning: only the user can give it. Returns the Change."""
+        settings, notes, warnings = self._lan_setup(trusted_network)
+        if settings is not None:
+            _write(self.settings_file, settings)
+        env = _read_env(self.secrets_file)
+        changes = {}
+        if not env.get("MITMWEB_PASSWORD"):
+            changes["MITMWEB_PASSWORD"] = self.new_secret()
+            notes.append(f"generated MITMWEB_PASSWORD (in {self.secrets_file}; the mitmweb UI asks for it)")
+        else:
+            notes.append("kept MITMWEB_PASSWORD")
+        if roku_user or not env.get("ROKU_DEV_USER"):
+            changes["ROKU_DEV_USER"] = roku_user or _example_roku_user()
+            notes.append(f"ROKU_DEV_USER: {changes['ROKU_DEV_USER']}")
+        else:
+            notes.append(f"kept ROKU_DEV_USER: {env['ROKU_DEV_USER']}")
+        if roku_password:
+            changes["ROKU_DEV_PASSWORD"] = roku_password
+            notes.append("set ROKU_DEV_PASSWORD")
+        elif env.get("ROKU_DEV_PASSWORD"):
+            notes.append("kept ROKU_DEV_PASSWORD")
+        else:
+            warnings.append(
+                "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
+            )
+        _write_env(self.secrets_file, changes)
+        return Change(notes, warnings)
+
+    def setup_values(self):
+        """What setup would keep, for a person to confirm or change: the lan_subnets (None:
+        none, or the examples'), this Mac's /32 and its whole subnet (None: on no network),
+        ROKU_DEV_USER (default: the examples') and whether there is a ROKU_DEV_PASSWORD.
+        Never a secret."""
+        settings, networks = self._lan_subnets()
+        mac = self._mac()
+        env = _read_env(self.secrets_file)
+        return SetupValues(
+            settings["lan_subnets"] if self._set_up(networks) else None,
+            mac and str(ip_network(mac.ip)),
+            mac and str(mac.network),
+            env.get("ROKU_DEV_USER") or _example_roku_user(),
+            bool(env.get("ROKU_DEV_PASSWORD")),
+        )
+
+    def _set_up(self, networks):
+        """Whether the lan_subnets NETWORKS are the user's own: some, and none the examples'."""
+        examples = [ip_network(subnet) for subnet in self._read(EXAMPLES / "settings.json")["lan_subnets"]]
+        return bool(networks) and not set(networks) & set(examples)
+
+    def _mac(self):
+        """This Mac's address on its network, as an interface (None: on no network)."""
+        mac = self.this_mac()
+        return mac and ip_interface("/".join(mac))
+
+    def _lan_setup(self, trusted_network):
+        """settings.json with lan_subnets for this Mac (None: kept as they are), and the
+        note and warnings saying so. The Mac's entry replaces them, keeping each registered
+        device's /32 it does not cover."""
+        settings, networks = self._lan_subnets()
+        if trusted_network is None and self._set_up(networks):
+            return None, [f"kept lan_subnets: {', '.join(settings['lan_subnets'])}"], []
+        mac = self._mac()
+        if mac is None:
+            return None, [], ["could not find this Mac's address: lan_subnets left as they are"]
+        entry = mac.network if trusted_network else ip_network(mac.ip)
+        device_ips = {ip_address(device.ip) for device in self.devices() if device.ip}
+        kept = [
+            str(network)
+            for network in networks
+            if network.prefixlen == network.max_prefixlen
+            and network[0] in device_ips
+            and network[0] not in entry
+        ]
+        settings["lan_subnets"] = [str(entry), *kept]
+        scope = "this Mac's network, trusted" if trusted_network else "this Mac only"
+        return settings, [f"lan_subnets: {entry} ({scope})"], []
 
     def discover(self):
         """The Rokus on the LAN, in the order they answered the SSDP search. Changes nothing."""
@@ -240,6 +342,26 @@ def rce_knows(rce_device_name):
         return False
 
 
+def this_mac():
+    """This Mac's address and netmask on its default-route interface, as `route` and
+    `ipconfig` give them (lab scripts find the Mac's LAN IP the same way: lan_ip in
+    scripts/lib.sh); None when it is on no network."""
+
+    def run(*command):
+        answer = subprocess.run(command, capture_output=True, text=True)
+        return answer.stdout.strip() if not answer.returncode else ""
+
+    interface = re.search(r"interface:\s*(\S+)", run("route", "-n", "get", "default"))
+    address = interface and run("ipconfig", "getifaddr", interface[1])
+    netmask = address and run("ipconfig", "getoption", interface[1], "subnet_mask")
+    return (address, netmask) if netmask else None
+
+
+def new_secret():
+    """A new random secret, safe unquoted in a URL path and a shell."""
+    return secrets.token_urlsafe(24)
+
+
 def ssdp_rokus():
     """The IPs answering an SSDP search for roku:ecp, sent to the SSDP group (or
     ROXY_SSDP_ADDRESS, host:port), in the order they answered within SSDP_SECONDS. Each Roku
@@ -296,4 +418,52 @@ def _write(file, doc):
     file.parent.mkdir(parents=True, exist_ok=True)
     draft = file.with_name(f".{file.name}.tmp")
     draft.write_text("{\n" + ",\n".join(lines) + "\n}\n" if lines else "{}\n")
+    draft.replace(file)
+
+
+def _example_roku_user():
+    """The Roku developer web server's user the examples give, every Roku's own default."""
+    return _read_env(EXAMPLES / "secrets.env")["ROKU_DEV_USER"]
+
+
+ENV_LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)")
+
+
+def _read_env(file):
+    """The NAME=value lines of the env FILE, each value as bash reads it ({} when there is
+    no FILE)."""
+    try:
+        lines = file.read_text().splitlines()
+    except FileNotFoundError:
+        return {}
+    env = {}
+    for line in lines:
+        match = ENV_LINE.fullmatch(line.strip())
+        if match:
+            try:
+                env[match[1]] = "".join(shlex.split(match[2], comments=True))
+            except ValueError:
+                env[match[1]] = match[2]
+    return env
+
+
+def _write_env(file, changes):
+    """Write each of CHANGES' values into the env FILE, over its NAME=value line, else
+    appended; every other line and comment kept. Private to the user (0600), and whole or
+    not at all (through a temp file beside it)."""
+    try:
+        lines = file.read_text().splitlines()
+    except FileNotFoundError:
+        lines = []
+    todo = dict(changes)
+    for i, line in enumerate(lines):
+        match = ENV_LINE.fullmatch(line.strip())
+        if match and match[1] in todo:
+            lines[i] = f"{match[1]}={shlex.quote(todo.pop(match[1]))}"
+    lines += [f"{name}={shlex.quote(value)}" for name, value in todo.items()]
+    file.parent.mkdir(parents=True, exist_ok=True)
+    draft = file.with_name(f".{file.name}.tmp")
+    draft.unlink(missing_ok=True)
+    with os.fdopen(os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as out:
+        out.write("".join(f"{line}\n" for line in lines))
     draft.replace(file)

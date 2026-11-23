@@ -22,6 +22,7 @@ The roxy lab from any terminal. roxy <subcommand> --help describes one.
   console    open a Target Device's debug console
   app        create or list App Profiles
   device     register, list or remove Target Devices, or discover Rokus
+  setup      fill your roxy settings for this Mac (run it again any time)
 EOF
     ;;
     start) cat <<'EOF'
@@ -147,6 +148,24 @@ a running lab to use a change.
                        roxy device add line for each one not registered; adds nothing
 EOF
     ;;
+    setup) cat <<'EOF'
+usage: roxy setup [--trusted-network | --this-mac-only] [--roku-user USER]
+Fill your roxy settings for this Mac, keeping what is there: run it again any time. It
+generates the mitmweb password (MITMWEB_PASSWORD in secrets.env, which the mitmweb UI
+asks for), allows this Mac in lan_subnets, and takes your Roku developer login (one for
+all your Rokus). Secrets are written to secrets.env, readable only by you, and never
+printed. In a terminal it shows each value and keeps it on Enter. Without one it never
+asks: the Roku password comes from stdin (pipe it in), never from a flag, and without it
+setup says so. Restart a running lab to use a change.
+  --trusted-network  allow this Mac's whole subnet in lan_subnets: every device on a
+                     network you trust, such as home, can use the lab
+  --this-mac-only    allow only this Mac's address in lan_subnets (the default, when
+                     there are none yet): on a shared network, such as work, no one
+                     else can relay through your lab. Either flag replaces lan_subnets,
+                     keeping each registered device's IP/32
+  --roku-user USER   the Roku developer web server's user (default: rokudev)
+EOF
+    ;;
   esac
 }
 
@@ -216,12 +235,22 @@ device() {
   esac
 }
 
+# setup [options] : never the Roku password as a flag, which shell history and process
+# lists would keep.
+setup() {
+  case " $* " in *" -h "*|*" --help "*) usage setup; return ;; esac
+  case " $* " in *" --roku-password"*)
+    die "the Roku password is never a flag: pipe it to roxy setup, or run roxy setup in a terminal" ;;
+  esac
+  proxy_cli setup "$@"
+}
+
 cmd="${1:-}"
 [ -n "$cmd" ] || { usage roxy >&2; exit 2; }
 shift
 case "$cmd" in
   -h|--help) usage roxy; exit 0 ;;
-  start|status|scenario|launch|flows|export|console|app|device) ;;
+  start|status|scenario|launch|flows|export|console|app|device|setup) ;;
   *) die "unknown subcommand '$cmd' (roxy --help lists them)" ;;
 esac
 case "${1:-}" in -h|--help) usage "$cmd"; exit 0 ;; esac
@@ -236,4 +265,5 @@ case "$cmd" in
   console) console "$@" ;;
   app) app "$@" ;;
   device) device "$@" ;;
+  setup) setup "$@" ;;
 esac

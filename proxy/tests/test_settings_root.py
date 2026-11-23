@@ -1,9 +1,10 @@
-"""The Settings Root module: the Target Devices and lan_subnets in the user's settings root,
-as `roxy device add`, `list` and `remove` change them and `roxy device discover` finds
-Rokus. Against the temp settings root (conftest's `settings`, seeded from the examples:
-lan_subnets 192.0.2.0/24), with a Roku's ECP answer, `rce device resolve` and the SSDP
-search faked."""
+"""The Settings Root module: the Target Devices, lan_subnets and secrets in the user's settings
+root, as `roxy device add`, `list` and `remove` and `roxy setup` change them, and the Rokus
+`roxy device discover` finds. Against the temp settings root (conftest's `settings`, seeded from
+the examples: lan_subnets 192.0.2.0/24), with a Roku's ECP answer, `rce device resolve`, this
+Mac's address, the random source and the SSDP search faked."""
 
+import itertools
 import json
 import subprocess
 
@@ -27,14 +28,33 @@ def rce():
 
 
 @pytest.fixture
+def mac():
+    """This Mac's address and netmask, as mac[0]; None: it is on no network."""
+    return [("198.51.100.23", "255.255.255.0")]
+
+
+@pytest.fixture
 def ssdp():
     """The IPs answering the SSDP search for roku:ecp, in the order they answered."""
     return []
 
 
 @pytest.fixture
-def root(settings, ecp, rce, ssdp):
-    return SettingsRoot(settings, ecp_device_info=ecp.get, rce_knows=rce.__contains__, ssdp_rokus=lambda: ssdp)
+def ports(ecp, rce, mac, ssdp):
+    """SettingsRoot's ports, faked; new_secret gives secret-1, secret-2, ..."""
+    secrets = (f"secret-{n}" for n in itertools.count(1))
+    return {
+        "ecp_device_info": ecp.get,
+        "rce_knows": rce.__contains__,
+        "this_mac": lambda: mac[0],
+        "new_secret": lambda: next(secrets),
+        "ssdp_rokus": lambda: ssdp,
+    }
+
+
+@pytest.fixture
+def root(settings, ports):
+    return SettingsRoot(settings, **ports)
 
 
 def devices_file(settings):
@@ -236,9 +256,9 @@ def test_remove_refuses_an_unknown_name(root, settings):
     assert devices_file(settings) == before
 
 
-def test_add_into_a_settings_root_without_its_files_creates_them(tmp_path, ecp, rce):
+def test_add_into_a_settings_root_without_its_files_creates_them(tmp_path, ports):
     empty = tmp_path / "empty-root"
-    root = SettingsRoot(empty, ecp_device_info=ecp.get, rce_knows=rce.__contains__, ssdp_rokus=list)
+    root = SettingsRoot(empty, **ports)
 
     root.add_device("Den", "198.51.100.7")
 
@@ -265,6 +285,161 @@ def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_changing_nothing(root,
 
     assert devices_file(settings) == before
     assert settings_file(settings) == {"lan_subnets": ["my LAN"]}
+
+
+# roxy setup: the secrets and lan_subnets for this Mac (faked: 198.51.100.23, netmask
+# 255.255.255.0), keeping what is there and replacing the examples' values.
+
+SECRET_NAMES = ("MITMWEB_PASSWORD", "LAB_SECRET", "ROKU_DEV_USER", "ROKU_DEV_PASSWORD")
+
+
+def secrets_env(settings):
+    """secrets.env as bash reads it (the lab sources it): each secret's value."""
+    script = '. "$1"; printf "%s\\0" ' + " ".join(f'"${name}"' for name in SECRET_NAMES)
+    out = subprocess.run(["bash", "-c", script, "-", settings / "secrets.env"], capture_output=True, text=True, check=True)
+    return dict(zip(SECRET_NAMES, out.stdout.split("\0")))
+
+
+def said(change):
+    """Everything a Change says, as one text."""
+    return "\n".join(change.notes + change.warnings)
+
+
+def test_setup_generates_the_mitmweb_password_into_a_private_file_and_never_says_it(root, settings):
+    change = root.setup()
+
+    assert secrets_env(settings)["MITMWEB_PASSWORD"] == "secret-1"
+    assert (settings / "secrets.env").stat().st_mode & 0o777 == 0o600
+    assert "secret-1" not in said(change)
+    assert "generated MITMWEB_PASSWORD" in said(change)
+
+
+def test_setup_keeps_the_other_lines_and_comments_of_secrets_env(root, settings):
+    before = (settings / "secrets.env").read_text().splitlines()
+
+    root.setup()
+
+    after = (settings / "secrets.env").read_text().splitlines()
+    assert [line for line in after if not line.startswith("MITMWEB_PASSWORD=")] == [
+        line for line in before if not line.startswith("MITMWEB_PASSWORD=")
+    ]
+
+
+def test_a_rerun_keeps_the_mitmweb_password(root, settings):
+    root.setup()
+
+    change = root.setup()
+
+    assert secrets_env(settings)["MITMWEB_PASSWORD"] == "secret-1"
+    assert "kept MITMWEB_PASSWORD" in said(change)
+
+
+def test_setup_into_a_settings_root_without_secrets_env_creates_it_private(tmp_path, ports):
+    empty = tmp_path / "empty-root"
+
+    SettingsRoot(empty, **ports).setup()
+
+    assert secrets_env(empty)["MITMWEB_PASSWORD"] == "secret-1"
+    assert (empty / "secrets.env").stat().st_mode & 0o777 == 0o600
+
+
+def test_setup_allows_only_this_mac_by_default_in_place_of_the_examples_subnet(root, settings):
+    change = root.setup()
+
+    assert settings_file(settings)["lan_subnets"] == ["198.51.100.23/32"]
+    assert settings_file(settings)["grid_devices"]["physical"] == "Living Room"
+    assert "lan_subnets: 198.51.100.23/32 (this Mac only)" in change.notes
+
+
+def test_setup_on_a_trusted_network_allows_this_macs_whole_subnet(root, settings):
+    change = root.setup(trusted_network=True)
+
+    assert settings_file(settings)["lan_subnets"] == ["198.51.100.0/24"]
+    assert "lan_subnets: 198.51.100.0/24 (this Mac's network, trusted)" in change.notes
+
+
+def test_a_rerun_keeps_the_lan_subnets_there_are(root, settings, mac):
+    root.setup(trusted_network=True)
+    mac[0] = ("203.0.113.5", "255.255.255.0")
+
+    change = root.setup()
+
+    assert settings_file(settings)["lan_subnets"] == ["198.51.100.0/24"]
+    assert "kept lan_subnets: 198.51.100.0/24" in change.notes
+
+
+def test_setup_replaces_the_examples_subnet_keeping_each_devices_32_beside_it(root, settings):
+    root.add_device("Den", "203.0.113.9")
+
+    root.setup()
+
+    assert settings_file(settings)["lan_subnets"] == ["198.51.100.23/32", "203.0.113.9/32"]
+
+
+def test_a_network_choice_replaces_lan_subnets_keeping_each_devices_32(root, settings):
+    root.setup(trusted_network=True)
+    root.add_device("Den", "203.0.113.9")
+
+    root.setup(trusted_network=False)
+
+    assert settings_file(settings)["lan_subnets"] == ["198.51.100.23/32", "203.0.113.9/32"]
+
+
+def test_setup_off_any_network_leaves_lan_subnets_and_warns(root, settings, mac):
+    mac[0] = None
+    before = settings_file(settings)
+
+    change = root.setup()
+
+    assert settings_file(settings) == before
+    assert "could not find this Mac's address: lan_subnets left as they are" in change.warnings
+
+
+def test_setup_takes_the_roku_developer_login_and_never_says_the_password(root, settings):
+    password = "p a$s'w\"rd"
+
+    change = root.setup(roku_user="dev", roku_password=password)
+
+    assert (secrets_env(settings)["ROKU_DEV_USER"], secrets_env(settings)["ROKU_DEV_PASSWORD"]) == ("dev", password)
+    assert password not in said(change)
+    assert {"ROKU_DEV_USER: dev", "set ROKU_DEV_PASSWORD"} <= set(change.notes)
+
+
+def test_setup_without_a_roku_password_hands_that_step_to_the_user(root, settings):
+    change = root.setup()
+
+    assert secrets_env(settings)["ROKU_DEV_PASSWORD"] == ""
+    assert change.warnings == [
+        "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
+    ]
+
+
+def test_a_rerun_keeps_the_roku_login(root, settings):
+    root.setup(roku_user="dev", roku_password="first")
+
+    change = root.setup()
+
+    assert (secrets_env(settings)["ROKU_DEV_USER"], secrets_env(settings)["ROKU_DEV_PASSWORD"]) == ("dev", "first")
+    assert {"kept ROKU_DEV_USER: dev", "kept ROKU_DEV_PASSWORD"} <= set(change.notes)
+    assert change.warnings == []
+
+
+def test_setup_gives_the_roku_user_its_default_when_there_is_none(root, settings):
+    (settings / "secrets.env").write_text("MITMWEB_PASSWORD=\n")
+
+    root.setup()
+
+    assert secrets_env(settings)["ROKU_DEV_USER"] == "rokudev"
+
+
+def test_the_values_setup_would_keep_show_no_secret_and_no_example(root, settings):
+    assert root.setup_values() == (None, "198.51.100.23/32", "198.51.100.0/24", "rokudev", False)
+
+    root.setup(roku_password="first")
+
+    values = root.setup_values()
+    assert values == (["198.51.100.23/32"], "198.51.100.23/32", "198.51.100.0/24", "rokudev", True)
+    assert "first" not in repr(values)
 
 
 def test_discover_lists_each_roku_that_answers_with_its_own_name_model_and_developer_mode(root, ssdp, ecp):
