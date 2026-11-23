@@ -20,6 +20,7 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 `roxy device` registers your Target Devices in `devices.json` without editing JSON, and keeps `lan_subnets` in step. It never prompts, so an agent can run it too:
 
 ```sh
+roxy device discover                                       # the Rokus on this network, with an add line for each new one
 roxy device add "Living Room" --ip 192.0.2.54             # a Roku on your LAN: a Physical Device
 roxy device add Phone --ip 192.0.2.60 --proxied           # a phone, tablet or TV box: a Proxied Device
 roxy device add "Cloud Device" --rce player                # a Cloud Device, by its rce Device Name; slug cloud-device
@@ -28,6 +29,7 @@ roxy device list                                           # each device, its IP
 roxy device remove Phone
 ```
 
+- `discover` searches this network for Rokus (SSDP, about 3 seconds) and asks each one's ECP, never through a proxy. It prints each Roku's IP, its own name, model, developer mode and the device it is registered as, and a ready `roxy device add "<its name>" --ip <ip>` line for each one not registered yet; it adds nothing itself. A network that blocks discovery (many work and guest networks do) finds none: a Roku shows its IP in Settings → Network → About.
 - `add` refuses a name that exists, an IP that is not one, and a slug that is taken or is not lowercase letters, digits and single dashes. A Cloud Device's slug, the last segment of its public Proxy Base, defaults to its name in lowercase with dashes.
 - `add` asks a Roku's ECP (`http://<ip>:8060/query/device-info`, never through a proxy) and a Cloud Device's `rce device resolve`. A Roku that does not answer or is not in developer mode, or a Device Name `rce` does not know, is registered anyway with a warning: it may only be off, or on another network, today.
 - `add` with an IP that no `lan_subnets` entry covers appends `<ip>/32` to them, and says so. `remove` drops a `/32` equal to the device's IP when no other device has that IP; it never touches a wider subnet, so a trusted network you allowed stays allowed.
