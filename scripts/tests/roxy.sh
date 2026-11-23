@@ -23,7 +23,8 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
   -e 's/^LAB_SECRET=.*/LAB_SECRET=test-secret/' "$ROXY_CONFIG_DIR/secrets.env"
 
 # Fakes on PATH. curl logs the URL of each call to $CURL_LOG.urls and answers for
-# cloudflared's metrics (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP. rce logs one line
+# cloudflared's metrics (FAKE_TUNNEL_HOST set: a tunnel is up) and ECP; with http_proxy
+# set it fails as through a dead proxy, unless the call has --noproxy. rce logs one line
 # of shell-quoted arguments per call.
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
@@ -33,11 +34,12 @@ export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log" REAL
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/curl" <<'EOF'
 #!/usr/bin/env bash
-url=""
+url="" proxy="${http_proxy:-}"
 for a in "$@"; do
-  case "$a" in http://*|https://*) url="$a" ;; esac
+  case "$a" in http://*|https://*) url="$a" ;; --noproxy) proxy="" ;; esac
 done
 echo "$url" >> "$CURL_LOG.urls"
+[ -z "$proxy" ] || { echo "curl: (7) Failed to connect to the proxy $proxy" >&2; exit 7; }
 case "$url" in
   */quicktunnel) [ -n "${FAKE_TUNNEL_HOST:-}" ] || { echo "curl: (7) Failed to connect" >&2; exit 7; }
     printf '{"hostname": "%s"}\n' "$FAKE_TUNNEL_HOST" ;;
@@ -160,6 +162,12 @@ case "$out" in *"Public Proxy Base: https://tunnel.example/test-secret"$'\n'*) ;
 $out" ;; esac
 out="$("$ROXY" status --help)"
 case "$out" in *"--show-secret"*"secret"*) ;; *) fail "status --help does not describe --show-secret: $out" ;; esac
+# The Mac's proxies pointed at a dead proxy (as at the lab's Proxy Routing listener): roxy
+# still reaches mitmweb and cloudflared's metrics on 127.0.0.1.
+out="$(http_proxy=http://127.0.0.1:9 FAKE_TUNNEL_HOST=tunnel.example lab_up "" "" "$ROXY" status)" \
+  || fail "status with http_proxy set exited non-zero: $out"
+case "$out" in *"Public Proxy Base: https://tunnel.example/<secret>"*) ;; *) fail "status with http_proxy set lost the tunnel:
+$out" ;; esac
 out="$(lab_up "" "" "$ROXY" status)" || fail "status without a tunnel or Scenario exited non-zero: $out"
 for want in "Public Proxy Base: none" "Scenarios:         none"; do
   case "$out" in *"$want"*) ;; *) fail "status without a tunnel or Scenario lacks '$want':

@@ -176,7 +176,7 @@ print_lan_addresses() {
 
 # tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.
 tunnel_host() {
-  curl -fsS "http://$TUNNEL_METRICS/quicktunnel" 2>/dev/null | jq -er '.hostname | select(. != "")'
+  curl -fsS --noproxy '*' "http://$TUNNEL_METRICS/quicktunnel" 2>/dev/null | jq -er '.hostname | select(. != "")'
 }
 
 # public_proxy_base : the running tunnel's public Proxy Base, without a device slug;

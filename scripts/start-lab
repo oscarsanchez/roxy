@@ -51,7 +51,7 @@ fi
 quick_tunnel_host() {
   local i
   for i in $(seq 30); do
-    if curl -fsS -o /dev/null "http://$TUNNEL_METRICS/ready" 2>/dev/null; then
+    if curl -fsS --noproxy '*' -o /dev/null "http://$TUNNEL_METRICS/ready" 2>/dev/null; then
       tunnel_host
       return
     fi
