@@ -1,23 +1,31 @@
-"""The Settings Root: the user's Target Devices and the LAN subnets allowed to use the lab,
-as `roxy device` changes them. The one place that writes them:
+"""The Settings Root: the user's Target Devices, the LAN subnets allowed to use the lab and
+the secrets, as `roxy device` and `roxy setup` change them. The one place that writes them:
 
     <settings root>/devices.json   {"<name>": {"ip": ...} | {"ip": ..., "kind": "proxied"}
                                               | {"rce_device_name": ..., "slug": ...}, ...}
     <settings root>/settings.json  {"lan_subnets": ["<CIDR>", ...], ...}
+    <settings root>/secrets.env    NAME=value lines, which the lab's scripts source
 
-Writes keep every key and entry they don't own (grid_devices, unknown keys). The outside
-world comes in through ports passed to SettingsRoot: a Roku's ECP device-info answer and
-`rce device resolve`; ecp_device_info and rce_knows, below, are the real ones.
+Writes keep every key and entry they don't own (grid_devices, unknown keys); secrets.env
+keeps its other lines and comments, and stays private to the user. A secret is never in
+what a change says. The outside world comes in through ports passed to SettingsRoot: a
+Roku's ECP device-info answer, `rce device resolve`, this Mac's address and the random
+source; ecp_device_info, rce_knows, this_mac and new_secret, below, are the real ones.
 """
 
 import json
+import os
 import re
+import secrets
+import shlex
 import subprocess
-from ipaddress import ip_address, ip_network
+from ipaddress import ip_address, ip_interface, ip_network
 from pathlib import Path
 from typing import NamedTuple
 from xml.etree import ElementTree
 
+# The examples install.sh seeded a settings root with: their values are no settings.
+EXAMPLES = Path(__file__).resolve().parents[2] / "settings.example"
 PHYSICAL_DEVICE = "Physical Device"
 CLOUD_DEVICE = "Cloud Device"
 PROXIED_DEVICE = "Proxied Device"
@@ -58,14 +66,18 @@ class Change(NamedTuple):
 
 
 class SettingsRoot:
-    def __init__(self, root, *, ecp_device_info, rce_knows):
+    def __init__(self, root, *, ecp_device_info, rce_knows, this_mac, new_secret):
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
         fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
-        `rce device resolve` knows it."""
+        `rce device resolve` knows it; THIS_MAC(), this Mac's address and netmask (None: it
+        is on no network); NEW_SECRET(), a new random secret."""
         self.devices_file = Path(root) / "devices.json"
         self.settings_file = Path(root) / "settings.json"
+        self.secrets_file = Path(root) / "secrets.env"
         self.ecp_device_info = ecp_device_info
         self.rce_knows = rce_knows
+        self.this_mac = this_mac
+        self.new_secret = new_secret
 
     def devices(self):
         """The registered Target Devices, in file order."""
@@ -119,6 +131,49 @@ class SettingsRoot:
         settings, notes = self._disallowing(ip) if ip and not shared else (None, [])
         self._save(registry, settings)
         return Change(notes, [])
+
+    def setup(self, *, trusted_network=None):
+        """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
+        when there is none, and lan_subnets for the network this Mac is on, when there are
+        none, they are the examples', or TRUSTED_NETWORK (True: the Mac's whole subnet;
+        False: the Mac's /32) chooses. Returns the Change."""
+        settings, notes, warnings = self._lan_setup(trusted_network)
+        if settings is not None:
+            _write(self.settings_file, settings)
+        env = _read_env(self.secrets_file)
+        changes = {}
+        if not env.get("MITMWEB_PASSWORD"):
+            changes["MITMWEB_PASSWORD"] = self.new_secret()
+            notes.append(f"generated MITMWEB_PASSWORD (in {self.secrets_file}; the mitmweb UI asks for it)")
+        else:
+            notes.append("kept MITMWEB_PASSWORD")
+        _write_env(self.secrets_file, changes)
+        return Change(notes, warnings)
+
+    def _lan_setup(self, trusted_network):
+        """settings.json with lan_subnets for this Mac (None: kept as they are), and the
+        note and warnings saying so. The Mac's entry replaces them, keeping each registered
+        device's /32 it does not cover."""
+        settings, networks = self._lan_subnets()
+        examples = [ip_network(subnet) for subnet in self._read(EXAMPLES / "settings.json")["lan_subnets"]]
+        if trusted_network is None and networks and not set(networks) & set(examples):
+            return None, [f"kept lan_subnets: {', '.join(settings['lan_subnets'])}"], []
+        mac = self.this_mac()
+        if mac is None:
+            return None, [], ["could not find this Mac's address: lan_subnets left as they are"]
+        mac = ip_interface("/".join(mac))
+        entry = mac.network if trusted_network else ip_network(mac.ip)
+        device_ips = {ip_address(device.ip) for device in self.devices() if device.ip}
+        kept = [
+            str(network)
+            for network in networks
+            if network.prefixlen == network.max_prefixlen
+            and network[0] in device_ips
+            and network[0] not in entry
+        ]
+        settings["lan_subnets"] = [str(entry), *kept]
+        scope = "this Mac's network, trusted" if trusted_network else "this Mac only"
+        return settings, [f"lan_subnets: {entry} ({scope})"], []
 
     def _save(self, registry, settings):
         """Write devices.json, then settings.json unless SETTINGS is None."""
@@ -207,6 +262,26 @@ def rce_knows(rce_device_name):
         return False
 
 
+def this_mac():
+    """This Mac's address and netmask on its default-route interface, as `route` and
+    `ipconfig` give them (lab scripts find the Mac's LAN IP the same way: lan_ip in
+    scripts/lib.sh); None when it is on no network."""
+
+    def run(*command):
+        answer = subprocess.run(command, capture_output=True, text=True)
+        return answer.stdout.strip() if not answer.returncode else ""
+
+    interface = re.search(r"interface:\s*(\S+)", run("route", "-n", "get", "default"))
+    address = interface and run("ipconfig", "getifaddr", interface[1])
+    netmask = address and run("ipconfig", "getoption", interface[1], "subnet_mask")
+    return (address, netmask) if netmask else None
+
+
+def new_secret():
+    """A new random secret, safe unquoted in a URL path and a shell."""
+    return secrets.token_urlsafe(24)
+
+
 def _kind(entry):
     """A devices.json entry's kind of Target Device."""
     if "rce_device_name" in entry:
@@ -225,4 +300,47 @@ def _write(file, doc):
     file.parent.mkdir(parents=True, exist_ok=True)
     draft = file.with_name(f".{file.name}.tmp")
     draft.write_text("{\n" + ",\n".join(lines) + "\n}\n" if lines else "{}\n")
+    draft.replace(file)
+
+
+ENV_LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)")
+
+
+def _read_env(file):
+    """The NAME=value lines of the env FILE, each value as bash reads it ({} when there is
+    no FILE)."""
+    try:
+        lines = file.read_text().splitlines()
+    except FileNotFoundError:
+        return {}
+    env = {}
+    for line in lines:
+        match = ENV_LINE.fullmatch(line.strip())
+        if match:
+            try:
+                env[match[1]] = "".join(shlex.split(match[2], comments=True))
+            except ValueError:
+                env[match[1]] = match[2]
+    return env
+
+
+def _write_env(file, changes):
+    """Write each of CHANGES' values into the env FILE, over its NAME=value line, else
+    appended; every other line and comment kept. Private to the user (0600), and whole or
+    not at all (through a temp file beside it)."""
+    try:
+        lines = file.read_text().splitlines()
+    except FileNotFoundError:
+        lines = []
+    todo = dict(changes)
+    for i, line in enumerate(lines):
+        match = ENV_LINE.fullmatch(line.strip())
+        if match and match[1] in todo:
+            lines[i] = f"{match[1]}={shlex.quote(todo.pop(match[1]))}"
+    lines += [f"{name}={shlex.quote(value)}" for name, value in todo.items()]
+    file.parent.mkdir(parents=True, exist_ok=True)
+    draft = file.with_name(f".{file.name}.tmp")
+    draft.unlink(missing_ok=True)
+    with os.fdopen(os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as out:
+        out.write("".join(f"{line}\n" for line in lines))
     draft.replace(file)
