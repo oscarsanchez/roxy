@@ -1,6 +1,9 @@
 # Sourced by the tests that look up the Mac's LAN IP (scripts/lan-interface): fakes of the
 # Mac's network commands, so a test never depends on the network this Mac is on.
 
+# The warning roxy start and roxy setup give when a VPN holds the default route.
+VPN_WARNING="warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab"
+
 # fake_mac_network DIR : writes route, networksetup and ipconfig into DIR, for DIR on PATH.
 # networksetup lists the network services in this order: a VPN on utun4, Thunderbolt Bridge
 # (bridge0), USB 10/100/1000 LAN (en5), Wi-Fi (en0), and a VPN with no device.

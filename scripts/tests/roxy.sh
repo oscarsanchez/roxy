@@ -684,6 +684,16 @@ done
 case "$(setup --roku-password hunter2 2>&1)" in *"never a flag"*) ;; *) fail "setup --roku-password said: $(setup --roku-password hunter2 2>&1)" ;; esac
 echo "ok: setup with no terminal generates the mitmweb password, allows this Mac, takes the Roku password from stdin only"
 
+# setup with a VPN holding the default route (utun4) and the Thunderbolt Bridge up: this Mac's
+# /32 is its Wi-Fi address, and setup warns without refusing. With no VPN, no warning.
+grep -qF "$VPN_WARNING" "$TMP/setup.err" && fail "setup warns of a VPN with none: $(cat "$TMP/setup.err")"
+out="$(FAKE_DEFAULT_ROUTE=utun4 FAKE_MAC_ADDRESSES="utun4=203.0.113.5 bridge0=203.0.113.6 en0=198.51.100.24" \
+  setup --this-mac-only < /dev/null 2>&1)" || fail "setup on a VPN: $out"
+jq -e '.lan_subnets == ["198.51.100.24/32"]' "$TMP/setup-settings/settings.json" >/dev/null \
+  || fail "setup on a VPN left lan_subnets as: $(cat "$TMP/setup-settings/settings.json")"
+grep -qxF "$VPN_WARNING" <<< "$out" || fail "setup on a VPN does not warn: $out"
+echo "ok: setup on a VPN allows this Mac's Wi-Fi address, and warns"
+
 # setup --cloud, cloudflared on the PATH beside the fake rce: the lab secret generated once,
 # never printed; an RCE token rce does not take is a warning for the user, not a failure.
 mkdir -p "$TMP/cloud-bin"

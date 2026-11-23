@@ -32,6 +32,7 @@ from xml.etree import ElementTree
 
 # The examples roxy 0.2.0's install.sh seeded a settings root with: their values are no settings.
 EXAMPLES = Path(__file__).resolve().parents[2] / "settings.example"
+LAN_INTERFACE = Path(__file__).resolve().parents[2] / "scripts" / "lan-interface"  # the Mac's LAN interface
 PHYSICAL_DEVICE = "Physical Device"
 CLOUD_DEVICE = "Cloud Device"
 PROXIED_DEVICE = "Proxied Device"
@@ -413,17 +414,17 @@ def rce_token_works():
 
 
 def this_mac():
-    """This Mac's address and netmask on its default-route interface, as `route` and
-    `ipconfig` give them (lab scripts find the Mac's LAN IP the same way: lan_ip in
-    scripts/lib.sh); None when it is on no network."""
+    """This Mac's address and netmask on its LAN interface, past any VPN, as `ipconfig` gives
+    them; the interface is the one scripts/lan-interface finds (as lan_ip in scripts/lib.sh
+    does). None when it is on no network."""
 
     def run(*command):
         answer = subprocess.run(command, capture_output=True, text=True)
         return answer.stdout.strip() if not answer.returncode else ""
 
-    interface = re.search(r"interface:\s*(\S+)", run("route", "-n", "get", "default"))
-    address = interface and run("ipconfig", "getifaddr", interface[1])
-    netmask = address and run("ipconfig", "getoption", interface[1], "subnet_mask")
+    interface = run(str(LAN_INTERFACE))
+    address = interface and run("ipconfig", "getifaddr", interface)
+    netmask = address and run("ipconfig", "getoption", interface, "subnet_mask")
     return (address, netmask) if netmask else None
 
 

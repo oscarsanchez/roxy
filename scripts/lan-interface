@@ -2,7 +2,7 @@
 # Print the Mac's LAN interface: the first active Wi-Fi or Ethernet interface (one
 # with an IPv4 address) in macOS's network service order, skipping VPN (utun), bridge and
 # loopback interfaces. Not the default route's: a VPN can hold that. The one lookup of the
-# Mac's LAN IP: lan_ip in scripts/lib.sh runs it.
+# Mac's LAN IP: lan_ip in scripts/lib.sh and this_mac in proxy/lab/settings_root.py run it.
 # Exits 1, printing nothing, when no such interface is active.
 # Usage: scripts/lan-interface
 set -euo pipefail

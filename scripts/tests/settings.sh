@@ -128,9 +128,8 @@ case "$out" in *"Proxy Routing:     $ip:$LAB_PROXY_ROUTING_PORT"*) ;; *) fail "t
 echo "ok: the Proxy Routing listener starts, and the start prints its address"
 
 # A VPN holds the default route (utun4), the Thunderbolt Bridge has an address too: the Proxy
-# IP is still Wi-Fi's, the first active Wi-Fi or Ethernet interface in the service order, and the start
-# warns without refusing. With no VPN, no warning.
-VPN_WARNING="warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab"
+# IP is still Wi-Fi's, the first active Wi-Fi or Ethernet interface in the service order, and
+# the start warns without refusing. With no VPN, no warning.
 case "$out" in *"$VPN_WARNING"*) fail "the start warns of a VPN with none: $out" ;; esac
 out="$(FAKE_DEFAULT_ROUTE=utun4 FAKE_MAC_ADDRESSES="utun4=203.0.113.5 bridge0=203.0.113.6 en0=192.0.2.10" \
   "$SCRIPTS/start-lab" 2>&1)" || fail "start-lab on a VPN: $out"

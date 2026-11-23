@@ -3,15 +3,18 @@ root, as `roxy device add`, `list` and `remove` and `roxy setup` change them, an
 `roxy device discover` finds. Against the temp settings root (conftest's `settings`, seeded from
 the examples: lan_subnets 192.0.2.0/24), with a Roku's ECP answer, `rce device resolve`, this
 Mac's address, the random source, the SSDP search, the tools on the PATH and
-`rce token status` faked."""
+`rce token status` faked; this Mac's address itself (this_mac) against the Mac's network commands
+faked."""
 
 import itertools
 import json
+import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
-from lab.settings_root import BadDevice, DeviceExists, SettingsRoot, SettingsRootError, UnknownDevice
+from lab.settings_root import BadDevice, DeviceExists, SettingsRoot, SettingsRootError, UnknownDevice, this_mac
 
 DEVELOPER_MODE = {"user-device-name": "Den", "model-name": "Roku Ultra", "developer-enabled": "true"}
 
@@ -624,3 +627,35 @@ def test_setup_with_no_roku_answering_says_where_to_read_a_rokus_ip(root):
         ],
         [],
     )
+
+
+@pytest.fixture
+def mac_network(tmp_path, monkeypatch):
+    """The Mac's network commands, faked on the PATH (scripts/tests/fake-mac-network.sh): the
+    services in the order VPN (utun4), Thunderbolt Bridge (bridge0), USB LAN (en5), Wi-Fi (en0)."""
+    bin_dir = tmp_path / "bin"
+    bin_dir.mkdir()
+    fake = Path(__file__).resolve().parents[2] / "scripts" / "tests" / "fake-mac-network.sh"
+    subprocess.run(["bash", "-c", '. "$1"; fake_mac_network "$2"', "-", fake, bin_dir], check=True)
+    monkeypatch.setenv("PATH", f"{bin_dir}:{os.environ['PATH']}")
+    return monkeypatch
+
+
+def test_this_mac_is_its_wi_fi_address_past_a_vpn_holding_the_default_route(mac_network):
+    mac_network.setenv("FAKE_DEFAULT_ROUTE", "utun4")
+    mac_network.setenv("FAKE_MAC_ADDRESSES", "utun4=203.0.113.5 bridge0=203.0.113.6 en0=192.0.2.10")
+
+    assert this_mac() == ("192.0.2.10", "255.255.255.0")
+
+
+def test_this_mac_with_ethernet_and_wi_fi_up_is_the_first_in_the_service_order(mac_network):
+    mac_network.setenv("FAKE_MAC_ADDRESSES", "en0=192.0.2.10 en5=192.0.2.20")
+
+    assert this_mac() == ("192.0.2.20", "255.255.255.0")
+
+
+def test_this_mac_with_only_a_vpn_up_is_on_no_network(mac_network):
+    mac_network.setenv("FAKE_DEFAULT_ROUTE", "utun4")
+    mac_network.setenv("FAKE_MAC_ADDRESSES", "utun4=203.0.113.5")
+
+    assert this_mac() is None

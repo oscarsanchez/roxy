@@ -242,13 +242,14 @@ device() {
 }
 
 # setup [options] : never the Roku password as a flag, which shell history and process
-# lists would keep.
+# lists would keep. A VPN holding the default route gets a warning once setup is done.
 setup() {
   case " $* " in *" -h "*|*" --help "*) usage setup; return ;; esac
   case " $* " in *" --roku-password"*)
     die "the Roku password is never a flag: pipe it to roxy setup, or run roxy setup in a terminal" ;;
   esac
   proxy_cli setup "$@"
+  warn_of_a_vpn
 }
 
 cmd="${1:-}"
