@@ -6,11 +6,17 @@ Personal settings (secrets, devices, LAN subnets) live in the settings root, nev
 
 Writing or reviewing code: `CODING_STANDARDS.md`.
 
+Ask the user before anything that reaches a Target Device, starts a Cloud Device Run (billed until stopped), opens a tunnel or runs `roxy start` on their own settings root. `scripts/check` needs none of them.
+
 ## Agent skills
 
 ### Issue tracker
 
 Issues and specs live as local markdown under `.scratch/<feature>/`. See `docs/agents/issue-tracker.md`.
+
+### Implementing a ticket
+
+In a worktree, on a feature's integration branch: `docs/agents/implementing.md`.
 
 ### Triage labels
 
