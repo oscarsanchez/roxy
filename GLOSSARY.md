@@ -1,6 +1,6 @@
 # roxy
 
-A lab for inspecting and manipulating the network traffic that a Roku app sends and receives, on both real Roku hardware and Roku's cloud-hosted emulator.
+A lab for inspecting and manipulating the network traffic that a Roku app sends and receives, on both real Roku hardware and Roku's cloud-hosted emulator, and that the same product's mobile apps send from phones and tablets.
 
 ## Targets
 
@@ -9,7 +9,7 @@ A disposable Roku app built only to exercise traffic through the lab; exists in 
 _Avoid_: test channel, sample app, client
 
 **Product App**:
-A Roku app you develop, run as a dev-mode sideloaded build that has opted in to the lab. Its store and production builds are out of scope.
+An app you develop that has opted in to the lab: a Roku dev-mode sideloaded build, or an iOS or Android debug build of the same product. Its store and production builds are out of scope.
 _Avoid_: real app, my app, customer app
 
 **Physical Device**:
@@ -20,8 +20,12 @@ _Avoid_: box, hardware, real device
 A virtual Roku player or TV running in Roku Cloud Emulator (RCE), reachable only over the public internet.
 _Avoid_: emulator, RCE instance, simulator
 
+**Mobile Device**:
+An iPhone, iPad, or Android phone or tablet on the lab's LAN, or a simulated one on the lab's own Mac, running a Product App's mobile debug build through Proxy Routing.
+_Avoid_: phone (unqualified), handset
+
 **Target Device**:
-Either a Physical Device or a Cloud Device: whatever is running the Lab App or Product App right now.
+A Physical Device, a Cloud Device or a Mobile Device: whatever is running the Lab App or Product App right now.
 _Avoid_: device (unqualified), Roku
 
 ## Traffic
@@ -41,6 +45,10 @@ _Avoid_: URL rewriting, reverse mode
 **CA Routing**:
 Getting Outbound Traffic to the lab by having DNS point Origins at the lab while a Lab App or Product App trusts the lab's certificate authority; Physical Devices only.
 _Avoid_: DNS mode, custom CA mode, transparent mode
+
+**Proxy Routing**:
+Getting Outbound Traffic to the lab by setting the lab as the Mobile Device's HTTP proxy while the device trusts the lab's certificate authority; Mobile Devices only. The flows keep their Origin URLs: no Proxy Base, no Prefixed URLs.
+_Avoid_: explicit proxy mode, regular mode
 
 **Proxy Base**:
 The address of the lab that a Lab App or Product App puts in front of an Origin URL; differs per Target Device kind (LAN address for a Physical Device, Public Endpoint plus secret segment and device slug for a Cloud Device).

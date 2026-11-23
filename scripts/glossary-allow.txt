@@ -3,3 +3,5 @@ Roku  # the vendor (Roku OS, Roku's docs); the lint cannot tell it from "the Rok
 client  # the proxy sense (LAN client, client IP, client response) is the lab's own; the Lab App is never called one
 Roku Cloud Emulator  # the product's name (Cloud Device is ours)
 HAR  # the file format roxy export --har writes from a Recording; a Recording itself is never called one
+iOS Simulator  # Apple's product name for a simulated iPhone on the Mac (Cloud Device is ours)
+Android Emulator  # Google's product name for an emulated Android device on the Mac (Cloud Device is ours)
