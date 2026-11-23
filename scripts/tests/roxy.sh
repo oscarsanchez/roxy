@@ -29,8 +29,7 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
 # command (proxy/cli.py runs Python) goes to the real uv.
-# route and ipconfig give the Mac the LAN IP 192.0.2.10 (FAKE_MAC_IP overrides it), netmask
-# 255.255.255.0.
+# The Mac's network commands (fake-mac-network.sh) give it Wi-Fi at 192.0.2.10/24.
 export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log" REAL_UV="$(command -v uv)"
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/curl" <<'EOF'
@@ -65,12 +64,9 @@ printf '%s\n' "$@" > "$UV_LOG"
 session="$(sed -n 's/^save_stream_file=//p' "$UV_LOG")"
 [ -z "$session" ] || touch "$session"
 EOF
-printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
-cat > "$TMP/bin/ipconfig" <<'EOF'
-#!/usr/bin/env bash
-case "$1 ${3:-}" in "getoption subnet_mask") echo 255.255.255.0 ;; *) echo "${FAKE_MAC_IP:-192.0.2.10}" ;; esac
-EOF
 chmod +x "$TMP/bin/"*
+. "$REPO/scripts/tests/fake-mac-network.sh"
+fake_mac_network "$TMP/bin"
 export PATH="$TMP/bin:$PATH"
 
 # The fake mitmweb, on a free local port: signed in with test-password, it answers
@@ -651,7 +647,7 @@ echo "ok: redact_secret and export --har show the lab secret alike"
 # setup, with no terminal, in its own settings root seeded from the examples, the Mac at
 # 198.51.100.23/24: one smoke check per way in. proxy/tests/test_settings_root.py covers
 # what setup keeps and replaces at SettingsRoot's interface.
-setup() { ROXY_CONFIG_DIR="$TMP/setup-settings" FAKE_MAC_IP=198.51.100.23 "$ROXY" setup "$@"; }
+setup() { ROXY_CONFIG_DIR="$TMP/setup-settings" FAKE_MAC_ADDRESSES="${FAKE_MAC_ADDRESSES:-en0=198.51.100.23}" "$ROXY" setup "$@"; }
 mkdir -p "$TMP/setup-settings"
 cp -R "$REPO/settings.example/." "$TMP/setup-settings"
 secret() { bash -c '. "$1"; printf %s "${!2}"' - "$TMP/setup-settings/secrets.env" "$1"; }

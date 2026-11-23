@@ -16,14 +16,14 @@ cp -R "$REPO/settings.example/." "$ROXY_CONFIG_DIR"  # Living Room: a Physical D
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
 
-# The checkout: the real kit-check and lib.sh, a fake deploy and a fake roxy. Each fake logs
+# The checkout: the real kit-check, lib.sh and lan-interface, a fake deploy and a fake roxy. Each fake logs
 # one line of shell-quoted arguments to $EVENTS. The device's screen is $SCREEN: what
 # the app shows after its last launch, as the kit example does with or without proxyBase.
 # FAKE_FLOWS=none: the lab sees no flow, whatever the launch.
 # FAKE_STATUS: the status the app shows (default 200).
 checkout="$TMP/checkout"
 mkdir -p "$checkout/scripts" "$checkout/bin" "$TMP/bin"
-ln -s "$SCRIPTS/lib.sh" "$SCRIPTS/kit-check" "$checkout/scripts/"
+ln -s "$SCRIPTS/lib.sh" "$SCRIPTS/kit-check" "$SCRIPTS/lan-interface" "$checkout/scripts/"
 cat > "$checkout/scripts/deploy" <<'EOF'
 #!/usr/bin/env bash
 printf '%q ' "ROXY_KIT=${ROXY_KIT:-}" deploy "$@" >> "$EVENTS"; echo >> "$EVENTS"
@@ -53,9 +53,10 @@ case "$url" in
   */launch/dev) printf 'GET https://httpbin.org/json\nstatus=%s length=429\n' "${FAKE_STATUS:-200}" > "$SCREEN" ;;
 esac
 EOF
-printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
-printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
 chmod +x "$checkout/scripts/deploy" "$checkout/bin/roxy" "$TMP/bin/"*
+# The Mac's network, faked: Wi-Fi at 192.0.2.10.
+. "$SCRIPTS/tests/fake-mac-network.sh"
+fake_mac_network "$TMP/bin"
 export PATH="$TMP/bin:$PATH"
 : > "$SCREEN"
 

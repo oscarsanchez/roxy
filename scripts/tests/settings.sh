@@ -30,10 +30,10 @@ cat > "$TMP/bin/uv" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$UV_LOG"
 EOF
-# route and ipconfig give the Mac the LAN IP 192.0.2.10, whatever network this Mac is on.
-printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
-printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
 chmod +x "$TMP/bin/"*
+# The Mac's network, faked: Wi-Fi at 192.0.2.10, whatever network this Mac is on.
+. "$SCRIPTS/tests/fake-mac-network.sh"
+fake_mac_network "$TMP/bin"
 export PATH="$TMP/bin:$PATH"
 
 # seeded DIR : a settings root seeded from the repo's examples, with a mitmweb password.
@@ -126,6 +126,17 @@ grep -qx "regular@$LAB_PROXY_ROUTING_PORT" "$UV_LOG" || fail "mitmweb has no Pro
 grep -qx "lab_proxy_routing_port=$LAB_PROXY_ROUTING_PORT" "$UV_LOG" || fail "the lab does not know the Proxy Routing listener's port"
 case "$out" in *"Proxy Routing:     $ip:$LAB_PROXY_ROUTING_PORT"*) ;; *) fail "the start does not print the Proxy Routing address: $out" ;; esac
 echo "ok: the Proxy Routing listener starts, and the start prints its address"
+
+# A VPN holds the default route (utun4), the Thunderbolt Bridge has an address too: the Proxy
+# IP is still Wi-Fi's, the first active Wi-Fi or Ethernet interface in the service order, and the start
+# warns without refusing. With no VPN, no warning.
+VPN_WARNING="warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab"
+case "$out" in *"$VPN_WARNING"*) fail "the start warns of a VPN with none: $out" ;; esac
+out="$(FAKE_DEFAULT_ROUTE=utun4 FAKE_MAC_ADDRESSES="utun4=203.0.113.5 bridge0=203.0.113.6 en0=192.0.2.10" \
+  "$SCRIPTS/start-lab" 2>&1)" || fail "start-lab on a VPN: $out"
+case "$out" in *"Proxy IP:          192.0.2.10 "*) ;; *) fail "on a VPN, the Proxy IP is not Wi-Fi's: $out" ;; esac
+grep -qxF "$VPN_WARNING" <<< "$out" || fail "the start on a VPN does not warn: $out"
+echo "ok: on a VPN the Proxy IP is the Wi-Fi address, and the start warns"
 
 # hold_port NAME : a test listener (perl) holds a free port, which becomes the lab port NAME;
 # held_pid is its pid.

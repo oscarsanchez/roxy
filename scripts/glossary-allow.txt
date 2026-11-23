@@ -6,3 +6,4 @@ HAR  # the file format roxy export --har writes from a Recording; a Recording it
 iOS Simulator  # Apple's product name for a simulated iPhone on the Mac (Cloud Device is ours)
 Android Emulator  # Google's product name for an emulated Android device on the Mac (Cloud Device is ours)
 TV box  # an Android TV, Google TV, Fire TV or Apple TV device, a Proxied Device; a Roku is never called one
+Hardware Port  # macOS's own word in networksetup's list of network services, not a Roku

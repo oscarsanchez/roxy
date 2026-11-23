@@ -188,13 +188,20 @@ proxy_cli() {
   LAB_WEB_PORT="$LAB_WEB_PORT" RECORDINGS_ROOT="$RECORDINGS_ROOT" uv run --quiet --project "$REPO_ROOT/proxy" python "$REPO_ROOT/proxy/cli.py" "$@"
 }
 
-# The Mac's address on the default-route interface.
+# The Mac's address on its LAN interface (scripts/lan-interface), past any VPN.
 lan_ip() {
-  local iface ip
-  iface="$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"
-  ip="$(ipconfig getifaddr "$iface" 2>/dev/null)" || true
+  local iface ip=""
+  iface="$("$REPO_ROOT/scripts/lan-interface")" && ip="$(ipconfig getifaddr "$iface" 2>/dev/null)" || true
   [ -n "$ip" ] || die "could not find the Mac's LAN IP"
   echo "$ip"
+}
+
+# warn_of_a_vpn : warns, on stderr, when a VPN (a utun interface) holds the default route:
+# the LAN IP is still the Mac's, but the VPN may keep the Rokus' traffic from reaching the lab.
+warn_of_a_vpn() {
+  case "$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')" in
+    utun*) echo "warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab" >&2 ;;
+  esac
 }
 
 # lan_proxy_base [IP [PORT]] : the LAN Proxy Base on IP (default: the Mac's LAN IP) and PORT

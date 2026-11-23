@@ -62,6 +62,7 @@ quick_tunnel_host() {
 
 echo "mitmweb UI:        http://127.0.0.1:$LAB_WEB_PORT  (password: MITMWEB_PASSWORD in $SECRETS_FILE)"
 ip="$(lan_ip)" || true  # lan_ip names the problem; the lab still starts
+warn_of_a_vpn
 print_lan_addresses "$ip"
 if [ -n "$LAB_APP" ]; then
   echo "App Profile:       $LAB_APP  ($app_repo)"
