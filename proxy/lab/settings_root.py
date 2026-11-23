@@ -44,9 +44,10 @@ PROXIED_KINDS = ("proxied", "mobile")  # "mobile": as roxy 0.2.0 wrote it
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SSDP_GROUP = "239.255.255.250:1900"  # every SSDP device on the LAN; ROXY_SSDP_ADDRESS overrides it (tests)
 SSDP_SECONDS = 3  # how long Rokus get to answer
+SSDP_SEARCHES = 3  # searches sent, spread over SSDP_SECONDS: one lost on Wi-Fi is no Roku missed
 NO_ROKU_FOUND = (
-    "no Roku answered (a network can block discovery): a Roku shows its IP in"
-    " Settings → Network → About; then roxy device add NAME --ip IP"
+    "no Roku answered (it may be off or on another network, or a VPN or the network may keep the"
+    " search from it): a Roku shows its IP in Settings → Network → About; then roxy device add NAME --ip IP"
 )
 RCE_CLI ="https://github.com/oscarsanchez/rce-cli"  # the rce CLI, which the lab runs Cloud Devices through
 PRIVATE = 0o600  # every settings file's permissions: personal settings and secrets, the user's eyes only
@@ -123,9 +124,10 @@ class SettingsRoot:
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
         fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
         `rce device resolve` knows it; THIS_MAC(), this Mac's address on its network, an
-        IPv4Interface (None: it is on no network); NEW_SECRET(), a new random secret; SSDP_ROKUS(), the IPs
-        answering an SSDP search for roku:ecp on the LAN; HAS_TOOL(command), whether COMMAND
-        is on the PATH; RCE_TOKEN_WORKS(), whether `rce token status` works."""
+        IPv4Interface (None: it is on no network); NEW_SECRET(), a new random secret;
+        SSDP_ROKUS(via), the IPs answering an SSDP search for roku:ecp on the LAN, sent from
+        the address VIA (None: the system's choice); HAS_TOOL(command), whether COMMAND is on
+        the PATH; RCE_TOKEN_WORKS(), whether `rce token status` works."""
         self.devices_file = Path(root) / "devices.json"
         self.settings_file = Path(root) / "settings.json"
         self.secrets_file = Path(root) / "secrets.env"
@@ -305,9 +307,13 @@ class SettingsRoot:
         return settings, [f"lan_subnets: {entry} ({scope})"], []
 
     def discover(self):
-        """The Rokus on the LAN, in the order they answered the SSDP search. Changes nothing."""
+        """The Rokus on the LAN, in the order they answered the SSDP search, sent from this
+        Mac's LAN address, so a VPN holding the default route does not take it. Changes
+        nothing."""
         names = {entry.get("ip"): name for name, entry in self._read(self.devices_file).items()}
-        return [_found(ip, self.ecp_device_info(ip) or {}, names.get(ip)) for ip in self.ssdp_rokus()]
+        mac = self.this_mac()
+        found = self.ssdp_rokus(mac and str(mac.ip))
+        return [_found(ip, self.ecp_device_info(ip) or {}, names.get(ip)) for ip in found]
 
     def add_found_rokus(self, name_for):
         """Offer each Roku discover finds that is not registered to NAME_FOR(found), which
@@ -457,24 +463,29 @@ def new_secret():
     return secrets.token_urlsafe(24)
 
 
-def ssdp_rokus():
+def ssdp_rokus(via):
     """The IPs answering an SSDP search for roku:ecp, sent to the SSDP group (or
-    ROXY_SSDP_ADDRESS, host:port), in the order they answered within SSDP_SECONDS. Each Roku
-    on the LAN answers, unless the network drops multicast."""
+    ROXY_SSDP_ADDRESS, host:port) from the address VIA (None: the system's choice) and
+    SSDP_SEARCHES times over SSDP_SECONDS, each IP once, in the order they first answered.
+    Each Roku on the LAN answers, unless the network drops multicast."""
     host, port = os.environ.get("ROXY_SSDP_ADDRESS", SSDP_GROUP).rsplit(":", 1)
     search = f'M-SEARCH * HTTP/1.1\r\nHost: {SSDP_GROUP}\r\nMan: "ssdp:discover"\r\nST: roku:ecp\r\n\r\n'
     found = []
     with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as search_socket:
-        search_socket.sendto(search.encode(), (host, int(port)))
-        deadline = time.monotonic() + SSDP_SECONDS
-        while (left := deadline - time.monotonic()) > 0:
-            search_socket.settimeout(left)
-            try:
-                answer, (ip, _) = search_socket.recvfrom(4096)
-            except TimeoutError:
-                break
-            if b"roku:ecp" in answer.lower() and ip not in found:
-                found.append(ip)
+        if via:
+            search_socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(via))
+        start = time.monotonic()
+        for n in range(1, SSDP_SEARCHES + 1):
+            search_socket.sendto(search.encode(), (host, int(port)))
+            until = start + SSDP_SECONDS * n / SSDP_SEARCHES
+            while (left := until - time.monotonic()) > 0:
+                search_socket.settimeout(left)
+                try:
+                    answer, (ip, _) = search_socket.recvfrom(4096)
+                except TimeoutError:
+                    break
+                if b"roku:ecp" in answer.lower() and ip not in found:
+                    found.append(ip)
     return found
 
 

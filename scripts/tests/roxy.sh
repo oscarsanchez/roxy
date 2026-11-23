@@ -395,7 +395,9 @@ echo "ok: device add, list and remove each kind of Target Device, keeping lan_su
 # device discover, its SSDP search sent to a fake Roku on loopback (ROXY_SSDP_ADDRESS)
 # that answers roku:ecp; ECP is asked, never through a proxy. It changes nothing.
 # proxy/tests/test_settings_root.py covers registered Rokus and the add line's quoting.
-"$REAL_UV" run --quiet --project "$REPO/proxy" python - "$TMP/ssdp.port" <<'EOF' &
+# It logs each search to $TMP/ssdp.searches. This Mac's LAN address is 127.0.0.1 here: the
+# search goes out from it (IP_MULTICAST_IF), which must be an address this Mac has.
+"$REAL_UV" run --quiet --project "$REPO/proxy" python - "$TMP/ssdp.port" "$TMP/ssdp.searches" <<'EOF' &
 import os, socket, sys
 
 roku = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
@@ -406,21 +408,27 @@ os.rename(sys.argv[1] + ".tmp", sys.argv[1])
 while True:
     search, sender = roku.recvfrom(4096)
     if b"ST: roku:ecp" in search:
+        with open(sys.argv[2], "a") as log:
+            log.write("search\n")
         roku.sendto(b"HTTP/1.1 200 OK\r\nST: roku:ecp\r\nLOCATION: http://127.0.0.1:8060/\r\n\r\n", sender)
 EOF
 ssdp_pid=$!
 until [ -s "$TMP/ssdp.port" ]; do sleep 0.1; done
 before="$(cat "$ROXY_CONFIG_DIR/devices.json" "$ROXY_CONFIG_DIR/settings.json")"
 : > "$CURL_LOG.urls"
-out="$(ROXY_SSDP_ADDRESS="127.0.0.1:$(cat "$TMP/ssdp.port")" http_proxy=http://127.0.0.1:9 device discover 2>&1)" \
-  || fail "device discover: $out"
+out="$(ROXY_SSDP_ADDRESS="127.0.0.1:$(cat "$TMP/ssdp.port")" FAKE_MAC_ADDRESSES=en0=127.0.0.1 http_proxy=http://127.0.0.1:9 \
+  device discover 2>&1)" || fail "device discover: $out"
 kill "$ssdp_pid"; ssdp_pid=""
+# The search goes out three times, in case one is lost; the Roku answering each is listed once.
+[ "$(wc -l < "$TMP/ssdp.searches")" -eq 3 ] || fail "device discover searched $(wc -l < "$TMP/ssdp.searches") times, not 3"
+[ "$(grep -c "^127.0.0.1 " <<< "$out")" -eq 1 ] || fail "device discover listed the Roku other than once: $out"
 grep -qx "127.0.0.1  *Kitchen  *Roku Ultra  *developer mode  *not registered" <<< "$out" \
   && grep -qx '  roxy device add "Kitchen" --ip 127.0.0.1' <<< "$out" || fail "device discover said: $out"
 grep -qx "http://127.0.0.1:8060/query/device-info" "$CURL_LOG.urls" || fail "device discover did not ask ECP: $(cat "$CURL_LOG.urls")"
 # No Roku answers: where to read a Roku's IP instead.
-out="$(ROXY_SSDP_ADDRESS="127.0.0.1:$(cat "$TMP/ssdp.port")" device discover 2>&1)" || fail "device discover, none: $out"
-[ "$out" = "no Roku answered (a network can block discovery): a Roku shows its IP in Settings → Network → About; then roxy device add NAME --ip IP" ] \
+out="$(ROXY_SSDP_ADDRESS="127.0.0.1:$(cat "$TMP/ssdp.port")" FAKE_MAC_ADDRESSES=en0=127.0.0.1 device discover 2>&1)" \
+  || fail "device discover, none: $out"
+[ "$out" = "no Roku answered (it may be off or on another network, or a VPN or the network may keep the search from it): a Roku shows its IP in Settings → Network → About; then roxy device add NAME --ip IP" ] \
   || fail "device discover, none, said: $out"
 [ "$(cat "$ROXY_CONFIG_DIR/devices.json" "$ROXY_CONFIG_DIR/settings.json")" = "$before" ] || fail "device discover changed the settings"
 case "$(device discover --help)" in *"discover "*) ;; *) fail "device --help lacks discover" ;; esac

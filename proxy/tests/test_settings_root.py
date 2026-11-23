@@ -45,6 +45,12 @@ def ssdp():
 
 
 @pytest.fixture
+def searched_from():
+    """The address each SSDP search was sent from, in order (None: the system's choice)."""
+    return []
+
+
+@pytest.fixture
 def on_path():
     """The tools Cloud Devices need that are on the PATH."""
     return {"rce", "cloudflared"}
@@ -57,7 +63,7 @@ def rce_token():
 
 
 @pytest.fixture
-def ports(ecp, rce, mac, ssdp, on_path, rce_token):
+def ports(ecp, rce, mac, ssdp, searched_from, on_path, rce_token):
     """SettingsRoot's ports, faked; new_secret gives secret-1, secret-2, ..."""
     secrets = (f"secret-{n}" for n in itertools.count(1))
     return {
@@ -67,7 +73,7 @@ def ports(ecp, rce, mac, ssdp, on_path, rce_token):
         "new_secret": lambda: next(secrets),
         "has_tool": on_path.__contains__,
         "rce_token_works": lambda: rce_token[0],
-        "ssdp_rokus": lambda: ssdp,
+        "ssdp_rokus": lambda via: searched_from.append(via) or ssdp,
     }
 
 
@@ -648,6 +654,14 @@ def test_a_roku_that_answers_the_search_but_not_ecp_is_listed_with_an_add_line_t
     assert found.add_command == "roxy device add NAME --ip 198.51.100.7"
 
 
+def test_discover_searches_from_this_macs_lan_address_past_a_vpn(root, mac, searched_from):
+    root.discover()
+    mac[0] = None
+    root.discover()
+
+    assert searched_from == ["10.0.0.23", None]
+
+
 def test_discover_with_no_roku_answering_finds_none(root):
     assert root.discover() == []
 
@@ -703,8 +717,8 @@ def test_setup_with_no_roku_answering_says_where_to_read_a_rokus_ip(root):
 
     assert change == (
         [
-            "no Roku answered (a network can block discovery): a Roku shows its IP in"
-            " Settings → Network → About; then roxy device add NAME --ip IP"
+            "no Roku answered (it may be off or on another network, or a VPN or the network may keep the"
+            " search from it): a Roku shows its IP in Settings → Network → About; then roxy device add NAME --ip IP"
         ],
         [],
         False,
