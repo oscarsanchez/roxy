@@ -22,7 +22,7 @@ Scenario rules that acted on the flow (annotate); `roxy flows` reads target_devi
 
 from typing import NamedTuple
 
-from lab.clients import from_rce_egress_ip, ip_address, through_proxy_routing, through_tunnel, tunnel_client_ip
+from lab.clients import from_rce_egress_ip, from_this_mac, ip_address, through_tunnel, tunnel_client_ip
 from lab.config import load_settings
 from lab.prefixed_url import client_proxy_base, device_slug
 
@@ -72,9 +72,7 @@ class TargetDevices:
     def identify(self, flow):
         if not through_tunnel(flow):
             ip = ip_address(flow.client_conn.peername[0])
-            if through_proxy_routing(flow) and ip.is_loopback:
-                return TargetDevice(f"ip {ip}", THIS_MAC)
-            return TargetDevice(f"ip {ip}", self.physical_devices.get(ip))
+            return TargetDevice(f"ip {ip}", THIS_MAC if from_this_mac(flow) else self.physical_devices.get(ip))
         client = client_proxy_base(flow)
         unnamed = CLOUD_DEVICE if from_rce_egress_ip(flow) else None
         if slug := client and device_slug(client.proxy_base):

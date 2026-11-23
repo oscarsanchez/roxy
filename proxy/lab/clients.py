@@ -9,7 +9,8 @@ trusted; a LAN client sending them is judged by its real IP.
 
 A Mobile Device sets the Proxy Routing listener (option lab_proxy_routing_port), a
 `regular` mode LAN listener, as its HTTP proxy: a request on it "came through Proxy
-Routing", and carries its Origin URL as is.
+Routing", and carries its Origin URL as is. From loopback, it came from This Mac: an
+iOS Simulator or Android Emulator on it.
 """
 
 import ipaddress
@@ -24,13 +25,22 @@ def ip_address(text):
 
 
 def through_tunnel(flow):
-    port = ctx.options.lab_tunnel_port
-    return bool(port) and flow.client_conn.proxy_mode.custom_listen_port == port
+    return _on_listener(flow, ctx.options.lab_tunnel_port)
 
 
 def through_proxy_routing(flow):
-    port = ctx.options.lab_proxy_routing_port
+    return _on_listener(flow, ctx.options.lab_proxy_routing_port)
+
+
+def _on_listener(flow, port):
+    """True if the flow came in on the listener on PORT; 0 (no such listener) never matches."""
     return bool(port) and flow.client_conn.proxy_mode.custom_listen_port == port
+
+
+def from_this_mac(flow):
+    """True if the flow came through Proxy Routing from loopback: an iOS Simulator or
+    Android Emulator on this Mac."""
+    return through_proxy_routing(flow) and ip_address(flow.client_conn.peername[0]).is_loopback
 
 
 def tunnel_client_ip(flow):

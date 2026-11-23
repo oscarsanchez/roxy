@@ -16,7 +16,7 @@ from collections.abc import Sequence  # what mitmproxy's --set parser matches li
 from mitmproxy import ctx
 from mitmproxy.exceptions import OptionsError
 
-from lab.clients import from_rce_egress_ip, ip_address, rce_egress_ips, through_proxy_routing, through_tunnel
+from lab.clients import from_rce_egress_ip, from_this_mac, ip_address, rce_egress_ips, through_tunnel
 from lab.config import load_config, load_settings
 from lab.prefixed_url import client_proxy_base, secret_segment
 from lab.refusal import refuse
@@ -90,9 +90,9 @@ class Guards:
     def _client_allowed(self, flow):
         if through_tunnel(flow):
             return from_rce_egress_ip(flow)
+        if from_this_mac(flow):
+            return True
         client = ip_address(flow.client_conn.peername[0])
-        if through_proxy_routing(flow) and client.is_loopback:
-            return True  # an iOS Simulator or Android Emulator on this Mac
         return any(client in subnet for subnet in self.lan_subnets)
 
     def _origin_allowlist(self):
