@@ -67,6 +67,14 @@ The lab signs a certificate for every HTTPS Origin with its own CA, the same one
 
 Open the app. Its requests show in mitmweb (`http://127.0.0.1:8081`) and in `roxy flows --json` under their Origin URLs, HTTP and HTTPS alike, with every follow-up request (images, segments, beacons) as the app sends it.
 
+To tell them from your Roku's, register the Mobile Device by its IP in your `devices.json` ([Settings](settings.md)), with `"kind": "mobile"`:
+
+```json
+"Phone": {"ip": "192.0.2.60", "kind": "mobile"}
+```
+
+Restart the lab: its flows are then named `Phone` in mitmweb's comment column (filter `~comment "Phone"`) and in `device` in `roxy flows --json`. A Mobile Device is no Roku: `scripts/deploy`, `roxy launch` and `roxy console` refuse it.
+
 - **Scenarios** act on them as on any flow: filter on the Origin (`~d api.example.com`) to reach both your Roku's and the Mobile Device's requests. A rule with `{proxy_base}` placeholders leaves them alone, as they have no Proxy Base ([Scenarios](scenarios.md)).
 - **No rewriting**: the lab never rewrites URLs in their headers or bodies; the app sees each response as the Origin sent it.
 - **Guards**: the LAN's. The client must be on `lan_subnets`, a private Origin is refused `origin-address`, and any public Origin is allowed: the Origin allowlist is the Public Endpoint's only ([Guards](guards.md)).
