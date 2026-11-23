@@ -1,6 +1,6 @@
 ---
 name: roxy
-description: Use for a Roku app's network traffic through the roxy lab (mitmproxy) - seeing what the app requested, making an API or other Origin fail, slow down or answer from a mock (Scenarios), App Profiles, and routing an app through the lab (Proxy Base, Charles hook, the kit). Also the same app's debug build on a phone, tablet, TV box, iOS Simulator or Android Emulator (Proxied Devices, Proxy Routing).
+description: Use for a Roku app's network traffic through the roxy lab (mitmproxy) - seeing what the app requested, making an API or other Origin fail, slow down or answer from a mock (Scenarios), App Profiles, registering Target Devices and setting roxy up (roxy device, roxy setup), and routing an app through the lab (Proxy Base, Charles hook, the kit). Also the same app's debug build on a phone, tablet, TV box, iOS Simulator or Android Emulator (Proxied Devices, Proxy Routing).
 ---
 
 # roxy: see and change a Roku app's traffic
@@ -16,12 +16,22 @@ Words: a **Target Device** is the device running the app: a Roku, either a Physi
 1. **Lab up for this app.** `roxy status`.
    - Up, with this app's profile on its `App Profile:` line: use that lab. Another profile: ask the user before going on, since a lab loads one App Profile per session and switching means stopping theirs.
    - Down: `roxy app list` (each profile and its repo). No profile whose repo is this repo: `roxy app new <name>` from inside it, once. Then `roxy start` from inside the repo, which loads that profile (`--app <name>` names it from elsewhere); add `--tunnel` for a Cloud Device. It runs in the foreground until Ctrl-C, so run it in the background, keep it for the session, and poll `roxy status` until it is up.
-   - `roxy start` refusing over a missing setting (`secrets.env`, `devices.json`, `lan_subnets`) names the file; those are the user's to fill in, in the settings root (`~/.config/roxy/`, or `$ROXY_CONFIG_DIR`).
+   - `roxy start` refusing over a missing setting (a secret, no Target Devices, empty `lan_subnets`) names each with the command that fills it in: `roxy setup` or `roxy device` (Settings, below).
 
    Done when `roxy status` prints `lab: up` and `App Profile: <this app's profile>`.
 2. **App routed.** A Roku app's requests reach the lab only as Prefixed URLs (a Proxied Device: Proxied Devices, below). Find how this app does it: a Charles hook (a debug proxy setting in a sideloaded build, on port 8888; the user types the `Proxy IP` from `roxy status` into the app), the kit (`RoxyUrl` or `prefixedUrl` in the source, built with `bs_const=roxy_kit=true` or `ROXY_KIT=1`), or neither, and then the Prefix Routing guide wires one in. roxy never builds or sideloads an app: build and sideload it with the app's own tooling, as its repo does, then launch it with roxy.
 3. **Launch.** `roxy launch [--scenario NAME]... "<device>" [key=value...]`, with a device name from `devices.json` in the settings root. It relaunches the sideloaded dev channel with the `proxyBase` launch param (the kit reads it; a Charles hook ignores it) and prints `run=<id>`: keep the id, for either kind of app.
 4. **Read the flows.** `roxy flows --json --since <run id>`. Done when every request you expected is in the output, or its absence is explained (Reading flows).
+
+## Settings: Target Devices and setup
+
+The user's settings live in the settings root (`~/.config/roxy/`, or `$ROXY_CONFIG_DIR`). Change them through `roxy device` and `roxy setup`, never by editing its files, and never read `secrets.env`. Every flag: [Settings](docs/settings.md#setup).
+
+- `roxy device list`: each Target Device, its IP or rce Device Name, and its kind. `roxy device discover`: the Rokus on this network, with a ready `roxy device add` line for each one not registered (a network can block discovery; a Roku shows its IP in Settings → Network → About).
+- `roxy device add "<name>" --ip <ip>` registers a Roku; `--proxied` any other device (phone, tablet, TV box); `roxy device add "<name>" --rce <rce Device Name> [--slug <slug>]` a Cloud Device. It allows the IP in `lan_subnets` when needed, and warns, still registering it, when the device does not answer. `roxy device remove "<name>"` unregisters one.
+- `roxy setup < /dev/null` (no terminal: it never prompts) generates the mitmweb password and allows this Mac in `lan_subnets`; `--cloud` adds the lab secret and checks `rce` and `cloudflared`. It never prints a secret. `--trusted-network` allows the whole subnet: only when the user says the network is theirs, such as home.
+- The Roku developer password is the user's to enter. When setup warns `no Roku developer password`, ask the user to run `roxy setup` in their own terminal (a hidden prompt); never ask for it in the chat or put it on a command line. The same goes for the RCE token (`rce token set`).
+- Every change ends `restart the lab if it is running (roxy start), to use the change`: a running lab reads devices and `lan_subnets` when it starts. Ask the user before restarting their lab.
 
 ## Scenarios: make an Origin fail, slow down or answer from a mock
 
@@ -55,7 +65,7 @@ status = 503
 
 A Proxied Device reaches the lab by **Proxy Routing**: it sets the lab as its HTTP proxy (the `Proxy Routing:` address in `roxy status`) and trusts the lab's CA from `http://mitm.it`. That setup is the user's, on the device: [Proxied Devices](docs/proxied-devices.md).
 
-- Its flows keep their Origin URLs, never rewritten. `device` in `roxy flows --json` is its name in `devices.json` (registered with `"kind": "proxied"`; `"kind": "mobile"` from roxy 0.2.0 counts too), or `This Mac` for an iOS Simulator or Android Emulator on the Mac; `null` for an unregistered Proxied Device.
+- Its flows keep their Origin URLs, never rewritten. `device` in `roxy flows --json` is its registered name (`roxy device add "<name>" --ip <ip> --proxied`, which also allows its IP in `lan_subnets`), or `This Mac` for an iOS Simulator or Android Emulator on the Mac; `null` for an unregistered Proxied Device.
 - Read one device's flows: `roxy flows --json --filter '~comment "<name>"' --since <ISO time>`. There is no run id: roxy never launches an app on a Proxied Device, so note the time before the user opens it.
 - Target it in a Scenario with `~comment "<name>"` in the filter (`~comment "Phone" & ~d api.example.com`); a filter on the Origin alone (`~d api.example.com`) acts on the Roku's and the Proxied Device's requests alike. Rules with `{proxy_base}` placeholders leave its flows alone.
 - `scripts/deploy`, `roxy launch` and `roxy console` are Roku-only: they refuse a Proxied Device with "not a Roku". The user runs the app with its own tooling.
