@@ -1,9 +1,11 @@
 """The Settings Root module: the Target Devices and lan_subnets in the user's settings root,
-as `roxy device add`, `list` and `remove` change them. Against the temp settings root
-(conftest's `settings`, seeded from the examples: lan_subnets 192.0.2.0/24), with a Roku's
-ECP answer and `rce device resolve` faked."""
+as `roxy device add`, `list` and `remove` change them and `roxy device discover` finds
+Rokus. Against the temp settings root (conftest's `settings`, seeded from the examples:
+lan_subnets 192.0.2.0/24), with a Roku's ECP answer, `rce device resolve` and the SSDP
+search faked."""
 
 import json
+import subprocess
 
 import pytest
 
@@ -25,8 +27,14 @@ def rce():
 
 
 @pytest.fixture
-def root(settings, ecp, rce):
-    return SettingsRoot(settings, ecp_device_info=ecp.get, rce_knows=rce.__contains__)
+def ssdp():
+    """The IPs answering the SSDP search for roku:ecp, in the order they answered."""
+    return []
+
+
+@pytest.fixture
+def root(settings, ecp, rce, ssdp):
+    return SettingsRoot(settings, ecp_device_info=ecp.get, rce_knows=rce.__contains__, ssdp_rokus=lambda: ssdp)
 
 
 def devices_file(settings):
@@ -230,7 +238,7 @@ def test_remove_refuses_an_unknown_name(root, settings):
 
 def test_add_into_a_settings_root_without_its_files_creates_them(tmp_path, ecp, rce):
     empty = tmp_path / "empty-root"
-    root = SettingsRoot(empty, ecp_device_info=ecp.get, rce_knows=rce.__contains__)
+    root = SettingsRoot(empty, ecp_device_info=ecp.get, rce_knows=rce.__contains__, ssdp_rokus=list)
 
     root.add_device("Den", "198.51.100.7")
 
@@ -257,3 +265,55 @@ def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_changing_nothing(root,
 
     assert devices_file(settings) == before
     assert settings_file(settings) == {"lan_subnets": ["my LAN"]}
+
+
+def test_discover_lists_each_roku_that_answers_with_its_own_name_model_and_developer_mode(root, ssdp, ecp):
+    ssdp += ["198.51.100.7", "192.0.2.54"]
+    ecp["198.51.100.7"] = DEVELOPER_MODE
+    ecp["192.0.2.54"] = {"friendly-device-name": "Roku Express - X1", "model-name": "Roku Express", "developer-enabled": "false"}
+
+    found = root.discover()
+
+    assert [(r.ip, r.name, r.model, r.developer_mode) for r in found] == [
+        ("198.51.100.7", "Den", "Roku Ultra", True),
+        ("192.0.2.54", "Roku Express - X1", "Roku Express", False),
+    ]
+
+
+def test_discover_marks_a_registered_roku_by_its_device_name_and_gives_the_others_an_add_line(root, ssdp, ecp):
+    ssdp += ["192.0.2.54", "198.51.100.7"]
+    ecp["192.0.2.54"] = {**DEVELOPER_MODE, "user-device-name": "Lounge"}
+    ecp["198.51.100.7"] = DEVELOPER_MODE
+
+    found = root.discover()
+
+    assert [(r.registered_as, r.add_command) for r in found] == [
+        ("Living Room", None),
+        (None, 'roxy device add "Den" --ip 198.51.100.7'),
+    ]
+
+
+def test_an_add_line_gives_the_shell_the_rokus_own_name_whatever_it_holds(root, ssdp, ecp):
+    name = 'Kid\'s 55" TV $HOME `x` \\'
+    ssdp.append("198.51.100.7")
+    ecp["198.51.100.7"] = {**DEVELOPER_MODE, "user-device-name": name}
+
+    [found] = root.discover()
+
+    typed = subprocess.run(
+        ["bash", "-c", f"roxy() {{ printf '%s\\n' \"$@\"; }}; {found.add_command}"], capture_output=True, text=True
+    )
+    assert typed.stdout.splitlines() == ["device", "add", name, "--ip", "198.51.100.7"]
+
+
+def test_a_roku_that_answers_the_search_but_not_ecp_is_listed_with_an_add_line_to_name_it(root, ssdp):
+    ssdp.append("198.51.100.7")
+
+    [found] = root.discover()
+
+    assert found == ("198.51.100.7", None, None, None, None)
+    assert found.add_command == "roxy device add NAME --ip 198.51.100.7"
+
+
+def test_discover_with_no_roku_answering_finds_none(root):
+    assert root.discover() == []

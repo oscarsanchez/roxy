@@ -49,7 +49,7 @@ from lab.app_profiles import AppProfileError, AppProfiles, ScenarioInBoth
 from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
-from lab.settings_root import CLOUD_DEVICE, SettingsRoot, SettingsRootError, ecp_device_info, rce_knows
+from lab.settings_root import CLOUD_DEVICE, SettingsRoot, SettingsRootError, ecp_device_info, rce_knows, ssdp_rokus
 
 REFUSED = "refused: in both (rename the profile's)"
 REDACTED_SECRET = "<secret>"
@@ -85,7 +85,7 @@ def app_list(args):
 
 
 def settings():
-    return SettingsRoot(settings_root(), ecp_device_info=ecp_device_info, rce_knows=rce_knows)
+    return SettingsRoot(settings_root(), ecp_device_info=ecp_device_info, rce_knows=rce_knows, ssdp_rokus=ssdp_rokus)
 
 
 def device_add(args):

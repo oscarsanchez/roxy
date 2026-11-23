@@ -1,18 +1,23 @@
 """The Settings Root: the user's Target Devices and the LAN subnets allowed to use the lab,
-as `roxy device` changes them. The one place that writes them:
+as `roxy device` changes them, and the Rokus on the LAN it could add. The one place that
+writes them:
 
     <settings root>/devices.json   {"<name>": {"ip": ...} | {"ip": ..., "kind": "proxied"}
                                               | {"rce_device_name": ..., "slug": ...}, ...}
     <settings root>/settings.json  {"lan_subnets": ["<CIDR>", ...], ...}
 
 Writes keep every key and entry they don't own (grid_devices, unknown keys). The outside
-world comes in through ports passed to SettingsRoot: a Roku's ECP device-info answer and
-`rce device resolve`; ecp_device_info and rce_knows, below, are the real ones.
+world comes in through ports passed to SettingsRoot: a Roku's ECP device-info answer,
+`rce device resolve` and the SSDP search for Rokus; ecp_device_info, rce_knows and
+ssdp_rokus, below, are the real ones.
 """
 
 import json
+import os
 import re
+import socket
 import subprocess
+import time
 from ipaddress import ip_address, ip_network
 from pathlib import Path
 from typing import NamedTuple
@@ -23,6 +28,8 @@ CLOUD_DEVICE = "Cloud Device"
 PROXIED_DEVICE = "Proxied Device"
 PROXIED_KINDS = ("proxied", "mobile")  # "mobile": as roxy 0.2.0 wrote it
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
+SSDP_GROUP = "239.255.255.250:1900"  # every SSDP device on the LAN; ROXY_SSDP_ADDRESS overrides it (tests)
+SSDP_SECONDS = 3  # how long Rokus get to answer
 
 
 class SettingsRootError(Exception):
@@ -57,15 +64,36 @@ class Change(NamedTuple):
     warnings: list
 
 
+class FoundRoku(NamedTuple):
+    """A Roku discover found: its own name, model and developer mode, from its ECP
+    device-info (None each when it did not answer), and the Target Device with its IP."""
+
+    ip: str
+    name: str | None
+    model: str | None
+    developer_mode: bool | None
+    registered_as: str | None
+
+    @property
+    def add_command(self):
+        """The roxy device add line that registers it under its own name (NAME, for the user
+        to fill in, when it did not say); None once registered."""
+        if self.registered_as:
+            return None
+        return f"roxy device add {_double_quoted(self.name) if self.name else 'NAME'} --ip {self.ip}"
+
+
 class SettingsRoot:
-    def __init__(self, root, *, ecp_device_info, rce_knows):
+    def __init__(self, root, *, ecp_device_info, rce_knows, ssdp_rokus):
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
         fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
-        `rce device resolve` knows it."""
+        `rce device resolve` knows it; SSDP_ROKUS(), the IPs answering an SSDP search for
+        roku:ecp on the LAN."""
         self.devices_file = Path(root) / "devices.json"
         self.settings_file = Path(root) / "settings.json"
         self.ecp_device_info = ecp_device_info
         self.rce_knows = rce_knows
+        self.ssdp_rokus = ssdp_rokus
 
     def devices(self):
         """The registered Target Devices, in file order."""
@@ -119,6 +147,11 @@ class SettingsRoot:
         settings, notes = self._disallowing(ip) if ip and not shared else (None, [])
         self._save(registry, settings)
         return Change(notes, [])
+
+    def discover(self):
+        """The Rokus on the LAN, in the order they answered the SSDP search. Changes nothing."""
+        names = {entry.get("ip"): name for name, entry in self._read(self.devices_file).items()}
+        return [_found(ip, self.ecp_device_info(ip) or {}, names.get(ip)) for ip in self.ssdp_rokus()]
 
     def _save(self, registry, settings):
         """Write devices.json, then settings.json unless SETTINGS is None."""
@@ -205,6 +238,44 @@ def rce_knows(rce_device_name):
         return not subprocess.run(["rce", "device", "resolve", rce_device_name], capture_output=True).returncode
     except FileNotFoundError:
         return False
+
+
+def ssdp_rokus():
+    """The IPs answering an SSDP search for roku:ecp, sent to the SSDP group (or
+    ROXY_SSDP_ADDRESS, host:port), in the order they answered within SSDP_SECONDS. Each Roku
+    on the LAN answers, unless the network drops multicast."""
+    host, port = os.environ.get("ROXY_SSDP_ADDRESS", SSDP_GROUP).rsplit(":", 1)
+    search = f'M-SEARCH * HTTP/1.1\r\nHost: {SSDP_GROUP}\r\nMan: "ssdp:discover"\r\nST: roku:ecp\r\n\r\n'
+    found = []
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as search_socket:
+        search_socket.sendto(search.encode(), (host, int(port)))
+        deadline = time.monotonic() + SSDP_SECONDS
+        while (left := deadline - time.monotonic()) > 0:
+            search_socket.settimeout(left)
+            try:
+                answer, (ip, _) = search_socket.recvfrom(4096)
+            except TimeoutError:
+                break
+            if b"roku:ecp" in answer.lower() and ip not in found:
+                found.append(ip)
+    return found
+
+
+def _found(ip, info, registered_as):
+    """The FoundRoku at IP, from its device-info fields INFO ({}: it did not answer)."""
+    developer = info.get("developer-enabled")
+    return FoundRoku(
+        ip,
+        info.get("user-device-name") or info.get("friendly-device-name"),
+        info.get("model-name"),
+        None if developer is None else developer == "true",
+        registered_as,
+    )
+
+
+def _double_quoted(text):
+    """TEXT as one shell word in double quotes, as a person would type a device name."""
+    return '"' + re.sub(r'([\\"$`])', r"\\\1", text) + '"'
 
 
 def _kind(entry):
