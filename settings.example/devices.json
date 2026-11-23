@@ -2,5 +2,6 @@
   "Living Room": {"ip": "192.0.2.54"},
   "Bedroom": {"ip": "192.0.2.55"},
   "Travel Stick": {"ip": "192.0.2.124"},
-  "Cloud Device": {"rce_device_name": "player", "slug": "cloud-device"}
+  "Cloud Device": {"rce_device_name": "player", "slug": "cloud-device"},
+  "Phone": {"ip": "192.0.2.60", "kind": "mobile"}
 }

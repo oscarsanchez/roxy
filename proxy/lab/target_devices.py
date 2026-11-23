@@ -4,7 +4,8 @@ A Target Device has a key, which tells devices apart (the throttle shares a rule
 bandwidth per key), and a name from the user's devices registry
 (<settings root>/devices.json), None when nothing names it:
 - A Physical Device is its client IP, named by `ip` in the registry. It opens a
-  connection per parallel request, each from its own port.
+  connection per parallel request, each from its own port. So is a Mobile Device
+  (`"kind": "mobile"` beside its `ip`), whose flows come through Proxy Routing.
 - Every Cloud Device reaches the lab through cloudflared, so all share its peer. One is
   the device slug in its Proxy Base, https://<tunnel-host>/<secret>/<slug> (scripts/launch
   adds it), named by `slug` in the registry; else its tunnel client IP (Cloud Devices
@@ -54,7 +55,7 @@ class TargetDevices:
     Proxy Base) and before the guards and Scenarios, which leave the client alone."""
 
     def __init__(self):
-        self.physical_devices = {}  # IP -> name
+        self.physical_devices = {}  # IP -> name, Mobile Devices included
         self.cloud_devices = {}  # slug -> name
 
     def load(self, loader):
