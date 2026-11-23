@@ -139,11 +139,40 @@ hold_port() {
   until [ -s "$TMP/held.port" ]; do sleep 0.1; done
   export "$1=$(cat "$TMP/held.port")"
 }
+release_port() { kill "$held_pid"; wait "$held_pid" 2>/dev/null || true; }
 
 # A busy port stops the start before mitmweb starts, naming the port, its role and the
 # process holding it, and pointing at Troubleshooting.
 hold_port LAB_CHARLES_PORT
 refused "port $LAB_CHARLES_PORT (Charles's port, the second LAN listener) is in use by perl (pid $held_pid)" \
   docs/troubleshooting.md
-kill "$held_pid"; wait "$held_pid" 2>/dev/null || true
+release_port
 echo "ok: a busy port is named, with its role and the process holding it"
+
+# Every busy port is named in one run, with the other settings problems.
+hold_port LAB_PORT; lan_holder=$held_pid
+hold_port LAB_WEB_PORT
+sed -i.bak 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=/' "$ROXY_CONFIG_DIR/secrets.env"
+refused "port $LAB_PORT (the LAN listener) is in use by perl (pid $lan_holder)" \
+  "port $LAB_WEB_PORT (the mitmweb UI) is in use by perl (pid $held_pid)" MITMWEB_PASSWORD
+release_port; held_pid=$lan_holder; release_port
+seeded "$ROXY_CONFIG_DIR"
+echo "ok: every busy port is named in one run, with the missing settings"
+
+# A holder lsof does not show this user (a root process on 443 or 80) is named by the port.
+mkdir -p "$TMP/blind"
+printf '#!/usr/bin/env bash\nexit 1\n' > "$TMP/blind/lsof"
+chmod +x "$TMP/blind/lsof"
+hold_port LAB_TUNNEL_PORT
+PATH="$TMP/blind:$PATH" refused "port $LAB_TUNNEL_PORT (the tunnel listener) is in use by a process this user cannot see"
+release_port
+echo "ok: a busy port whose holder this user cannot see is named"
+
+# The CA Routing ports are checked only with --ca-routing, the only start that listens on them.
+hold_port LAB_CA_ROUTING_PORTS
+out="$("$SCRIPTS/start-lab" 2>&1)" || fail "start-lab without --ca-routing refused a busy CA Routing port: $out"
+START_ARGS=(--ca-routing)
+refused "port $LAB_CA_ROUTING_PORTS (a CA Routing listener) is in use by perl (pid $held_pid)"
+START_ARGS=()
+release_port
+echo "ok: a busy CA Routing port stops only a start with --ca-routing"
