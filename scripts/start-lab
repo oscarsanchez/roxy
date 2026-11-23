@@ -38,11 +38,13 @@ if [ -n "$replay" ]; then
   export LAB_REPLAY="$(cd "$(dirname "$replay")" && pwd)/$(basename "$replay")"  # read by run-mitmweb
 fi
 
+# One lab per user (deploy, launch and grid take the devices lock instead), taken first: a
+# lab already running holds the ports too, and the lock names it.
+lab_lock lab
 if $tunnel; then require_lab_settings MITMWEB_PASSWORD LAB_SECRET; else require_lab_settings MITMWEB_PASSWORD; fi
 resolved="$(proxy_cli resolve ${app:+--app "$app"})" || exit 1  # two lines: name, repo
 LAB_APP="${resolved%%$'\n'*}" app_repo="${resolved#*$'\n'}"
 export LAB_APP  # read by scripts/run-mitmweb
-lab_lock lab  # one lab per user; deploy, launch and grid take the devices lock instead
 if $tunnel; then
   command -v cloudflared >/dev/null || die "cloudflared is required for --tunnel (brew install cloudflared)"
 fi

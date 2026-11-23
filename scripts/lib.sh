@@ -150,9 +150,10 @@ busy_port_problem() {
 }
 
 # require_lab_settings SECRET... : what the lab needs to start, loading secrets.env. Fails
-# naming everything missing at once (settings files, the secrets SECRET..., Target Devices,
-# lan_subnets), each with the command that fills it in, and every busy port the lab listens
-# on (lab_listeners), so one run shows all there is to do.
+# naming everything missing at once (settings files, the secrets SECRET..., lan_subnets),
+# each with the command that fills it in, and every busy port the lab listens on
+# (lab_listeners), so one run shows all there is to do. No Target Devices is a warning: the
+# lab still serves This Mac's own clients.
 require_lab_settings() {
   local problems=() problem file port role
   require_jq
@@ -166,7 +167,7 @@ require_lab_settings() {
     [ -z "$problem" ] || problems+=("$problem (roxy setup generates them; roxy setup --cloud for LAB_SECRET)")
   fi
   if [ -f "$DEVICES_FILE" ] && ! jq -e 'length > 0' "$DEVICES_FILE" >/dev/null 2>&1; then
-    problems+=("no Target Devices in $DEVICES_FILE (roxy setup in a terminal offers the Rokus it finds; or roxy device add NAME --ip IP, and roxy device discover lists the Rokus)")
+    echo "warning: no Target Devices in $DEVICES_FILE: the lab serves only This Mac's own clients (iOS Simulator, Android Emulator, curl). For a Roku or a Proxied Device: roxy device add NAME --ip IP (roxy device discover lists the Rokus; roxy setup in a terminal offers them)" >&2
   fi
   if [ -f "$SETTINGS_FILE" ] && ! jq -e '.lan_subnets | length > 0' "$SETTINGS_FILE" >/dev/null 2>&1; then
     problems+=("missing setting lan_subnets (the LAN subnets allowed to use the lab, CIDR) in $SETTINGS_FILE (roxy setup sets them for this Mac's network)")
@@ -196,12 +197,19 @@ lan_ip() {
   echo "$ip"
 }
 
-# warn_of_a_vpn : warns, on stderr, when a VPN (a utun interface) holds the default route:
-# the LAN IP is still the Mac's, but the VPN may keep the Rokus' traffic from reaching the lab.
+# vpn_interface IFACE : whether the network interface IFACE is a VPN's: utun (macOS's own
+# VPNs and most apps'), ipsec, ppp (L2TP, PPTP), tun and tap (OpenVPN and the like), gpd
+# (GlobalProtect).
+vpn_interface() {
+  case "$1" in utun*|ipsec*|ppp*|tun*|tap*|gpd*) return 0 ;; *) return 1 ;; esac
+}
+
+# warn_of_a_vpn : warns, on stderr, when a VPN (vpn_interface) holds the default route: the
+# LAN IP is still the Mac's, but the VPN may keep the Rokus' traffic from reaching the lab.
 warn_of_a_vpn() {
-  case "$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')" in
-    utun*) echo "warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab" >&2 ;;
-  esac
+  if vpn_interface "$(route -n get default 2>/dev/null | awk '/interface:/{print $2}')"; then
+    echo "warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab" >&2
+  fi
 }
 
 # lan_proxy_base [IP [PORT]] : the LAN Proxy Base on IP (default: the Mac's LAN IP) and PORT

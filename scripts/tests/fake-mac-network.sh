@@ -6,7 +6,8 @@ VPN_WARNING="warning: a VPN holds the default route: Rokus reach the lab only if
 
 # fake_mac_network DIR : writes route, networksetup and ipconfig into DIR, for DIR on PATH.
 # networksetup lists the network services in this order: a VPN on utun4, Thunderbolt Bridge
-# (bridge0), USB 10/100/1000 LAN (en5), Wi-Fi (en0), and a VPN with no device.
+# (bridge0), iPhone USB (en8), Bluetooth PAN (en6), an L2TP VPN (ppp0), USB 10/100/1000 LAN
+# (en5), Wi-Fi (en0), and a VPN with no device.
 # FAKE_MAC_ADDRESSES: each active interface and its IPv4 address, netmask 255.255.255.0
 # (default "en0=192.0.2.10": Wi-Fi alone). FAKE_DEFAULT_ROUTE: the default route's
 # interface (default en0).
@@ -26,13 +27,22 @@ An asterisk (*) denotes that a network service is disabled.
 (2) Thunderbolt Bridge
 (Hardware Port: Thunderbolt Bridge, Device: bridge0)
 
-(3) USB 10/100/1000 LAN
+(3) iPhone USB
+(Hardware Port: iPhone USB, Device: en8)
+
+(4) Bluetooth PAN
+(Hardware Port: Bluetooth PAN, Device: en6)
+
+(5) Travel VPN
+(Hardware Port: L2TP, Device: ppp0)
+
+(6) USB 10/100/1000 LAN
 (Hardware Port: USB 10/100/1000 LAN, Device: en5)
 
-(4) Wi-Fi
+(7) Wi-Fi
 (Hardware Port: Wi-Fi, Device: en0)
 
-(5) Home VPN
+(8) Home VPN
 (Hardware Port: com.example.vpn, Device: )
 
 ORDER

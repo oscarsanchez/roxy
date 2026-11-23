@@ -1,17 +1,23 @@
 #!/usr/bin/env bash
 # Print the Mac's LAN interface: the first active Wi-Fi or Ethernet interface (one
-# with an IPv4 address) in macOS's network service order, skipping VPN (utun), bridge and
-# loopback interfaces. Not the default route's: a VPN can hold that. The one lookup of the
-# Mac's LAN IP: lan_ip in scripts/lib.sh and this_mac in proxy/lab/settings_root.py run it.
+# with an IPv4 address) in macOS's network service order, skipping VPN (vpn_interface in
+# scripts/lib.sh), bridge and loopback interfaces, and the hardware ports that never reach a
+# Roku's LAN: iPhone and iPad USB tethering, Bluetooth PAN and Thunderbolt Bridge. Not the
+# default route's: a VPN can hold that. The one lookup of the Mac's LAN IP: lan_ip in
+# scripts/lib.sh and this_mac in proxy/lab/settings_root.py run it.
 # Exits 1, printing nothing, when no such interface is active.
 # Usage: scripts/lan-interface
 set -euo pipefail
+. "$(dirname "$0")/lib.sh"
 
-while read -r device; do
-  case "$device" in ''|utun*|bridge*|lo*) continue ;; esac
+while IFS='|' read -r port device; do
+  case "$port" in "iPhone USB"*|"iPad USB"*|"Bluetooth PAN"|"Thunderbolt Bridge") continue ;; esac
+  case "$device" in ''|bridge*|lo*) continue ;; esac
+  ! vpn_interface "$device" || continue
   if ipconfig getifaddr "$device" >/dev/null 2>&1; then
     echo "$device"
     exit 0
   fi
-done < <(networksetup -listnetworkserviceorder 2>/dev/null | sed -n 's/.*Device: \([^)]*\)).*/\1/p')
+done < <(networksetup -listnetworkserviceorder 2>/dev/null \
+  | sed -n 's/.*Hardware Port: \(.*\), Device: \([^)]*\)).*/\1|\2/p')
 exit 1

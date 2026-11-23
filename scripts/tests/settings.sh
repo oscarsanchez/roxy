@@ -78,14 +78,25 @@ echo '{}' > "$ROXY_CONFIG_DIR/settings.json"
 refused lan_subnets
 echo "ok: a missing settings file or setting is named"
 
-# As install.sh seeds them: no devices and no lan_subnets are named, with the commands that
-# fill them in, and so is the empty mitmweb password.
+# As install.sh seeds them: no lan_subnets is named, with the command that fills them in,
+# and so is the empty mitmweb password.
 seeded "$ROXY_CONFIG_DIR"
 sed -i.bak 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=/' "$ROXY_CONFIG_DIR/secrets.env"
 echo '{}' > "$ROXY_CONFIG_DIR/devices.json"
 printf '{"lan_subnets": [], "grid_devices": {}}\n' > "$ROXY_CONFIG_DIR/settings.json"
-refused "no Target Devices in $ROXY_CONFIG_DIR/devices.json" "roxy device add" lan_subnets MITMWEB_PASSWORD "roxy setup"
-echo "ok: no devices and no lan_subnets are named, pointing at roxy setup and roxy device add"
+refused lan_subnets MITMWEB_PASSWORD "roxy setup"
+echo "ok: no lan_subnets is named, pointing at roxy setup"
+
+# No Target Devices: the lab still starts, for This Mac's own clients (iOS Simulator,
+# Android Emulator, curl), and warns, pointing at roxy device add.
+seeded "$ROXY_CONFIG_DIR"
+echo '{}' > "$ROXY_CONFIG_DIR/devices.json"
+rm -f "$UV_LOG"
+out="$("$SCRIPTS/start-lab" 2>&1)" || fail "start-lab with no Target Devices: $out"
+[ -e "$UV_LOG" ] || fail "mitmweb did not start with no Target Devices: $out"
+case "$out" in *"warning: no Target Devices in $ROXY_CONFIG_DIR/devices.json"*"roxy device add"*) ;;
+  *) fail "the start with no Target Devices does not warn: $out" ;; esac
+echo "ok: with no Target Devices the lab starts for This Mac, and warns"
 
 # Everything missing is named in one run, not one problem per try.
 rm -r "$ROXY_CONFIG_DIR"
@@ -135,6 +146,11 @@ out="$(FAKE_DEFAULT_ROUTE=utun4 FAKE_MAC_ADDRESSES="utun4=203.0.113.5 bridge0=20
   "$SCRIPTS/start-lab" 2>&1)" || fail "start-lab on a VPN: $out"
 case "$out" in *"Proxy IP:          192.0.2.10 "*) ;; *) fail "on a VPN, the Proxy IP is not Wi-Fi's: $out" ;; esac
 grep -qxF "$VPN_WARNING" <<< "$out" || fail "the start on a VPN does not warn: $out"
+# Every kind of VPN interface holding the default route gets the warning.
+for vpn in ipsec0 ppp0 tun0 tap0 gpd0; do
+  out="$(FAKE_DEFAULT_ROUTE=$vpn "$SCRIPTS/start-lab" 2>&1)" || fail "start-lab on a VPN ($vpn): $out"
+  grep -qxF "$VPN_WARNING" <<< "$out" || fail "the start on a VPN ($vpn) does not warn: $out"
+done
 echo "ok: on a VPN the Proxy IP is the Wi-Fi address, and the start warns"
 
 # hold_port NAME : a test listener (perl) holds a free port, which becomes the lab port NAME;
@@ -150,6 +166,21 @@ hold_port() {
   export "$1=$(cat "$TMP/held.port")"
 }
 release_port() { kill "$held_pid"; wait "$held_pid" 2>/dev/null || true; }
+
+# A lab already running holds the lab lock and its ports: a second start names the lock's
+# holder, not the ports.
+hold_port LAB_PORT
+mkdir -p "$LAB_LOCK_DIR"
+printf 'pid=%s\nowner=\ncommand=roxy start\nsince=2026-11-23 09:00:00\ntoken=the-running-lab\n' "$held_pid" > "$LAB_LOCK_DIR/lab"
+rm -f "$UV_LOG"
+if err="$("$SCRIPTS/start-lab" 2>&1)"; then fail "a second start-lab started: $err"; fi
+case "$err" in *"the lab lock is held by pid $held_pid since 2026-11-23 09:00:00: roxy start"*) ;;
+  *) fail "a second start does not name the lab lock's holder: $err" ;; esac
+case "$err" in *"port $LAB_PORT"*) fail "a second start names the busy port, not the running lab: $err" ;; esac
+[ ! -e "$UV_LOG" ] || fail "mitmweb started beside a running lab"
+rm "$LAB_LOCK_DIR/lab"
+release_port
+echo "ok: a second start names the running lab's lock holder"
 
 # A busy port stops the start before mitmweb starts, naming the port, its role and the
 # process holding it, and pointing at Troubleshooting.

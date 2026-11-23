@@ -733,7 +733,8 @@ def test_changes_merge_into_one_saying_all_they_say(root):
 @pytest.fixture
 def mac_network(tmp_path, monkeypatch):
     """The Mac's network commands, faked on the PATH (scripts/tests/fake-mac-network.sh): the
-    services in the order VPN (utun4), Thunderbolt Bridge (bridge0), USB LAN (en5), Wi-Fi (en0)."""
+    services in the order VPN (utun4), Thunderbolt Bridge (bridge0), iPhone USB (en8),
+    Bluetooth PAN (en6), L2TP VPN (ppp0), USB LAN (en5), Wi-Fi (en0)."""
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     fake = Path(__file__).resolve().parents[2] / "scripts" / "tests" / "fake-mac-network.sh"
@@ -753,6 +754,12 @@ def test_this_mac_with_ethernet_and_wi_fi_up_is_the_first_in_the_service_order(m
     mac_network.setenv("FAKE_MAC_ADDRESSES", "en0=192.0.2.10 en5=192.0.2.20")
 
     assert this_mac() == ip_interface("192.0.2.20/24")
+
+
+def test_this_mac_skips_an_iphone_tether_bluetooth_and_any_vpn_up_before_wi_fi(mac_network):
+    mac_network.setenv("FAKE_MAC_ADDRESSES", "en8=203.0.113.7 en6=203.0.113.8 ppp0=203.0.113.9 en0=192.0.2.10")
+
+    assert this_mac() == ip_interface("192.0.2.10/24")
 
 
 def test_this_mac_with_only_a_vpn_up_is_on_no_network(mac_network):
