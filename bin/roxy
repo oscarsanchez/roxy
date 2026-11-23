@@ -154,9 +154,11 @@ Fill your roxy settings for this Mac, keeping what is there: run it again any ti
 generates the mitmweb password (MITMWEB_PASSWORD in secrets.env, which the mitmweb UI
 asks for), allows this Mac in lan_subnets, and takes your Roku developer login (one for
 all your Rokus). Secrets are written to secrets.env, readable only by you, and never
-printed. In a terminal it shows each value and keeps it on Enter. Without one it never
-asks: the Roku password comes from stdin (pipe it in), never from a flag, and without it
-setup says so. Restart a running lab to use a change.
+printed. In a terminal it shows each value and keeps it on Enter, then offers each
+unregistered Roku it finds on this network (as roxy device discover does) to register
+under its own name. Without one it never asks and registers no Roku: the Roku password
+comes from stdin (pipe it in), never from a flag, and without it setup says so. Restart a
+running lab to use a change.
   --trusted-network  allow this Mac's whole subnet in lan_subnets: every device on a
                      network you trust, such as home, can use the lab
   --this-mac-only    allow only this Mac's address in lan_subnets (the default, when

@@ -54,8 +54,8 @@ from lab.app_profiles import AppProfileError, AppProfiles, ScenarioInBoth
 from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
-from lab.settings_root import CLOUD_DEVICE, SettingsRoot, SettingsRootError, ecp_device_info, rce_knows
-from lab.settings_root import has_tool, new_secret, rce_token_works, ssdp_rokus, this_mac
+from lab.settings_root import CLOUD_DEVICE, NO_ROKU_FOUND, SSDP_SECONDS, Change, SettingsRoot, SettingsRootError
+from lab.settings_root import ecp_device_info, has_tool, new_secret, rce_knows, rce_token_works, ssdp_rokus, this_mac
 
 REFUSED = "refused: in both (rename the profile's)"
 REDACTED_SECRET = "<secret>"
@@ -131,16 +131,17 @@ def device_remove(args):
 def device_discover(args):
     found = settings().discover()
     if not found:
-        print(
-            "no Roku answered (a network can block discovery): a Roku shows its IP in"
-            " Settings → Network → About; then roxy device add NAME --ip IP"
-        )
+        print(NO_ROKU_FOUND)
     for roku in found:
-        mode = {True: "developer mode", False: "not in developer mode", None: "did not answer ECP"}[roku.developer_mode]
         registered = f"registered as '{roku.registered_as}'" if roku.registered_as else "not registered"
-        print(f"{roku.ip:<16} {roku.name or '?':<24} {roku.model or '?':<20} {mode:<22} {registered}")
+        print(f"{roku.ip:<16} {roku.name or '?':<24} {roku.model or '?':<20} {developer_mode(roku):<22} {registered}")
         if roku.add_command:
             print(f"  {roku.add_command}")
+
+
+def developer_mode(roku):
+    """Whether the Roku discover found is in developer mode, in words."""
+    return {True: "developer mode", False: "not in developer mode", None: "did not answer ECP"}[roku.developer_mode]
 
 
 def device_address(device):
@@ -149,11 +150,13 @@ def device_address(device):
 
 
 def setup(args):
-    """roxy setup: in a terminal, each value asked for and kept on Enter; otherwise the flags
-    decide, and the Roku password comes from stdin."""
+    """roxy setup: in a terminal, each value asked for and kept on Enter, then each Roku on
+    the LAN offered to register; otherwise the flags decide, and the Roku password comes
+    from stdin."""
     root = settings()
     trusted_network, roku_user = args.trusted_network, args.roku_user
-    if sys.stdin.isatty():
+    terminal = sys.stdin.isatty()
+    if terminal:
         try:
             trusted_network, roku_user, roku_password = ask_setup(root.setup_values(), trusted_network, roku_user)
         except (EOFError, KeyboardInterrupt):
@@ -163,7 +166,25 @@ def setup(args):
     change = root.setup(
         trusted_network=trusted_network, roku_user=roku_user, roku_password=roku_password or None, cloud=args.cloud
     )
+    if terminal:
+        print(f"looking for Rokus on this network (about {SSDP_SECONDS} s)")
+        try:
+            found = root.add_found_rokus(ask_roku_name)
+        except (EOFError, KeyboardInterrupt):
+            print_change(change)
+            sys.exit("\nsetup stopped offering Rokus: roxy device list shows the ones registered")
+        change = Change(change.notes + found.notes, change.warnings + found.warnings)
     print_change(change)
+
+
+def ask_roku_name(roku):
+    """The name the person at the terminal registers the Roku discover found under (None:
+    skip it); Enter takes the Roku's own name."""
+    about = f"{roku.name or 'a Roku'} at {roku.ip} ({roku.model or 'model unknown'}, {developer_mode(roku)})"
+    if roku.name:
+        answer = input(f"register {about} as '{roku.name}'? [Enter: yes; or another name; n: skip]: ").strip()
+        return None if answer.lower() == "n" else answer or roku.name
+    return input(f"register {about}? [a name; Enter: skip]: ").strip() or None
 
 
 def ask_setup(values, trusted_network, roku_user):

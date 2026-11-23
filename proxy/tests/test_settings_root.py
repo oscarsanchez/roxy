@@ -567,3 +567,60 @@ def test_a_roku_that_answers_the_search_but_not_ecp_is_listed_with_an_add_line_t
 
 def test_discover_with_no_roku_answering_finds_none(root):
     assert root.discover() == []
+
+
+# roxy setup in a terminal offers each Roku discover finds that is not registered: the person
+# names it (its own name by default) or skips it (None).
+
+
+def test_setup_offers_each_unregistered_roku_found_and_registers_it_as_device_add_does(root, settings, ssdp, ecp):
+    ssdp += ["192.0.2.54", "198.51.100.7", "198.51.100.8"]
+    ecp["192.0.2.54"] = {**DEVELOPER_MODE, "user-device-name": "Lounge"}
+    ecp["198.51.100.7"] = DEVELOPER_MODE
+    offered = []
+
+    def name_for(found):
+        offered.append((found.ip, found.name))
+        return found.name
+
+    change = root.add_found_rokus(name_for)
+
+    assert offered == [("198.51.100.7", "Den"), ("198.51.100.8", None)]
+    assert devices_file(settings)["Den"] == {"ip": "198.51.100.7"}
+    assert "198.51.100.8" not in [d.ip for d in root.devices()]
+    assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24", "198.51.100.7/32"]
+    assert change == (["registered 'Den' (198.51.100.7)", "allowed 198.51.100.7/32 in lan_subnets"], [])
+
+
+def test_a_roku_found_is_registered_under_the_name_given_with_device_adds_warnings(root, settings, ssdp, ecp):
+    ssdp.append("198.51.100.7")
+    ecp["198.51.100.7"] = {**DEVELOPER_MODE, "developer-enabled": "false"}
+
+    change = root.add_found_rokus(lambda found: "Kids")
+
+    assert devices_file(settings)["Kids"] == {"ip": "198.51.100.7"}
+    assert change.warnings == ["Kids (198.51.100.7) is not in developer mode: registered anyway (deploy and launch need it)"]
+
+
+def test_a_roku_found_under_a_name_that_exists_is_left_with_a_warning_and_the_next_is_offered(root, settings, ssdp):
+    ssdp += ["198.51.100.7", "198.51.100.8"]
+
+    change = root.add_found_rokus(lambda found: {"198.51.100.7": "Living Room", "198.51.100.8": "Kids"}[found.ip])
+
+    assert devices_file(settings)["Living Room"] == {"ip": "192.0.2.54"}
+    assert devices_file(settings)["Kids"] == {"ip": "198.51.100.8"}
+    assert change.warnings[0] == (
+        "198.51.100.7 not registered: the device 'Living Room' already exists (roxy device list shows them)"
+    )
+
+
+def test_setup_with_no_roku_answering_says_where_to_read_a_rokus_ip(root):
+    change = root.add_found_rokus(lambda found: pytest.fail("nothing to offer"))
+
+    assert change == (
+        [
+            "no Roku answered (a network can block discovery): a Roku shows its IP in"
+            " Settings → Network → About; then roxy device add NAME --ip IP"
+        ],
+        [],
+    )

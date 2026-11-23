@@ -39,7 +39,11 @@ PROXIED_KINDS = ("proxied", "mobile")  # "mobile": as roxy 0.2.0 wrote it
 SLUG = re.compile(r"[a-z0-9]+(?:-[a-z0-9]+)*")
 SSDP_GROUP = "239.255.255.250:1900"  # every SSDP device on the LAN; ROXY_SSDP_ADDRESS overrides it (tests)
 SSDP_SECONDS = 3  # how long Rokus get to answer
-RCE_CLI = "https://github.com/oscarsanchez/rce-cli"  # the rce CLI, which the lab runs Cloud Devices through
+NO_ROKU_FOUND = (
+    "no Roku answered (a network can block discovery): a Roku shows its IP in"
+    " Settings → Network → About; then roxy device add NAME --ip IP"
+)
+RCE_CLI ="https://github.com/oscarsanchez/rce-cli"  # the rce CLI, which the lab runs Cloud Devices through
 
 
 class SettingsRootError(Exception):
@@ -285,6 +289,28 @@ class SettingsRoot:
         """The Rokus on the LAN, in the order they answered the SSDP search. Changes nothing."""
         names = {entry.get("ip"): name for name, entry in self._read(self.devices_file).items()}
         return [_found(ip, self.ecp_device_info(ip) or {}, names.get(ip)) for ip in self.ssdp_rokus()]
+
+    def add_found_rokus(self, name_for):
+        """Offer each Roku discover finds that is not registered to NAME_FOR(found), which
+        gives the name to register it under (None: skip it), and register it as add_device
+        does. A name add_device refuses leaves that Roku unregistered, with a warning.
+        Returns the Change of them all."""
+        found = self.discover()
+        if not found:
+            return Change([NO_ROKU_FOUND], [])
+        notes, warnings = [], []
+        for roku in found:
+            name = None if roku.registered_as else name_for(roku)
+            if name is None:
+                continue
+            try:
+                change = self.add_device(name, roku.ip)
+            except (DeviceExists, BadDevice) as e:
+                warnings.append(f"{roku.ip} not registered: {e}")
+                continue
+            notes += [f"registered {name!r} ({roku.ip})", *change.notes]
+            warnings += change.warnings
+        return Change(notes, warnings)
 
     def _save(self, registry, settings):
         """Write devices.json, then settings.json unless SETTINGS is None."""
