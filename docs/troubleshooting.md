@@ -9,15 +9,31 @@ A refused request is marked ⛔ in mitmweb, carries an `X-Lab-Blocked` header, a
 | Refusal | Cause | Fix |
 |---|---|---|
 | `403 secret-segment` | Through the tunnel, the request lacks the secret path segment, or is not a Prefixed URL behind it. | Launch with `roxy launch`, which sends the real public Proxy Base. Pasting by hand: `roxy status --show-secret`. The tunnel hostname changes on every `roxy start`: relaunch after a restart. |
-| `403 client-ip` | On the LAN, the client is not on your `lan_subnets`: a Proxied Device on another Wi-Fi network than the Mac's too. Through the tunnel, its `CF-Connecting-IP` is not one of the RCE egress IPs. | Add the subnet to `lan_subnets` ([Settings](settings.md)) and restart the lab, or join the Proxied Device to the Mac's LAN ([Proxied Devices](proxied-devices.md#before-you-start)). RCE egress IPs may change: add the new one with mitmweb's `lab_rce_egress_ips` option, then in `proxy/config/guards.json`. |
+| `403 client-ip` | On the LAN, the client is not on your `lan_subnets`: a Proxied Device on another Wi-Fi network than the Mac's too. Through the tunnel, its `CF-Connecting-IP` is not one of the RCE egress IPs. | Register the device, `roxy device add NAME --ip IP` (`--proxied` for a Proxied Device), which allows its IP in `lan_subnets`, or on a network you trust `roxy setup --trusted-network`; then restart the lab ([Settings](settings.md#setup)). Or join the Proxied Device to the Mac's LAN ([Proxied Devices](proxied-devices.md#before-you-start)). RCE egress IPs may change: add the new one with mitmweb's `lab_rce_egress_ips` option, then in `proxy/config/guards.json`. |
 | `403 origin-host` | Through the tunnel, the Origin host is not on the allowlist. | Add it to the App Profile's `origin_allowlist` (a leading dot allows any subdomain) and restart ([App Profiles](settings.md#app-profiles)). |
 | `403 origin-address` | The Origin resolves to a private, loopback, link-local or unique-local address. | By design: the lab never reaches private Origins, `map_remote` targets included. A `This Mac` flow to `127.0.0.1`: see [mitmweb says `lab refused: origin-address`](#mitmweb-says-lab-refused-origin-address-while-the-macs-web-proxies-point-at-the-lab). |
 | `400 not-prefixed` | A request reached a LAN listener with no Origin in its path: the app resolved a root-relative URL against the Proxy Base, or the app sent a URL without the Proxy Base. | Put the Proxy Base in front of that URL in the app ([Prefix Routing guide](prefix-routing.md)), or catch the bare path with the App Profile's [fallback Origin](settings.md#app-profiles). |
 
 ## `roxy start` stops before mitmweb starts
 
-**Cause:** a settings file, a secret it needs (`MITMWEB_PASSWORD`; `LAB_SECRET` with `--tunnel`) or `lan_subnets` is missing. It names which. A bad App Profile `fallback_origin` or a profile Scenario named like one of the lab's own stops it too, naming the profile.
-**Fix:** fill in the named setting in the settings root, or run `./install.sh` to seed missing files ([Settings](settings.md)).
+**Cause:** a settings file or a secret it needs (`MITMWEB_PASSWORD`; `LAB_SECRET` with `--tunnel`) is missing, or `devices.json` or `lan_subnets` is empty, as `./install.sh` leaves them. It names each, in one run, with the command that fills it in:
+```
+error: missing secrets in .../roxy/secrets.env: MITMWEB_PASSWORD (roxy setup generates them; roxy setup --cloud for LAB_SECRET)
+error: no Target Devices in .../roxy/devices.json (roxy setup in a terminal offers the Rokus it finds; or roxy device add NAME --ip IP, and roxy device discover lists the Rokus)
+error: missing setting lan_subnets (the LAN subnets allowed to use the lab, CIDR) in .../roxy/settings.json (roxy setup sets them for this Mac's network)
+```
+A bad App Profile `fallback_origin` or a profile Scenario named like one of the lab's own stops it too, naming the profile.
+**Fix:** run the command it names: `roxy setup` (`--cloud` for `LAB_SECRET`), then `roxy device add` or `roxy device discover`. A missing file: run `./install.sh` to seed it ([Settings](settings.md#setup)).
+
+## `roxy setup` warns
+
+Setup still finishes; each warning says what is left:
+
+- `no Roku developer password (ROKU_DEV_PASSWORD)`: it had no terminal to ask in and nothing on stdin. Run `roxy setup` in a terminal, or pipe the password to it. An agent leaves this to you.
+- `could not find this Mac's address: lan_subnets left as they are`: the Mac is on no network. Join one and run it again.
+- `rce is not installed`, `rce token status fails` or `cloudflared is not installed` (`--cloud`): install it, or set the token with `rce token set` ([Cloud Devices](cloud-devices.md#prerequisites)).
+- `<ip> not registered: ...`: a Roku it offered took a name that exists; `roxy device add` it under another name.
+- A Roku that `did not answer ECP` or `is not in developer mode`: registered anyway; turn it on, or turn on developer mode before `scripts/deploy`. The same goes for `roxy device add`.
 
 ## A Scenario seems to do nothing
 

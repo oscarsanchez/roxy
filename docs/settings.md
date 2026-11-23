@@ -2,18 +2,37 @@
 
 Where your secrets, devices, LAN subnets and App Profiles live, and what each file holds. Vocabulary: [GLOSSARY.md](../GLOSSARY.md).
 
-Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/roxy/` (`$XDG_CONFIG_HOME/roxy` if you set that), never in the repo. The environment variable `ROXY_CONFIG_DIR` points the lab at another settings root, for tests or experiments. The repo ships examples only, in `settings.example/`; the install copies each one the settings root lacks, for you to fill in:
+Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/roxy/` (`$XDG_CONFIG_HOME/roxy` if you set that), never in the repo. The environment variable `ROXY_CONFIG_DIR` points the lab at another settings root, for tests or experiments. The install seeds each file the settings root lacks with nothing set yet: no devices, no LAN subnets, every secret empty. `roxy setup` and `roxy device` fill them in (below), or edit them by hand; `settings.example/` in the repo shows every field with made-up values.
 
 | File | Holds |
 |---|---|
-| `secrets.env` | `MITMWEB_PASSWORD` (mitmweb UI), `LAB_SECRET` (secret path segment of the public Proxy Base, Cloud Devices), `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD` (sideloading to Physical Devices; a Cloud Device's dev password is kept by `rce`) |
+| `secrets.env` | `NAME=value` lines, readable only by you: `MITMWEB_PASSWORD` (mitmweb UI), `LAB_SECRET` (secret path segment of the public Proxy Base, Cloud Devices), `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD` (sideloading to Physical Devices; a Cloud Device's dev password is kept by `rce`) |
 | `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`), `{"ip": ..., "kind": "proxied"}` for a Proxied Device (no `kind` means a Roku; `"kind": "mobile"`, as roxy 0.2.0 wrote it, means a Proxied Device too; `scripts/deploy`, `roxy launch` and `roxy console` refuse a Proxied Device: not a Roku). `roxy device` edits it for you (see [Target Devices](#target-devices)) |
-| `settings.json` | `lan_subnets`: your LAN's subnets (CIDR), the clients allowed on the LAN listener; `roxy device add` and `remove` keep a device's `/32` in step. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
+| `settings.json` | `lan_subnets`: the LAN subnets (CIDR) whose clients may use the LAN listeners and Proxy Routing; `roxy setup` allows this Mac (see [Setup](#setup)), and `roxy device add` and `remove` keep a device's `/32` in step. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
 | `apps/<name>/` | App Profiles, made by `roxy app new` (see [App Profiles](#app-profiles)) |
 
-- `roxy start` stops before mitmweb starts if a file, a secret it needs or `lan_subnets` is missing, and names it.
+- `roxy start` stops before mitmweb starts if a file or a secret it needs is missing, or `devices.json` or `lan_subnets` is empty, naming each with the command that fills it in.
 - The RCE token is `rce`'s (`rce token set`), not the lab's. Keep `RCE_TOKEN` out of `secrets.env`: the scripts export it, and `rce` takes `RCE_TOKEN` over its stored token.
 - The lab's own defaults, the same for everyone, stay in the repo: `proxy/config/guards.json` (RCE egress IPs and the Origin allowlist, see [Guards](guards.md)). Restart the lab after editing a setting.
+
+## Setup
+
+`roxy setup` fills the settings root for this Mac, keeping what is there: run it again any time.
+
+```sh
+roxy setup                                 # in a terminal: shows each value, Enter keeps it; then offers the Rokus it finds
+roxy setup --trusted-network               # allow this Mac's whole subnet: every device on a network you trust, such as home
+roxy setup --this-mac-only                 # back to this Mac's address only
+roxy setup --cloud                         # Cloud Devices too: the lab secret, and rce and cloudflared checked
+pbpaste | roxy setup --roku-user rokudev   # no terminal: the Roku password from stdin, never a flag
+```
+
+- **Secrets.** It generates `MITMWEB_PASSWORD` when there is none, and with `--cloud` `LAB_SECRET` too. Both go to `secrets.env`, readable only by you, and are never printed; a re-run keeps them. When the mitmweb UI asks for its password, read it there (`roxy start` names the file).
+- **`lan_subnets`.** With none yet, or the examples' (`192.0.2.0/24`, which roxy 0.2.0's install seeded), it allows this Mac's address as a `/32`: on a shared network, such as work, no one else can relay through your lab. `--trusted-network` allows the Mac's whole subnet instead. Either flag replaces `lan_subnets`, keeping each registered device's `/32` the new entry does not cover; without one, setup keeps the `lan_subnets` you have. In a terminal it asks (`t`: trust this network; `m`: this Mac only; Enter keeps).
+- **Roku developer login.** `ROKU_DEV_USER` (`--roku-user`, default `rokudev`) and `ROKU_DEV_PASSWORD`, one for all your Rokus. The password comes from a hidden prompt in a terminal, or from the first line of stdin without one; never from a flag (`roxy setup --roku-password` is refused). Without it, setup warns `no Roku developer password (ROKU_DEV_PASSWORD): ...`, and `scripts/deploy` to a Physical Device will need it.
+- **Rokus.** In a terminal it then searches this network as `roxy device discover` does and offers each unregistered Roku: Enter registers it under its own name, as `roxy device add` would; type another name, or `n` to skip. Without a terminal it never asks and registers none.
+- **Cloud Devices** (`--cloud`). It checks that `rce` is installed and `rce token status` works, and that `cloudflared` is installed, warning with what to do: `rce is not installed: install it as its README says, ...`, `rce token status fails: the user runs rce token set (pbpaste | rce token set)`, `cloudflared is not installed: brew install cloudflared ...`. With all three in place it says `rce and cloudflared installed, and rce token status works`.
+- It prints what it set and kept, warnings on stderr, and ends reminding you to restart a running lab. It never touches `grid_devices`.
 
 ## Target Devices
 

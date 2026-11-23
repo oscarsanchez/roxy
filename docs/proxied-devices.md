@@ -14,7 +14,11 @@ For an iOS Simulator or Android Emulator on the Mac that runs the lab, see [iOS 
 
 ## Before you start
 
-- The Proxied Device and the Mac are on the same LAN, and that LAN is in `lan_subnets` in your `settings.json` ([Settings](settings.md)). A client outside it is refused `client-ip`.
+- The Proxied Device and the Mac are on the same LAN, and the Proxied Device's IP is in `lan_subnets` in your `settings.json` ([Settings](settings.md)). A client outside it is refused `client-ip`. Registering it does that for you, and names its flows (step 3):
+  ```sh
+  roxy device add Phone --ip 192.0.2.60 --proxied   # registered 'Phone' (192.0.2.60) as a Proxied Device
+  ```
+  It also says `allowed 192.0.2.60/32 in lan_subnets` unless they cover that IP already, as they do after `roxy setup --trusted-network`. Restart a running lab to use it.
 - The app is a debug build of your Product App. Store builds are out of scope, and so is an app that pins its certificates: it refuses the lab's.
 - The lab is running. `roxy start` (or `roxy status`, from another terminal) prints the address to use:
   ```
@@ -69,7 +73,7 @@ The lab signs a certificate for every HTTPS Origin with its own CA, the same one
 
 Open the app. Its requests show in mitmweb (`http://127.0.0.1:8081`) and in `roxy flows --json` under their Origin URLs, HTTP and HTTPS alike, with every follow-up request (images, segments, beacons) as the app sends it.
 
-To tell them from your Roku's, register the Proxied Device by its IP in your `devices.json` ([Settings](settings.md)), with `"kind": "proxied"` (an entry with `"kind": "mobile"`, as roxy 0.2.0 had it, still counts):
+To tell them from your Roku's, register the Proxied Device by its IP, as in [Before you start](#before-you-start): `roxy device add Phone --ip 192.0.2.60 --proxied`. By hand, that is this entry in your `devices.json` ([Settings](settings.md)), with `"kind": "proxied"` (an entry with `"kind": "mobile"`, as roxy 0.2.0 had it, still counts), and its IP in `lan_subnets`:
 
 ```json
 "Phone": {"ip": "192.0.2.60", "kind": "proxied"}
@@ -85,7 +89,7 @@ Restart the lab: its flows are then named `Phone` in mitmweb's comment column (f
 
 ## TV boxes and other devices
 
-Any other device goes the same way: set the lab as its HTTP proxy, make the app's debug build trust the lab's CA, and register it with `"kind": "proxied"` (step 3).
+Any other device goes the same way: set the lab as its HTTP proxy, make the app's debug build trust the lab's CA, and register it with `roxy device add NAME --ip IP --proxied` ([Before you start](#before-you-start)).
 
 - **Android TV, Google TV and Fire TV**: their Wi-Fi settings rarely offer a proxy, so set Android's global proxy over adb, with ADB debugging on in Developer options (and the TV box's IP, here `192.0.2.70`):
   ```sh

@@ -54,15 +54,28 @@ git clone https://github.com/oscarsanchez/roxy.git && cd roxy
 ./install.sh
 ```
 
-You should see `linked ~/.local/bin/roxy -> .../bin/roxy`, one `seeded <file>: fill it in` line per settings file, and `git hooks on: .githooks`. Put `~/.local/bin` on your PATH if it says so. `roxy` then works from any terminal, and `git pull` updates it. Run `./install.sh` again whenever you like: it never overwrites a setting.
+You should see `linked ~/.local/bin/roxy -> .../bin/roxy`, one `seeded <file>` line per settings file, `next: roxy setup, ...`, and `git hooks on: .githooks`. Put `~/.local/bin` on your PATH if it says so. `roxy` then works from any terminal, and `git pull` updates it. Run `./install.sh` again whenever you like: it never overwrites a setting. It seeds no devices and no LAN subnets: the next step fills them in.
 
-### 3. Fill in your settings
+### 3. Set up roxy for this Mac
 
-Your settings live in the **settings root**, `~/.config/roxy/`, never in the repo. Fill in what the install seeded ([every field](docs/settings.md)):
+Your settings live in the **settings root**, `~/.config/roxy/`, never in the repo. In a terminal:
 
-- `secrets.env`: `MITMWEB_PASSWORD`, the mitmweb UI's password; `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD`, your Roku's developer login.
-- `settings.json`: `lan_subnets`, your LAN in CIDR, such as `["192.0.2.0/24"]`, which must hold the Mac and the Roku.
-- `devices.json`: your Roku by name, `{"Living Room": {"ip": "<its IP>"}}`. This guide uses `Living Room`.
+```sh
+roxy setup
+```
+
+It asks, keeping each value on Enter: which LAN clients may use the lab (Enter: this Mac only; `t` trusts this network, home for instance, and allows its whole subnet), your Roku's developer user (`rokudev` unless you changed it) and password, hidden as you type. Then it looks for Rokus on this network and offers each one to register: type `Living Room`, the name this guide uses, or keep the Roku's own name and use that below.
+
+You should see what it set: `lan_subnets: <mac-ip>/32 (this Mac only)`, `generated MITMWEB_PASSWORD (in .../roxy/secrets.env; the mitmweb UI asks for it)`, `kept ROKU_DEV_USER: rokudev`, `set ROKU_DEV_PASSWORD`, `registered 'Living Room' (<roku-ip>)` and `allowed <roku-ip>/32 in lan_subnets`. Run it again any time: it keeps what is there.
+
+If it found no Roku (many work and guest networks block discovery), register yours by its IP, which the Roku shows in Settings → Network → About:
+
+```sh
+roxy device discover                                     # the Rokus roxy can find, each with a ready add line
+roxy device add "Living Room" --ip <roku-ip>             # registered 'Living Room' (<roku-ip>) as a Physical Device
+```
+
+Every command and field: [Settings](docs/settings.md).
 
 ### 4. Start the lab and send one request
 
@@ -70,7 +83,7 @@ Your settings live in the **settings root**, `~/.config/roxy/`, never in the rep
 roxy start
 ```
 
-You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP`, two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`, and the `Proxy Routing` address for Proxied Devices, `<mac-ip>:8090`. A missing setting stops it before mitmweb starts, naming the setting. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
+You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP`, two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`, and the `Proxy Routing` address for Proxied Devices, `<mac-ip>:8090`. A missing setting stops it before mitmweb starts, naming the setting and the command that fills it in. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
 
 From another terminal, send a Prefixed URL from the Mac itself, no Roku needed:
 

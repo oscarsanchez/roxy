@@ -14,7 +14,7 @@ How a Roku app sends its Outbound Traffic through the lab by putting the Proxy B
 
 1. Copy the kit into the app and route its URLs through it: [Wiring a classic app](#wiring-a-classic-app) or [Wiring an RSG 2.0 app](#wiring-an-rsg-20-app).
 2. Build it with the kit's constant: `bs_const=roxy_kit=true` (classic) or `ROXY_KIT=1` (RSG 2.0).
-3. `roxy start`, then `roxy launch "<device>"`: it launches the dev channel with the `proxyBase` launch param set to the LAN Proxy Base. Without a device in your `devices.json`, set it over ECP yourself, with a Proxy Base the start prints:
+3. `roxy start`, then `roxy launch "<device>"`: it launches the dev channel with the `proxyBase` launch param set to the LAN Proxy Base. For a Roku you have not registered (`roxy device add` does), set it over ECP yourself, with a Proxy Base the start prints:
    ```
    curl -d '' "http://192.0.2.20:8060/launch/dev?proxyBase=http%3A%2F%2F192.0.2.10%3A8888"
    ```

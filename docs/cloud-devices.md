@@ -4,7 +4,14 @@ Running a Lab App or a Product App on a Cloud Device in Roku Cloud Emulator (RCE
 
 ## Prerequisites
 
-`brew install cloudflared` and the [`rce` CLI](https://github.com/oscarsanchez/rce-cli) (install it as its README says), which does every RCE call for the lab. Give the Cloud Device an rce Device Name and a Dev Snapshot once: `rce device alias <id> player`, `rce device setup-dev player`.
+`brew install cloudflared` and the [`rce` CLI](https://github.com/oscarsanchez/rce-cli) (install it as its README says), which does every RCE call for the lab. Give the Cloud Device an rce Device Name and a Dev Snapshot once: `rce device alias <id> player`, `rce device setup-dev player`. Then, once:
+
+```sh
+roxy setup --cloud                              # generates the lab secret; checks rce, its token and cloudflared
+roxy device add "Cloud Device" --rce player     # registers it by its rce Device Name, slug cloud-device
+```
+
+You should see `generated LAB_SECRET (in .../roxy/secrets.env; the Public Endpoint's secret path segment)`, never the secret itself, and `rce and cloudflared installed, and rce token status works`; a missing tool or token is a warning saying what to do. `roxy device add` warns, and still registers it, when `rce device resolve` does not know the name. Every option: [Settings](settings.md#setup).
 
 ## Deploy and launch
 
