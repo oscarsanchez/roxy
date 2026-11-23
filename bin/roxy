@@ -131,7 +131,8 @@ a running lab to use a change.
   add NAME --ip IP     register the Roku at IP (a Physical Device); warns, and still
                        registers it, when it does not answer ECP or is not in
                        developer mode. An IP lan_subnets does not cover is added to
-                       them as IP/32
+                       them as IP/32. A NAME registered at another IP is refused,
+                       naming that IP: roxy device remove NAME first
     --proxied          a Proxied Device instead: a phone, tablet or other non-Roku
                        device using the lab through Proxy Routing
   add NAME --rce DEVICE_NAME

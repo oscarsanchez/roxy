@@ -16,14 +16,22 @@ A refused request is marked ⛔ in mitmweb, carries an `X-Lab-Blocked` header, a
 
 ## `roxy start` stops before mitmweb starts
 
-**Cause:** a settings file or a secret it needs (`MITMWEB_PASSWORD`; `LAB_SECRET` with `--tunnel`) is missing, or `devices.json` or `lan_subnets` is empty, as `./install.sh` leaves them. It names each, in one run, with the command that fills it in:
+**Cause:** a settings file or a secret it needs (`MITMWEB_PASSWORD`; `LAB_SECRET` with `--tunnel`) is missing, or `lan_subnets` is empty, as `./install.sh` leaves them. It names each, in one run, with the command that fills it in:
 ```
 error: missing secrets in .../roxy/secrets.env: MITMWEB_PASSWORD (roxy setup generates them; roxy setup --cloud for LAB_SECRET)
-error: no Target Devices in .../roxy/devices.json (roxy setup in a terminal offers the Rokus it finds; or roxy device add NAME --ip IP, and roxy device discover lists the Rokus)
 error: missing setting lan_subnets (the LAN subnets allowed to use the lab, CIDR) in .../roxy/settings.json (roxy setup sets them for this Mac's network)
 ```
+An empty `devices.json` only warns (`warning: no Target Devices in ...`): the lab still serves This Mac's own clients, such as the iOS Simulator, the Android Emulator and `curl`.
 A bad App Profile `fallback_origin` or a profile Scenario named like one of the lab's own stops it too, naming the profile.
-**Fix:** run the command it names: `roxy setup` (`--cloud` for `LAB_SECRET`), then `roxy device add` or `roxy device discover`. A missing file: run `./install.sh` to seed it ([Settings](settings.md#setup)).
+**Fix:** run the command it names: `roxy setup` (`--cloud` for `LAB_SECRET`), then `roxy device add` or `roxy device discover` for a Roku or a Proxied Device. A missing file: run `./install.sh` to seed it ([Settings](settings.md#setup)).
+
+## `roxy start` says the lab lock is held
+
+```
+error: the lab lock is held by pid 4211 since 2026-11-23 09:00:00: bash .../scripts/start-lab. Retry later, or wait with LAB_LOCK_WAIT=1
+```
+**Cause:** a lab is already running for this user, in another terminal or another checkout: one lab per user. The start checks the lock before its ports, so it names the running lab rather than the ports that lab holds.
+**Fix:** use the running lab (`roxy status`), or stop it (Ctrl-C in its terminal) and start again.
 
 ## `roxy start` says a port is in use
 
@@ -32,24 +40,24 @@ A bad App Profile `fallback_origin` or a profile Scenario named like one of the 
 error: port 8888 (Charles's port, the second LAN listener) is in use by Charles (pid 4211): quit it, then start again (docs/troubleshooting.md)
 ```
 A process of another user (a root process on 443 or 80) is named by the port alone, with the `sudo lsof` command that names it.
-**Fix:** quit that process (`roxy status` says whether a lab is already up; `docker compose down` stops the Compose one), then start again. The ports are fixed.
+**Fix:** quit that process (`docker compose down` stops the Compose lab; a roxy lab already running is named by its lock instead, above), then start again. The ports are fixed.
 
 ## `roxy start` or `roxy setup` warns that a VPN holds the default route
 
 ```
 warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab
 ```
-**Cause:** a VPN is connected on the Mac. The Proxy IP, the LAN Proxy Bases and the address setup allows in `lan_subnets` are still the Mac's own: the first active Wi-Fi or Ethernet interface in macOS's network service order (System Settings → Network → ⋯ → Set Service Order), never the VPN's. But a VPN that sends all traffic through its tunnel drops the replies to devices on the LAN, so Rokus and Proxied Devices time out against the lab.
+**Cause:** a VPN is connected on the Mac (its interface is `utun`, `ipsec`, `ppp`, `tun`, `tap` or `gpd`). The Proxy IP, the LAN Proxy Bases, the address setup allows in `lan_subnets` and the address `roxy device discover` searches from are still the Mac's own: the first active Wi-Fi or Ethernet interface in macOS's network service order (System Settings → Network → ⋯ → Set Service Order), never the VPN's, and never iPhone or iPad USB tethering, Bluetooth PAN or Thunderbolt Bridge, which do not reach a Roku's LAN. But a VPN that sends all traffic through its tunnel drops the replies to devices on the LAN, so Rokus and Proxied Devices time out against the lab.
 **Fix:** allow local LAN access in the VPN's settings (split tunnel), or disconnect it while you use the lab. Nothing to change in roxy; the start and setup go on ([Prefix Routing](prefix-routing.md)).
 
 ## `roxy setup` warns
 
 Setup still finishes; each warning says what is left:
 
-- `no Roku developer password (ROKU_DEV_PASSWORD)`: it had no terminal to ask in and nothing on stdin. Run `roxy setup` in a terminal, or pipe the password to it. An agent leaves this to you.
+- `no Roku developer password (ROKU_DEV_PASSWORD)`: it had no terminal to ask in, and no `--roku-password-stdin`. Run `roxy setup` in a terminal, or pipe the password to `roxy setup --roku-password-stdin`. An agent leaves this to you.
 - `could not find this Mac's address: lan_subnets left as they are`: the Mac is on no network. Join one and run it again.
 - `rce is not installed`, `rce token status fails` or `cloudflared is not installed` (`--cloud`): install it, or set the token with `rce token set` ([Cloud Devices](cloud-devices.md#prerequisites)).
-- `<ip> not registered: ...`: a Roku it offered took a name that exists; `roxy device add` it under another name.
+- `<ip> not registered: ...`: a Roku it offered took a name that exists; `roxy device add` it under another name. When that name is registered at another IP (the Roku's address changed), the warning names it: `roxy device remove "<name>"`, then run setup again or `roxy device add` it.
 - A Roku that `did not answer ECP` or `is not in developer mode`: registered anyway; turn it on, or turn on developer mode before `scripts/deploy`. The same goes for `roxy device add`.
 
 ## A Scenario seems to do nothing

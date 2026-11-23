@@ -11,7 +11,8 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 | `settings.json` | `lan_subnets`: the LAN subnets (CIDR) whose clients may use the LAN listeners and Proxy Routing; `roxy setup` allows this Mac (see [Setup](#setup)), and `roxy device add` and `remove` keep a device's `/32` in step. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
 | `apps/<name>/` | App Profiles, made by `roxy app new` (see [App Profiles](#app-profiles)) |
 
-- `roxy start` stops before mitmweb starts if a file or a secret it needs is missing, or `devices.json` or `lan_subnets` is empty, naming each with the command that fills it in.
+- `roxy start` stops before mitmweb starts if a file or a secret it needs is missing, or `lan_subnets` is empty, naming each with the command that fills it in. An empty `devices.json` is only a warning: the lab still serves This Mac's own clients (iOS Simulator, Android Emulator, `curl`).
+- Every settings file stays readable only by you: `roxy setup` and `roxy device` write each one whole, private to you.
 - The RCE token is `rce`'s (`rce token set`), not the lab's. Keep `RCE_TOKEN` out of `secrets.env`: the scripts export it, and `rce` takes `RCE_TOKEN` over its stored token.
 - The lab's own defaults, the same for everyone, stay in the repo: `proxy/config/guards.json` (RCE egress IPs and the Origin allowlist, see [Guards](guards.md)). Restart the lab after editing a setting.
 
@@ -24,15 +25,16 @@ roxy setup                                 # in a terminal: shows each value, En
 roxy setup --trusted-network               # allow this Mac's whole subnet: every device on a network you trust, such as home
 roxy setup --this-mac-only                 # back to this Mac's address only
 roxy setup --cloud                         # Cloud Devices too: the lab secret, and rce and cloudflared checked
-pbpaste | roxy setup --roku-user rokudev   # no terminal: the Roku password from stdin, never a flag
+pbpaste | roxy setup --roku-password-stdin   # the Roku password from stdin, never a flag
 ```
 
 - **Secrets.** It generates `MITMWEB_PASSWORD` when there is none, and with `--cloud` `LAB_SECRET` too. Both go to `secrets.env`, readable only by you, and are never printed; a re-run keeps them. When the mitmweb UI asks for its password, read it there (`roxy start` names the file).
-- **`lan_subnets`.** With none yet, or the examples' (`192.0.2.0/24`, which roxy 0.2.0's install seeded), it allows this Mac's address as a `/32`: on a shared network, such as work, no one else can relay through your lab. `--trusted-network` allows the Mac's whole subnet instead. Either flag replaces `lan_subnets`, keeping each registered device's `/32` the new entry does not cover; without one, setup keeps the `lan_subnets` you have. In a terminal it asks (`t`: trust this network; `m`: this Mac only; Enter keeps).
-- **Roku developer login.** `ROKU_DEV_USER` (`--roku-user`, default `rokudev`) and `ROKU_DEV_PASSWORD`, one for all your Rokus. The password comes from a hidden prompt in a terminal, or from the first line of stdin without one; never from a flag (`roxy setup --roku-password` is refused). Without it, setup warns `no Roku developer password (ROKU_DEV_PASSWORD): ...`, and `scripts/deploy` to a Physical Device will need it.
+- **Example values.** Values roxy 0.2.0's install seeded from `settings.example/` go: each device on a documentation range (`192.0.2.0/24`, `198.51.100.0/24`, `203.0.113.0/24`) and the examples' Cloud Device are unregistered, each with `removed the example device '<name>'`.
+- **`lan_subnets`.** With none yet, or any entry inside a documentation range (the examples' `192.0.2.0/24`, for instance), it allows this Mac's address as a `/32`: on a shared network, such as work, no one else can relay through your lab. `--trusted-network` allows the Mac's whole subnet instead. Either flag replaces `lan_subnets`, keeping each registered device's `/32` the new entry does not cover; without one, setup keeps the `lan_subnets` you have. In a terminal it asks (`t`: trust this network; `m`: this Mac only; Enter keeps).
+- **Roku developer login.** `ROKU_DEV_USER` (`--roku-user`, default `rokudev`) and `ROKU_DEV_PASSWORD`, one for all your Rokus. The password comes from a hidden prompt in a terminal, or with `--roku-password-stdin` from the first line of stdin; never from a flag (`roxy setup --roku-password` is refused). Without a terminal and without `--roku-password-stdin`, setup never reads stdin. Without it, setup warns `no Roku developer password (ROKU_DEV_PASSWORD): ...`, and `scripts/deploy` to a Physical Device will need it.
 - **Rokus.** In a terminal it then searches this network as `roxy device discover` does and offers each unregistered Roku: Enter registers it under its own name, as `roxy device add` would; type another name, or `n` to skip. Without a terminal it never asks and registers none.
 - **Cloud Devices** (`--cloud`). It checks that `rce` is installed and `rce token status` works, and that `cloudflared` is installed, warning with what to do: `rce is not installed: install it as its README says, ...`, `rce token status fails: the user runs rce token set (pbpaste | rce token set)`, `cloudflared is not installed: brew install cloudflared ...`. With all three in place it says `rce and cloudflared installed, and rce token status works`.
-- It prints what it set and kept, warnings on stderr, and ends reminding you to restart a running lab. It never touches `grid_devices`.
+- It prints what it set and kept, then warnings on stderr, and, when it changed something, ends reminding you to restart a running lab. It never touches `grid_devices`.
 
 ## Target Devices
 
@@ -48,8 +50,8 @@ roxy device list                                           # each device, its IP
 roxy device remove Phone
 ```
 
-- `discover` searches this network for Rokus (SSDP, about 3 seconds) and asks each one's ECP, never through a proxy. It prints each Roku's IP, its own name, model, developer mode and the device it is registered as, and a ready `roxy device add "<its name>" --ip <ip>` line for each one not registered yet; it adds nothing itself. A network that blocks discovery (many work and guest networks do) finds none: a Roku shows its IP in Settings → Network → About.
-- `add` refuses a name that exists, an IP that is not one, and a slug that is taken or is not lowercase letters, digits and single dashes. A Cloud Device's slug, the last segment of its public Proxy Base, defaults to its name in lowercase with dashes.
+- `discover` searches this network for Rokus (SSDP, three searches over about 3 seconds, sent from the Mac's LAN address so a VPN does not take them) and asks each one's ECP, never through a proxy. It prints each Roku's IP, its own name, model, developer mode and the device it is registered as, and a ready `roxy device add "<its name>" --ip <ip>` line for each one not registered yet; it adds nothing itself. A Roku that is off or on another network, a VPN that keeps the search from the LAN, or a network that blocks discovery (many work and guest networks do) finds none: a Roku shows its IP in Settings → Network → About.
+- `add` refuses a name that exists (one registered at another IP, say after the Roku's address changed, is named with that IP: `roxy device remove "<name>"` it first), an IP that is not one, and a slug that is taken or is not lowercase letters, digits and single dashes. A Cloud Device's slug, the last segment of its public Proxy Base, defaults to its name in lowercase with dashes.
 - `add` asks a Roku's ECP (`http://<ip>:8060/query/device-info`, never through a proxy) and a Cloud Device's `rce device resolve`. A Roku that does not answer or is not in developer mode, or a Device Name `rce` does not know, is registered anyway with a warning: it may only be off, or on another network, today.
 - `add` with an IP that no `lan_subnets` entry covers appends `<ip>/32` to them, and says so. `remove` drops a `/32` equal to the device's IP when no other device has that IP; it never touches a wider subnet, so a trusted network you allowed stays allowed.
 - Both keep every other key and entry of both files (`grid_devices` included), and end by reminding you to restart a running lab: it reads them when it starts.

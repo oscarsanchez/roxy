@@ -6,21 +6,22 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 ### Added
 
-- `roxy setup` fills the settings root for this Mac and can run again any time, keeping what is there: it generates the mitmweb password (and with `--cloud` the lab secret, checking `rce`, its token and `cloudflared`), never printing a secret; allows this Mac in `lan_subnets` (`--trusted-network`: its whole subnet); takes the Roku developer login, the password from a hidden prompt or stdin, never a flag; and, in a terminal, offers the Rokus it finds to register. Without a terminal it never prompts, so an agent can run it. Values the examples seeded are replaced.
-- `roxy device add | list | remove | discover` register Target Devices without editing JSON: `add NAME --ip IP` a Roku, `--proxied` a Proxied Device, `--rce DEVICE_NAME [--slug SLUG]` a Cloud Device. `add` allows the IP in `lan_subnets` as a `/32` when needed and `remove` drops it, never a wider subnet; `discover` lists the Rokus on the network with a ready `add` line for each new one.
+- `roxy setup` fills the settings root for this Mac and can run again any time, keeping what is there: it generates the mitmweb password (and with `--cloud` the lab secret, checking `rce`, its token and `cloudflared`), never printing a secret; allows this Mac in `lan_subnets` (`--trusted-network`: its whole subnet); takes the Roku developer login, the password from a hidden prompt or, with `--roku-password-stdin`, stdin, never a flag; and, in a terminal, offers the Rokus it finds to register. Without a terminal it never prompts and never reads stdin unasked, so an agent can run it. Values the examples seeded are replaced: devices on the documentation ranges and the examples' Cloud Device are removed, and `lan_subnets` inside a documentation range count as unset. It ends with the restart hint only when it changed something.
+- `roxy device add | list | remove | discover` register Target Devices without editing JSON: `add NAME --ip IP` a Roku, `--proxied` a Proxied Device, `--rce DEVICE_NAME [--slug SLUG]` a Cloud Device. `add` allows the IP in `lan_subnets` as a `/32` when needed and `remove` drops it, never a wider subnet; `discover` lists the Rokus on the network with a ready `add` line for each new one, searching three times from the Mac's LAN address, so a VPN does not swallow the search. Adding a name registered at another IP names that IP and says to `roxy device remove` it first. Every settings file stays readable only by you.
 - The `roxy` skill registers devices with `roxy device` and hands the Roku password to the user.
 
 ### Changed
 
 - `./install.sh` seeds no made-up devices or `lan_subnets`: `devices.json` is empty, `lan_subnets` too, and it points at `roxy setup`. `settings.example/` stays as documentation.
-- `roxy start` also refuses an empty device list, and names each missing setting with the command that fills it in. The README quickstart's settings step is `roxy setup`, then `roxy device add` or `discover`.
+- `roxy start` names each missing setting with the command that fills it in. An empty device list only warns: the lab still serves This Mac's own clients (iOS Simulator, Android Emulator, `curl`).
+- A second `roxy start` names the running lab's lock holder, not the ports that lab holds. The README quickstart's settings step is `roxy setup`, then `roxy device add` or `discover`.
 - `roxy start` stops before mitmweb starts when a port it listens on is in use, naming each busy port, its role and the process holding it (Troubleshooting).
 
 - Mobile Devices are now Proxied Devices: any device that is not a Roku (phone, tablet, Android TV, Google TV, Fire TV, Apple TV, console, computer) goes through Proxy Routing. `devices.json` registers one with `"kind": "proxied"`; `"kind": "mobile"` from 0.2.0 still counts. The how-to moved to `docs/proxied-devices.md`, with a section for TV boxes (Apple TV unverified), and the glossary lint now flags the old name. <!-- glossary-ok: names the old term -->
 
 ### Fixed
 
-- With a VPN connected, the Proxy IP, the LAN Proxy Bases, `roxy launch`'s `proxyBase` and the address `roxy setup` allows in `lan_subnets` were the VPN's. They are now the Mac's LAN address: the first active Wi-Fi or Ethernet interface in macOS's network service order. `roxy start` and `roxy setup` warn when a VPN holds the default route, since Rokus reach the lab only through a split tunnel (Troubleshooting).
+- With a VPN connected, the Proxy IP, the LAN Proxy Bases, `roxy launch`'s `proxyBase` and the address `roxy setup` allows in `lan_subnets` were the VPN's. They are now the Mac's LAN address: the first active Wi-Fi or Ethernet interface in macOS's network service order, never iPhone or iPad USB tethering, Bluetooth PAN or Thunderbolt Bridge. `roxy start` and `roxy setup` warn when a VPN (`utun`, `ipsec`, `ppp`, `tun`, `tap`, `gpd`) holds the default route, since Rokus reach the lab only through a split tunnel (Troubleshooting).
 
 ## [0.2.0] - 2026-11-23
 
