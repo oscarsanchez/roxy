@@ -89,10 +89,10 @@ step_docs() {
 step_imports() {
   echo "== imports: test imports"
   # Proxy tests reach the lab through tests/chain.py (the full addon chain), never a lab module;
-  # App Profiles and the Lab Session client, which bin/roxy and the scripts use too, are tested at
-  # their own interfaces.
+  # App Profiles, the Settings Root and the Lab Session client, which bin/roxy and the scripts use
+  # too, are tested at their own interfaces.
   if grep -nE '^[[:space:]]*(from|import)[[:space:]]+lab([.[:space:]]|$)' proxy/tests/test_*.py \
-    | grep -vE ':[[:space:]]*from lab\.(app_profiles|lab_session) import '; then
+    | grep -vE ':[[:space:]]*from lab\.(app_profiles|settings_root|lab_session) import '; then
     die "proxy tests import lab modules (above); go through tests/chain.py instead"
   fi
 }
