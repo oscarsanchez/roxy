@@ -1,6 +1,6 @@
 # roxy
 
-A lab for inspecting and manipulating the network traffic that a Roku app sends and receives, on both real Roku hardware and Roku's cloud-hosted emulator, and that the same product's mobile apps send from phones and tablets.
+A lab for inspecting and manipulating the network traffic that a Roku app sends and receives, on both real Roku hardware and Roku's cloud-hosted emulator, and that the same product's apps send from phones, tablets, TV boxes and other devices.
 
 ## Targets
 
@@ -9,7 +9,7 @@ A disposable Roku app built only to exercise traffic through the lab; exists in 
 _Avoid_: test channel, sample app, client
 
 **Product App**:
-An app you develop that has opted in to the lab: a Roku dev-mode sideloaded build, or an iOS or Android debug build of the same product. Its store and production builds are out of scope.
+An app you develop that has opted in to the lab: a Roku dev-mode sideloaded build, or a debug build of the same product for another platform (iOS, Android, tvOS, Android TV and the like). Its store and production builds are out of scope.
 _Avoid_: real app, my app, customer app
 
 **Physical Device**:
@@ -20,12 +20,12 @@ _Avoid_: box, hardware, real device
 A virtual Roku player or TV running in Roku Cloud Emulator (RCE), reachable only over the public internet.
 _Avoid_: emulator, RCE instance, simulator
 
-**Mobile Device**:
-An iPhone, iPad, or Android phone or tablet on the lab's LAN, or a simulated one on the lab's own Mac, running a Product App's mobile debug build through Proxy Routing.
-_Avoid_: phone (unqualified), handset
+**Proxied Device**:
+Any device that is not a Roku (a phone, tablet, Apple TV, Android TV or Fire TV box, console or computer) on the lab's LAN, or a simulated one on the lab's own Mac, running a Product App's debug build through Proxy Routing.
+_Avoid_: Mobile Device, phone (unqualified), handset
 
 **Target Device**:
-A Physical Device, a Cloud Device or a Mobile Device: whatever is running the Lab App or Product App right now.
+A Physical Device, a Cloud Device or a Proxied Device: whatever is running the Lab App or Product App right now.
 _Avoid_: device (unqualified), Roku
 
 ## Traffic
@@ -47,7 +47,7 @@ Getting Outbound Traffic to the lab by having DNS point Origins at the lab while
 _Avoid_: DNS mode, custom CA mode, transparent mode
 
 **Proxy Routing**:
-Getting Outbound Traffic to the lab by setting the lab as the Mobile Device's HTTP proxy while the device trusts the lab's certificate authority; Mobile Devices only. The flows keep their Origin URLs: no Proxy Base, no Prefixed URLs.
+Getting Outbound Traffic to the lab by setting the lab as the Proxied Device's HTTP proxy while the device trusts the lab's certificate authority; Proxied Devices only. The flows keep their Origin URLs: no Proxy Base, no Prefixed URLs.
 _Avoid_: explicit proxy mode, regular mode
 
 **Proxy Base**:
@@ -77,6 +77,10 @@ _Avoid_: mock set, rule file
 **App Profile**:
 What the lab keeps for one Product App, in your own lab settings and outside every repo: its repo location, the Origins it may reach through the Public Endpoint, its Scenarios and their mocks. Optional; at most one is loaded per Lab Session.
 _Avoid_: app config, app settings
+
+**Settings Root**:
+The one folder, per person and outside every repo, that holds their secrets, their Target Devices, the LAN subnets allowed to use the lab, and their App Profiles; every checkout and worktree of roxy reads the same one.
+_Avoid_: config folder, dotfiles, settings repo
 
 **Lab Session**:
 One run of the lab, from the moment it starts until it stops. It loads at most one App Profile and has an ordered set of active Scenarios (possibly none); switching App Profile means a new Lab Session.

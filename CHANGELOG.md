@@ -4,14 +4,18 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+### Changed
+
+- Mobile Devices are now Proxied Devices: any device that is not a Roku (phone, tablet, Android TV, Google TV, Fire TV, Apple TV, console, computer) goes through Proxy Routing. `devices.json` registers one with `"kind": "proxied"`; `"kind": "mobile"` from 0.2.0 still counts. The how-to moved to `docs/proxied-devices.md`, with a section for TV boxes (Apple TV unverified), and the glossary lint now flags the old name. <!-- glossary-ok: names the old term -->
+
 ## [0.2.0] - 2026-11-23
 
-Mobile Devices through Proxy Routing, and the docs reorganised around a one-path quickstart.
+Mobile Devices through Proxy Routing, and the docs reorganised around a one-path quickstart. <!-- glossary-ok: released text keeps its words -->
 
 ### Added
 
-- Proxy Routing, for Mobile Devices: a Product App's iOS and Android debug builds set the lab's new Proxy Routing listener (port 8090, always on) as their HTTP proxy and trust the lab's CA from `http://mitm.it`. Their flows keep their Origin URLs, unrewritten, and the active Scenarios act on them; the LAN guards apply. `roxy start` and `roxy status` print `Proxy Routing: <mac-ip>:8090`, and `roxy status --json` gains `proxy_routing_port`. How-to: `docs/mobile-devices.md`.
-- A Mobile Device is registered in `devices.json` with `"kind": "mobile"`, which names its flows; `scripts/deploy`, `roxy launch` and `roxy console` refuse it as not a Roku.
+- Proxy Routing, for Mobile Devices: a Product App's iOS and Android debug builds set the lab's new Proxy Routing listener (port 8090, always on) as their HTTP proxy and trust the lab's CA from `http://mitm.it`. Their flows keep their Origin URLs, unrewritten, and the active Scenarios act on them; the LAN guards apply. `roxy start` and `roxy status` print `Proxy Routing: <mac-ip>:8090`, and `roxy status --json` gains `proxy_routing_port`. How-to: `docs/mobile-devices.md`. <!-- glossary-ok: released text keeps its words -->
+- A Mobile Device is registered in `devices.json` with `"kind": "mobile"`, which names its flows; `scripts/deploy`, `roxy launch` and `roxy console` refuse it as not a Roku. <!-- glossary-ok: released text keeps its words -->
 - An iOS Simulator or Android Emulator on the lab's Mac goes through Proxy Routing from loopback, allowed on that listener only, and its flows are named `This Mac`.
 - `scripts/check docs`: every relative link and `#anchor` in the Markdown resolves, and this changelog has a section for the plugin's version.
 - `docs/troubleshooting.md`: symptom, cause and fix for every known failure, the `X-Lab-Blocked` refusals first.
@@ -21,7 +25,7 @@ Mobile Devices through Proxy Routing, and the docs reorganised around a one-path
 ### Changed
 
 - The README is a landing page with a one-path quickstart, starting with a Prefixed URL sent from the Mac; every other section moved to a page in `docs/`, indexed by kind in `docs/README.md`.
-- The `roxy` skill reaches `docs/` through one link, points to the new pages, and knows Mobile Devices and Proxy Routing.
+- The `roxy` skill reaches `docs/` through one link, points to the new pages, and knows Mobile Devices and Proxy Routing. <!-- glossary-ok: released text keeps its words -->
 
 ### Fixed
 
