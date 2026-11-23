@@ -1,0 +1,31 @@
+# scripts/check on every push to main and every pull request: the same checks the pre-commit
+# hook runs, for clones without the hook. No devices, network or secrets (see scripts/check).
+name: check
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    # macOS: the lab's scripts use macOS tools (networksetup, lsof, ipconfig), faked in the tests
+    # but still parsed in their macOS form.
+    runs-on: macos-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+      - name: git identity for the tests' temp repos
+        run: |
+          git config --global user.name "roxy ci"
+          git config --global user.email "ci@example.com"
+      - name: scripts/check
+        run: scripts/check
