@@ -5,6 +5,7 @@ and on a plugin version with no CHANGELOG.md section.
 Usage: scripts/check-docs [ROOT]   (run by scripts/check; ROOT defaults to the repo, a git checkout)
 - Links: inline [text](target) and <a href="target">, outside code. External URLs (any scheme) are skipped.
 - A target resolves from the real file the link lives in: a symlinked doc is checked once, as its target.
+- A target must be tracked by git (a file, or a folder holding one): an ignored file is not in a clone.
 - Anchors: GitHub heading slugs (duplicates get -1, -2...) and <a id/name="..."> in the target file.
 - Version: .claude-plugin/plugin.json's "version" is the one source; CHANGELOG.md needs "## [<version>]".
 """
@@ -57,10 +58,21 @@ def anchors(path: Path, cache: dict) -> set:
     return cache[path]
 
 
+def files_all(root: Path) -> list:
+    """Every tracked path under ROOT, relative to it."""
+    out = subprocess.run(["git", "ls-files"], cwd=root, check=True, stdout=subprocess.PIPE, text=True).stdout
+    return out.splitlines()
+
+
 def check_links(root: Path) -> list:
-    files = subprocess.run(["git", "ls-files", "*.md"], cwd=root, check=True, stdout=subprocess.PIPE, text=True).stdout
+    names = files_all(root)
+    tracked = set()
+    for name in names:
+        path = (root / name).resolve()
+        tracked.add(path)
+        tracked.update(path.parents)
     problems, cache = [], {}
-    for name in files.splitlines():
+    for name in (n for n in names if n.endswith(".md")):
         path = root / name
         if path.is_symlink() or not path.is_file():
             continue
@@ -71,7 +83,7 @@ def check_links(root: Path) -> list:
                     continue
                 file_part, _, anchor = target.partition("#")
                 dest = (path.parent / file_part).resolve() if file_part else path
-                if not dest.exists():
+                if not dest.exists() or dest not in tracked:
                     problems.append(f"{name}:{n}: broken link '{target}'")
                 elif anchor and dest.suffix == ".md" and anchor not in anchors(dest, cache):
                     problems.append(f"{name}:{n}: broken anchor '{target}'")

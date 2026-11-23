@@ -77,3 +77,10 @@ t="$(tree version-bump)"
 printf '{"name": "lab", "version": "1.3.0"}\n' > "$t/.claude-plugin/plugin.json"
 expect_fail "$t" "CHANGELOG.md: no '## [1.3.0]' section"
 echo "ok: a plugin version with no changelog section fails, naming the version"
+
+t="$(tree ignored-target)"
+mkdir -p "$t/notes" && printf '# Local\n' > "$t/notes/local.md" && printf 'notes/\n' > "$t/.gitignore"
+git -C "$t" add .gitignore
+printf '\nSee [local](notes/local.md).\n' >> "$t/README.md"
+expect_fail "$t" "README.md:12: broken link 'notes/local.md'"
+echo "ok: a link to a file git does not track fails"
