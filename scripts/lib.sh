@@ -202,12 +202,16 @@ require_public_proxy_base() {
     || die "a Cloud Device needs the public Proxy Base: start the lab with its tunnel (roxy start --tunnel), or pass --proxy-base"
 }
 
-# device_field DEVICE-NAME FIELD : a field of a named Target Device, empty if unset.
+# device_field DEVICE-NAME FIELD : a field of a named Roku (a Physical or Cloud Device),
+# empty if unset. Every script that drives a device looks it up here, so a Mobile Device
+# ("kind": "mobile") is refused before any device or rce call.
 device_field() {
   require_jq
   require_setting_file "$DEVICES_FILE"
   jq -e --arg n "$1" 'has($n)' "$DEVICES_FILE" >/dev/null \
     || die "unknown device '$1'. Known: $(jq -r 'keys | join(", ")' "$DEVICES_FILE")"
+  jq -e --arg n "$1" '.[$n].kind != "mobile"' "$DEVICES_FILE" >/dev/null \
+    || die "'$1' is a Mobile Device, not a Roku"
   jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // empty' "$DEVICES_FILE"
 }
 
