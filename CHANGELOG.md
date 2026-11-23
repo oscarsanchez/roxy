@@ -4,9 +4,14 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-23
+
+Mobile Devices through Proxy Routing, and the docs reorganised around a one-path quickstart.
+
 ### Added
 
 - Proxy Routing, for Mobile Devices: a Product App's iOS and Android debug builds set the lab's new Proxy Routing listener (port 8090, always on) as their HTTP proxy and trust the lab's CA from `http://mitm.it`. Their flows keep their Origin URLs, unrewritten, and the active Scenarios act on them; the LAN guards apply. `roxy start` and `roxy status` print `Proxy Routing: <mac-ip>:8090`, and `roxy status --json` gains `proxy_routing_port`. How-to: `docs/mobile-devices.md`.
+- A Mobile Device is registered in `devices.json` with `"kind": "mobile"`, which names its flows; `scripts/deploy`, `roxy launch` and `roxy console` refuse it as not a Roku.
 - An iOS Simulator or Android Emulator on the lab's Mac goes through Proxy Routing from loopback, allowed on that listener only, and its flows are named `This Mac`.
 - `scripts/check docs`: every relative link and `#anchor` in the Markdown resolves, and this changelog has a section for the plugin's version.
 - `docs/troubleshooting.md`: symptom, cause and fix for every known failure, the `X-Lab-Blocked` refusals first.
@@ -16,7 +21,7 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 ### Changed
 
 - The README is a landing page with a one-path quickstart, starting with a Prefixed URL sent from the Mac; every other section moved to a page in `docs/`, indexed by kind in `docs/README.md`.
-- The `roxy` skill reaches `docs/` through one link and points to the new pages.
+- The `roxy` skill reaches `docs/` through one link, points to the new pages, and knows Mobile Devices and Proxy Routing.
 
 ### Fixed
 
@@ -39,5 +44,6 @@ The first release: a mitmproxy/mitmweb lab on the Mac for the Outbound Traffic o
 - Two Lab Apps (classic BrightScript/SceneGraph and RSG 2.0) and the grid runner, single cells or batches, on Physical and Cloud Devices.
 - The kit for wiring your own apps, Docker Compose, per-user locks, and the `roxy` skill as a Claude Code plugin.
 
-[Unreleased]: https://github.com/oscarsanchez/roxy/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/oscarsanchez/roxy/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/oscarsanchez/roxy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oscarsanchez/roxy/releases/tag/v0.1.0
