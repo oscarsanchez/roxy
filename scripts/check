@@ -6,6 +6,10 @@
 # It never reads your own settings: the settings root is a temp folder seeded from
 # settings.example/, and the user data directory and out/ (ROXY_OUT_DIR) temp folders too.
 set -euo pipefail
+# The pre-commit hook exports the checkout's GIT_DIR and GIT_INDEX_FILE (absolute in a worktree):
+# a test that runs git in a temp repo would write the commit's index. Every step finds its repo
+# from its own folder instead.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
 export ROXY_CONFIG_DIR="$TMP/settings" XDG_DATA_HOME="$TMP/data" ROXY_OUT_DIR="$TMP/out"

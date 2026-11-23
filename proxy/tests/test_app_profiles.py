@@ -97,11 +97,7 @@ def lab_scenarios(tmp_path):
 
 
 @pytest.fixture
-def profiles(settings, lab_scenarios, monkeypatch):
-    # A git hook (scripts/check from the pre-commit hook) exports the checkout's GIT_DIR,
-    # which would point git in the temp repos at the roxy repo.
-    for var in ("GIT_DIR", "GIT_INDEX_FILE", "GIT_WORK_TREE"):
-        monkeypatch.delenv(var, raising=False)
+def profiles(settings, lab_scenarios):
     return AppProfiles(settings, lab_scenarios)
 
 

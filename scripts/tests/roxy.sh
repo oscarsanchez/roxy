@@ -436,9 +436,6 @@ echo "ok: device discover lists the Rokus that answer, with an add line, and say
 
 # App Profiles, in a temp app repo: one smoke check per command. proxy/tests/test_app_profiles.py
 # covers resolution, refusals and clashes at AppProfiles' interface.
-# A git hook (scripts/check from the pre-commit hook) exports the checkout's GIT_DIR, which
-# would point git in the temp repo at the roxy repo.
-unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
 repo_a="$TMP/repos/app-a"
 git init -q "$repo_a"
 mkdir -p "$repo_a/src/nested"

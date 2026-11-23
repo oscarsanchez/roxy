@@ -18,3 +18,9 @@ echo "ok: scripts/check runs only the named step"
 if err="$("$CHECK" syntax no-such-step 2>&1)"; then fail "scripts/check took an unknown step: $err"; fi
 case "$err" in "error: unknown step 'no-such-step' (steps: "*"syntax"*"glossary"*"docs"*) ;; *) fail "an unknown step said: $err" ;; esac
 echo "ok: an unknown step is refused, naming the steps"
+
+# A hook's git variables never reach a step: with them, git in a step would use the hook's
+# repo and index (here, none) instead of the one its folder is in.
+out="$(GIT_DIR=/nonexistent/git GIT_INDEX_FILE=/nonexistent/index GIT_WORK_TREE=/nonexistent "$CHECK" glossary 2>&1)" \
+  || fail "scripts/check glossary with a hook's git variables: $out"
+echo "ok: a hook's git variables never reach the steps"
