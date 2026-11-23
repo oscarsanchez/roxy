@@ -8,11 +8,14 @@ A fallback Origin (the loaded App Profile's fallback_origin): a bare path on a L
 listener, which names no Origin, is taken as Prefixed with that Origin and the
 client's Proxy Base, in the "/;" form, when the profile's path regex matches it.
 lab.app_profile gives that Origin URL, or None (no profile, no fallback, no match).
+Proxy Routing (option lab_proxy_routing_port): a request on that listener already
+carries its Origin URL, and keeps it; it has no Proxy Base, so the rewriters leave it
+alone. A Prefixed-looking path there is an ordinary Origin path.
 """
 
 from mitmproxy import ctx
 
-from lab.clients import client_scheme, through_tunnel
+from lab.clients import client_scheme, through_proxy_routing, through_tunnel
 from lab.prefixed_url import PrefixedUrl, parse_prefixed_url, remember_client
 from lab.refusal import refuse
 
@@ -26,8 +29,14 @@ class OriginDecoder:
             "lab_ca_routing", bool, False,
             "CA Routing: take the Origin of a request that is not a Prefixed URL from Host/SNI.",
         )
+        loader.add_option(
+            "lab_proxy_routing_port", int, 0,
+            "Port of the Proxy Routing listener, the HTTP proxy Mobile Devices set. 0: no Proxy Routing listener.",
+        )
 
     def requestheaders(self, flow):
+        if through_proxy_routing(flow):
+            return  # already the Origin URL
         # Needs keep_host_header=true, or Host is already the dummy reverse target.
         proxy_base = f"{client_scheme(flow)}://{flow.request.host_header}"
         parsed = parse_prefixed_url(f"{proxy_base}{flow.request.path}")

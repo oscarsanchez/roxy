@@ -1,16 +1,20 @@
-"""Who sent a request: a LAN client directly, or a Cloud Device through the tunnel.
+"""Who sent a request: a LAN client directly, a Mobile Device through Proxy Routing,
+or a Cloud Device through the tunnel.
 
 cloudflared dials its own listener, the tunnel listener (option
 lab_tunnel_port), which is never reachable from the LAN: bound to loopback on
 macOS, unpublished under Compose. A request on it "came through the tunnel"
 (the Public Endpoint), whatever its peer IP. Only then are the tunnel's headers
 trusted; a LAN client sending them is judged by its real IP.
+
+A Mobile Device sets the Proxy Routing listener (option lab_proxy_routing_port), a
+`regular` mode LAN listener, as its HTTP proxy: a request on it "came through Proxy
+Routing", and carries its Origin URL as is.
 """
 
 import ipaddress
 
 from mitmproxy import ctx
-
 
 
 def ip_address(text):
@@ -21,6 +25,11 @@ def ip_address(text):
 
 def through_tunnel(flow):
     port = ctx.options.lab_tunnel_port
+    return bool(port) and flow.client_conn.proxy_mode.custom_listen_port == port
+
+
+def through_proxy_routing(flow):
+    port = ctx.options.lab_proxy_routing_port
     return bool(port) and flow.client_conn.proxy_mode.custom_listen_port == port
 
 

@@ -103,6 +103,12 @@ class Guards:
         given = secret_segment(proxy_base)
         return bool(secret) and hmac.compare_digest(given.encode(), secret.encode())
 
+    def http_connect(self, flow):
+        """A CONNECT, on the Proxy Routing listener: no tunnel for a client the LAN guard
+        refuses, or it could relay raw TCP that no request hook ever sees."""
+        if not self._client_allowed(flow):
+            refuse(flow, 403, "client-ip")
+
     async def requestheaders(self, flow):
         if flow.response is not None:  # already answered by the lab
             return

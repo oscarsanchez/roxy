@@ -9,6 +9,7 @@ summary (flows_summary). No network: Origin responses are fixtures.
 import asyncio
 from io import BytesIO
 from pathlib import Path
+from urllib.parse import urlsplit
 
 from mitmproxy import hooks as lifecycle
 from mitmproxy import connection, http, io
@@ -41,6 +42,11 @@ TUNNEL_PEER = ("127.0.0.1", 52000)  # cloudflared on this Mac
 RCE_EGRESS_IP = "44.239.29.169"
 TUNNEL_OPTIONS = {"lab_secret": SECRET, "lab_tunnel_port": TUNNEL_PORT}  # as start-lab --tunnel sets them
 
+# Proxy Routing: a Mobile Device sets the lab's `regular` mode listener as its HTTP proxy.
+PROXY_ROUTING_PORT = 8090
+PROXY_ROUTING_LISTENER = ProxyMode.parse(f"regular@{PROXY_ROUTING_PORT}")
+PROXY_ROUTING_OPTIONS = {"lab_proxy_routing_port": PROXY_ROUTING_PORT}  # as start-lab sets it
+
 
 def lab_flow(path, host_header=LAN_PROXY_BASE_HOST, peer=LAN_CLIENT):
     """A request as the `reverse` mode listener sees it at hook time
@@ -71,6 +77,32 @@ def tunnel_flow(path, client_ip=RCE_EGRESS_IP, peer=TUNNEL_PEER, listener=TUNNEL
             "Cf-Warp-Tag-Id": "0b6f6c2e-1111-2222-3333-444455556666",
         }
     )
+    return flow
+
+
+def proxy_routing_flow(url, peer=LAN_CLIENT):
+    """A request as the Proxy Routing listener (`regular` mode) sees it at hook time: a Mobile
+    Device that set the lab as its HTTP proxy, asking for an Origin URL (over HTTPS, inside
+    the CONNECT tunnel mitmproxy terminates)."""
+    request = http.Request.make("GET", url, headers={"host": urlsplit(url).netloc})
+    flow = tflow.tflow(req=request)
+    flow.client_conn.peername = peer
+    flow.client_conn.proxy_mode = PROXY_ROUTING_LISTENER
+    flow.client_conn.tls = request.scheme == "https"
+    return flow
+
+
+def proxy_routing_connect(authority, peer=LAN_CLIENT):
+    """A Mobile Device's CONNECT to the Proxy Routing listener, opening a tunnel to AUTHORITY
+    (host:port), as the http_connect hook sees it. Run it with Lab.http_connect."""
+    host, port = authority.rsplit(":", 1)
+    request = tutils.treq(
+        method=b"CONNECT", scheme=b"", host=host, port=int(port), authority=authority.encode(),
+        path=b"", headers=http.Headers(), content=b"",
+    )
+    flow = tflow.tflow(req=request)
+    flow.client_conn.peername = peer
+    flow.client_conn.proxy_mode = PROXY_ROUTING_LISTENER
     return flow
 
 
@@ -260,6 +292,13 @@ class Lab:
         answered: ("write_eof" or "close", seconds since its response started), in order."""
         started, client = self._sent[flow.id]
         return [(how, when - started) for how, when in client.ends]
+
+    def http_connect(self, flow):
+        """mitmproxy runs the http_connect hooks for a client's CONNECT `flow` (a `regular`
+        mode listener). True if it then opens the tunnel; False if the lab answered the
+        client itself (flow.response)."""
+        self._context.master.event_loop.run_until_complete(self._hook(hooks.HttpConnectHook(flow)))
+        return flow.response is None
 
     def connect(self, flow):
         """mitmproxy opens the server connection for a forwarded `flow`, running the
