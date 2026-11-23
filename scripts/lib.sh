@@ -120,8 +120,8 @@ require_env() {
 }
 
 # require_lab_settings SECRET... : what the lab needs to start, loading secrets.env. Fails
-# naming everything missing at once (settings files, lan_subnets, the secrets SECRET...),
-# so one run shows all there is to fill in.
+# naming everything missing at once (settings files, the secrets SECRET..., Target Devices,
+# lan_subnets), each with the command that fills it in, so one run shows all there is to do.
 require_lab_settings() {
   local problems=() problem file
   require_jq
@@ -132,10 +132,13 @@ require_lab_settings() {
   if [ -f "$SECRETS_FILE" ]; then
     load_env
     problem="$(secrets_problem "$@")"
-    [ -z "$problem" ] || problems+=("$problem")
+    [ -z "$problem" ] || problems+=("$problem (roxy setup generates them; roxy setup --cloud for LAB_SECRET)")
+  fi
+  if [ -f "$DEVICES_FILE" ] && ! jq -e 'length > 0' "$DEVICES_FILE" >/dev/null 2>&1; then
+    problems+=("no Target Devices in $DEVICES_FILE (roxy setup in a terminal offers the Rokus it finds; or roxy device add NAME --ip IP, and roxy device discover lists the Rokus)")
   fi
   if [ -f "$SETTINGS_FILE" ] && ! jq -e '.lan_subnets | length > 0' "$SETTINGS_FILE" >/dev/null 2>&1; then
-    problems+=("missing setting lan_subnets (your LAN's subnets, CIDR) in $SETTINGS_FILE")
+    problems+=("missing setting lan_subnets (the LAN subnets allowed to use the lab, CIDR) in $SETTINGS_FILE (roxy setup sets them for this Mac's network)")
   fi
   [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }

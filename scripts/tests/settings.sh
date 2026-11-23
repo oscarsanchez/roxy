@@ -66,6 +66,15 @@ echo '{}' > "$ROXY_CONFIG_DIR/settings.json"
 refused lan_subnets
 echo "ok: a missing settings file or setting is named"
 
+# As install.sh seeds them: no devices and no lan_subnets are named, with the commands that
+# fill them in, and so is the empty mitmweb password.
+seeded "$ROXY_CONFIG_DIR"
+sed -i.bak 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=/' "$ROXY_CONFIG_DIR/secrets.env"
+echo '{}' > "$ROXY_CONFIG_DIR/devices.json"
+printf '{"lan_subnets": [], "grid_devices": {}}\n' > "$ROXY_CONFIG_DIR/settings.json"
+refused "no Target Devices in $ROXY_CONFIG_DIR/devices.json" "roxy device add" lan_subnets MITMWEB_PASSWORD "roxy setup"
+echo "ok: no devices and no lan_subnets are named, pointing at roxy setup and roxy device add"
+
 # Everything missing is named in one run, not one problem per try.
 rm -r "$ROXY_CONFIG_DIR"
 refused "$ROXY_CONFIG_DIR/secrets.env" "$ROXY_CONFIG_DIR/devices.json" "$ROXY_CONFIG_DIR/settings.json"
