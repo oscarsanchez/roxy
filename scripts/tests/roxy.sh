@@ -704,24 +704,28 @@ grep -qxF "warning: rce token status fails: the user runs rce token set (pbpaste
 echo "ok: setup --cloud generates the lab secret once and warns of an RCE token rce does not take"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
-# seeds the missing settings from the examples. Run again, it keeps every existing setting.
+# seeds the missing settings with no made-up values: secrets.env as its example (every
+# secret empty), no devices and no lan_subnets, so roxy start names them, and points at
+# roxy setup. Run again, it keeps every existing setting.
 home="$TMP/home"
 run_install() { env -u ROXY_CONFIG_DIR -u XDG_CONFIG_HOME HOME="$home" "$REPO/install.sh"; }
 link="$home/.local/bin/roxy" settings="$home/.config/roxy"
+seeded_empty() { jq -e '. == {"lan_subnets": [], "grid_devices": {}}' "$settings/settings.json" >/dev/null; }
 out="$(run_install)" || fail "install: $out"
 [ -L "$link" ] && [ "$(realpath "$link")" = "$ROXY" ] || fail "install did not link $link to $ROXY"
 "$link" --help >/dev/null || fail "the linked roxy does not run"
-for file in secrets.env devices.json settings.json; do
-  cmp -s "$REPO/settings.example/$file" "$settings/$file" || fail "install did not seed $file from its example"
-done
+cmp -s "$REPO/settings.example/secrets.env" "$settings/secrets.env" || fail "install did not seed secrets.env from its example"
+jq -e '. == {}' "$settings/devices.json" >/dev/null || fail "install seeded devices: $(cat "$settings/devices.json")"
+seeded_empty || fail "install seeded settings.json with: $(cat "$settings/settings.json")"
+case "$out" in *"roxy setup"*) ;; *) fail "install does not point at roxy setup: $out" ;; esac
 echo '{"Mine": {"ip": "192.0.2.99"}}' > "$settings/devices.json"
 rm "$settings/settings.json"
 out="$(run_install)" || fail "install, run again: $out"
 [ "$(cat "$settings/devices.json")" = '{"Mine": {"ip": "192.0.2.99"}}' ] || fail "install overwrote devices.json"
-cmp -s "$REPO/settings.example/settings.json" "$settings/settings.json" || fail "install did not seed the missing settings.json"
+seeded_empty || fail "install did not seed the missing settings.json: $(cat "$settings/settings.json")"
 [ "$(realpath "$link")" = "$ROXY" ] || fail "install, run again, broke the link"
 [ "$(git -C "$REPO" config --get core.hooksPath)" = .githooks ] || fail "install did not switch on the repo's git hooks"
-echo "ok: install is idempotent, keeps existing settings and switches on the git hooks"
+echo "ok: install seeds no made-up settings, keeps existing ones, and switches on the git hooks"
 
 # A roxy at the link's place that is not a link is someone else's: install refuses, changing nothing.
 rm "$link"

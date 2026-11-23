@@ -30,7 +30,7 @@ from pathlib import Path
 from typing import NamedTuple
 from xml.etree import ElementTree
 
-# The examples install.sh seeded a settings root with: their values are no settings.
+# The examples roxy 0.2.0's install.sh seeded a settings root with: their values are no settings.
 EXAMPLES = Path(__file__).resolve().parents[2] / "settings.example"
 PHYSICAL_DEVICE = "Physical Device"
 CLOUD_DEVICE = "Cloud Device"
