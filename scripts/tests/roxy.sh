@@ -29,7 +29,8 @@ sed -i.bak -e 's/^MITMWEB_PASSWORD=.*/MITMWEB_PASSWORD=test-password/' \
 # uv stands in for `uv run mitmweb ...` (roxy start): it logs one argument per line to
 # $UV_LOG and, as mitmweb does, creates the file it saves the session to. Any other uv
 # command (proxy/cli.py runs Python) goes to the real uv.
-# route and ipconfig give the Mac the LAN IP 192.0.2.10.
+# route and ipconfig give the Mac the LAN IP 192.0.2.10 (FAKE_MAC_IP overrides it), netmask
+# 255.255.255.0.
 export CURL_LOG="$TMP/curl.log" RCE_LOG="$TMP/rce.log" UV_LOG="$TMP/uv.log" REAL_UV="$(command -v uv)"
 mkdir -p "$TMP/bin"
 cat > "$TMP/bin/curl" <<'EOF'
@@ -64,7 +65,10 @@ session="$(sed -n 's/^save_stream_file=//p' "$UV_LOG")"
 [ -z "$session" ] || touch "$session"
 EOF
 printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
-printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
+cat > "$TMP/bin/ipconfig" <<'EOF'
+#!/usr/bin/env bash
+case "$1 ${3:-}" in "getoption subnet_mask") echo 255.255.255.0 ;; *) echo "${FAKE_MAC_IP:-192.0.2.10}" ;; esac
+EOF
 chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH"
 
@@ -125,7 +129,7 @@ lab_up() {
 }
 
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
-for args in "" start status scenario launch flows export console app device; do
+for args in "" start status scenario launch flows export console app device setup; do
   # shellcheck disable=SC2086
   out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
   case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
@@ -607,6 +611,46 @@ shown="$(LAB_SECRET=test-secret bash -c '. "$1"; redact_secret "$2"' lab "$REPO/
   "https://tunnel.example/test-secret/cloud-device")"
 [ "$shown" = "$redacted" ] || fail "redact_secret shows $shown, export --har $redacted"
 echo "ok: redact_secret and export --har show the lab secret alike"
+
+# setup, with no terminal, in its own settings root seeded from the examples, the Mac at
+# 198.51.100.23/24: one smoke check per way in. proxy/tests/test_settings_root.py covers
+# what setup keeps and replaces at SettingsRoot's interface.
+setup() { ROXY_CONFIG_DIR="$TMP/setup-settings" FAKE_MAC_IP=198.51.100.23 "$ROXY" setup "$@"; }
+mkdir -p "$TMP/setup-settings"
+cp -R "$REPO/settings.example/." "$TMP/setup-settings"
+secret() { bash -c '. "$1"; printf %s "${!2}"' - "$TMP/setup-settings/secrets.env" "$1"; }
+# Flags only, stdin empty: the mitmweb password generated, never printed, the file private;
+# this Mac alone in lan_subnets; the Roku password handed to the user, on stderr.
+out="$(setup --this-mac-only --roku-user dev < /dev/null 2>"$TMP/setup.err")" || fail "setup: $out $(cat "$TMP/setup.err")"
+password="$(secret MITMWEB_PASSWORD)"
+[ ${#password} -ge 16 ] || fail "setup did not generate a mitmweb password"
+case "$out$(cat "$TMP/setup.err")" in *"$password"*) fail "setup printed the mitmweb password" ;; esac
+[ "$(stat -f %Lp "$TMP/setup-settings/secrets.env")" = 600 ] || fail "setup left secrets.env readable by others"
+for want in "generated MITMWEB_PASSWORD (in $TMP/setup-settings/secrets.env; the mitmweb UI asks for it)" \
+  "lan_subnets: 198.51.100.23/32 (this Mac only)" "ROKU_DEV_USER: dev" "$RESTART_HINT"; do
+  grep -qxF "$want" <<< "$out" || fail "setup did not say '$want':
+$out"
+done
+grep -q "^warning: no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup" "$TMP/setup.err" \
+  || fail "setup did not hand the Roku password to the user: $(cat "$TMP/setup.err")"
+jq -e '.lan_subnets == ["198.51.100.23/32"] and .grid_devices.physical == "Living Room"' \
+  "$TMP/setup-settings/settings.json" >/dev/null || fail "setup left settings.json as: $(cat "$TMP/setup-settings/settings.json")"
+# The Roku password piped in, never printed; a trusted network; the mitmweb password kept.
+out="$(printf '%s\n' "p@ss w'rd" | setup --trusted-network 2>&1)" || fail "setup, password piped: $out"
+[ "$(secret ROKU_DEV_PASSWORD)" = "p@ss w'rd" ] || fail "setup did not save the piped Roku password"
+case "$out" in *"p@ss w'rd"*) fail "setup printed the Roku password" ;; esac
+[ "$(secret MITMWEB_PASSWORD)" = "$password" ] || fail "setup, run again, replaced the mitmweb password"
+jq -e '.lan_subnets == ["198.51.100.0/24"]' "$TMP/setup-settings/settings.json" >/dev/null \
+  || fail "setup --trusted-network left lan_subnets as: $(cat "$TMP/setup-settings/settings.json")"
+# Never the Roku password as a flag; refusals change nothing.
+before="$(cat "$TMP/setup-settings/secrets.env" "$TMP/setup-settings/settings.json")"
+for args in "--roku-password hunter2" "--roku-password=hunter2" "--trusted-network --this-mac-only"; do
+  # shellcheck disable=SC2086
+  if err="$(setup $args < /dev/null 2>&1)"; then fail "setup $args exited 0: $err"; fi
+  [ "$(cat "$TMP/setup-settings/secrets.env" "$TMP/setup-settings/settings.json")" = "$before" ] || fail "setup $args changed the settings"
+done
+case "$(setup --roku-password hunter2 2>&1)" in *"never a flag"*) ;; *) fail "setup --roku-password said: $(setup --roku-password hunter2 2>&1)" ;; esac
+echo "ok: setup with no terminal generates the mitmweb password, allows this Mac, takes the Roku password from stdin only"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
 # seeds the missing settings from the examples. Run again, it keeps every existing setting.

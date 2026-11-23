@@ -158,7 +158,7 @@ class SettingsRoot:
         else:
             notes.append("kept MITMWEB_PASSWORD")
         if roku_user or not env.get("ROKU_DEV_USER"):
-            changes["ROKU_DEV_USER"] = roku_user or _read_env(EXAMPLES / "secrets.env")["ROKU_DEV_USER"]
+            changes["ROKU_DEV_USER"] = roku_user or _example_roku_user()
             notes.append(f"ROKU_DEV_USER: {changes['ROKU_DEV_USER']}")
         else:
             notes.append(f"kept ROKU_DEV_USER: {env['ROKU_DEV_USER']}")
@@ -177,7 +177,8 @@ class SettingsRoot:
     def setup_values(self):
         """What setup would keep, for a person to confirm or change: the lan_subnets (None:
         none, or the examples'), this Mac's /32 and its whole subnet (None: on no network),
-        ROKU_DEV_USER and whether there is a ROKU_DEV_PASSWORD. Never a secret."""
+        ROKU_DEV_USER (default: the examples') and whether there is a ROKU_DEV_PASSWORD.
+        Never a secret."""
         settings, networks = self._lan_subnets()
         mac = self._mac()
         env = _read_env(self.secrets_file)
@@ -185,7 +186,7 @@ class SettingsRoot:
             settings["lan_subnets"] if self._set_up(networks) else None,
             mac and str(ip_network(mac.ip)),
             mac and str(mac.network),
-            env.get("ROKU_DEV_USER"),
+            env.get("ROKU_DEV_USER") or _example_roku_user(),
             bool(env.get("ROKU_DEV_PASSWORD")),
         )
 
@@ -348,6 +349,11 @@ def _write(file, doc):
     draft = file.with_name(f".{file.name}.tmp")
     draft.write_text("{\n" + ",\n".join(lines) + "\n}\n" if lines else "{}\n")
     draft.replace(file)
+
+
+def _example_roku_user():
+    """The Roku developer web server's user the examples give, every Roku's own default."""
+    return _read_env(EXAMPLES / "secrets.env")["ROKU_DEV_USER"]
 
 
 ENV_LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)")

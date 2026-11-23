@@ -9,6 +9,8 @@ and LAB_SECRET for export, as proxy_cli passes them.
                                          register a Target Device (roxy device --help)
   cli.py device list                     each Target Device, its address and its kind
   cli.py device remove NAME              unregister the Target Device NAME
+  cli.py setup [--trusted-network | --this-mac-only] [--roku-user USER]
+                                         fill the settings root for this Mac (roxy setup --help)
   cli.py scenario list [--app NAME]      the Scenarios of NAME (else the profile resolve
                                          finds) and the lab's own, each once with its source
   cli.py scenario set NAME...            make NAMEs the running lab's active Scenarios, in that
@@ -28,14 +30,15 @@ and LAB_SECRET for export, as proxy_cli passes them.
                                          a Recording as a HAR file (roxy export --help)
   cli.py run-id                          a fresh roxy launch run id
 
-The device add and remove commands print what they changed, warnings on stderr, then a
-restart hint. The scenario commands print the active Scenarios after the change, as
+The device add and remove commands and setup print what they changed, warnings on stderr,
+then a restart hint; setup never prints a secret. The scenario commands print the active Scenarios after the change, as
 `scenario=A,B` (`scenario=none` for none). A refusal prints `error: ...` and exits 1; with the lab down, a Lab Session command prints
 the `lab: down (...)` line instead.
 """
 
 import argparse
 import base64
+import getpass
 import json
 import os
 import sys
@@ -123,6 +126,39 @@ def device_remove(args):
 def device_address(device):
     """Where the lab finds DEVICE: its IP, or a Cloud Device's rce Device Name and slug."""
     return f"rce {device.rce_device_name}, slug {device.slug}" if device.kind == CLOUD_DEVICE else device.ip
+
+
+def setup(args):
+    """roxy setup: in a terminal, each value asked for and kept on Enter; otherwise the flags
+    decide, and the Roku password comes from stdin."""
+    root = settings()
+    trusted_network, roku_user = args.trusted_network, args.roku_user
+    if sys.stdin.isatty():
+        try:
+            trusted_network, roku_user, roku_password = ask_setup(root.setup_values(), trusted_network, roku_user)
+        except (EOFError, KeyboardInterrupt):
+            sys.exit("\nsetup stopped: nothing changed")
+    else:
+        roku_password = sys.stdin.readline().rstrip("\r\n")
+    change = root.setup(trusted_network=trusted_network, roku_user=roku_user, roku_password=roku_password or None)
+    print_change(change)
+
+
+def ask_setup(values, trusted_network, roku_user):
+    """What the person at the terminal gives setup, shown the VALUES it would keep: the
+    network choice and Roku user, unless a flag gave them, and the Roku password, hidden.
+    Enter keeps each value (None)."""
+    if trusted_network is None and values.this_mac_network:
+        current = ", ".join(values.lan_subnets) if values.lan_subnets else f"none (Enter: {values.this_mac_only}, this Mac only)"
+        answer = input(
+            f"lan_subnets: {current}\n"
+            f"  t: trust this network, allowing all of {values.this_mac_network}; m: only this Mac, {values.this_mac_only} [Enter keeps]: "
+        )
+        trusted_network = {"t": True, "m": False}.get(answer.strip().lower()[:1])
+    if roku_user is None:
+        roku_user = input(f"Roku developer user [{values.roku_user}]: ").strip() or None
+    state = "set; Enter keeps it" if values.roku_password_set else "not set"
+    return trusted_network, roku_user, getpass.getpass(f"Roku developer password ({state}): ")
 
 
 def print_change(change):
@@ -327,6 +363,12 @@ def main():
     device_remove_parser = device.add_parser("remove")
     device_remove_parser.add_argument("name")
     device_remove_parser.set_defaults(run=device_remove)
+    setup_parser = commands.add_parser("setup", prog="roxy setup")
+    network = setup_parser.add_mutually_exclusive_group()
+    network.add_argument("--trusted-network", dest="trusted_network", action="store_const", const=True)
+    network.add_argument("--this-mac-only", dest="trusted_network", action="store_const", const=False)
+    setup_parser.add_argument("--roku-user")
+    setup_parser.set_defaults(run=setup)
     scenario = commands.add_parser("scenario").add_subparsers(required=True)
     scenario_list_parser = scenario.add_parser("list")
     scenario_list_parser.add_argument("--app")
