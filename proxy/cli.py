@@ -11,7 +11,7 @@ and LAB_SECRET for export, as proxy_cli passes them.
   cli.py device remove NAME              unregister the Target Device NAME
   cli.py device discover                 the Rokus on the LAN, with an add line for each
                                          one not registered (roxy device --help)
-  cli.py setup [--trusted-network | --this-mac-only] [--cloud] [--roku-user USER]
+  cli.py setup [--trusted-network | --this-mac-only] [--cloud] [--roku-user USER] [--roku-password-stdin]
                                          fill the settings root for this Mac (roxy setup --help)
   cli.py scenario list [--app NAME]      the Scenarios of NAME (else the profile resolve
                                          finds) and the lab's own, each once with its source
@@ -152,16 +152,16 @@ def device_address(device):
 def setup(args):
     """roxy setup: in a terminal, each value asked for and kept on Enter, then each Roku on
     the LAN offered to register; otherwise the flags decide, and the Roku password comes
-    from stdin."""
+    from stdin with --roku-password-stdin only (stdin is never read without it)."""
     root = settings()
-    trusted_network, roku_user = args.trusted_network, args.roku_user
-    terminal = sys.stdin.isatty()
+    trusted_network, roku_user, roku_password = args.trusted_network, args.roku_user, None
+    terminal = sys.stdin.isatty() and not args.roku_password_stdin
     if terminal:
         try:
             trusted_network, roku_user, roku_password = ask_setup(root.setup_values(), trusted_network, roku_user)
         except (EOFError, KeyboardInterrupt):
             sys.exit("\nsetup stopped: nothing changed")
-    else:
+    elif args.roku_password_stdin:
         roku_password = sys.stdin.readline().rstrip("\r\n")
     change = root.setup(
         trusted_network=trusted_network, roku_user=roku_user, roku_password=roku_password or None, cloud=args.cloud
@@ -415,6 +415,7 @@ def main():
     network.add_argument("--this-mac-only", dest="trusted_network", action="store_const", const=False)
     setup_parser.add_argument("--cloud", action="store_true")
     setup_parser.add_argument("--roku-user")
+    setup_parser.add_argument("--roku-password-stdin", action="store_true")
     setup_parser.set_defaults(run=setup)
     scenario = commands.add_parser("scenario").add_subparsers(required=True)
     scenario_list_parser = scenario.add_parser("list")

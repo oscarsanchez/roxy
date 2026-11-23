@@ -507,7 +507,8 @@ def test_setup_without_a_roku_password_hands_that_step_to_the_user(root, setting
 
     assert secrets_env(settings)["ROKU_DEV_PASSWORD"] == ""
     assert change.warnings == [
-        "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
+        "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal,"
+        " or pipes it to roxy setup --roku-password-stdin"
     ]
 
 

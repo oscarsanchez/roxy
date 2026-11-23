@@ -150,15 +150,17 @@ EOF
     ;;
     setup) cat <<'EOF'
 usage: roxy setup [--trusted-network | --this-mac-only] [--cloud] [--roku-user USER]
+                  [--roku-password-stdin]
 Fill your roxy settings for this Mac, keeping what is there: run it again any time. It
 generates the mitmweb password (MITMWEB_PASSWORD in secrets.env, which the mitmweb UI
-asks for), allows this Mac in lan_subnets, and takes your Roku developer login (one for
-all your Rokus). Secrets are written to secrets.env, readable only by you, and never
-printed. In a terminal it shows each value and keeps it on Enter, then offers each
-unregistered Roku it finds on this network (as roxy device discover does) to register
-under its own name. Without one it never asks and registers no Roku: the Roku password
-comes from stdin (pipe it in), never from a flag, and without it setup says so. Restart a
-running lab to use a change.
+asks for), allows this Mac in lan_subnets, takes your Roku developer login (one for all
+your Rokus), and removes the examples' devices and lan_subnets an old install seeded.
+Secrets are written to secrets.env, readable only by you, and never printed. In a
+terminal it shows each value and keeps it on Enter, then offers each unregistered Roku it
+finds on this network (as roxy device discover does) to register under its own name.
+Without one it never asks, never reads stdin unless told to, and registers no Roku;
+without a Roku password it says so. Restart a running lab to use a change (setup says
+when there is one).
   --trusted-network  allow this Mac's whole subnet in lan_subnets: every device on a
                      network you trust, such as home, can use the lab
   --this-mac-only    allow only this Mac's address in lan_subnets (the default, when
@@ -170,6 +172,9 @@ running lab to use a change.
                      that rce and cloudflared are installed and rce token status works,
                      warning with what to do when not
   --roku-user USER   the Roku developer web server's user (default: rokudev)
+  --roku-password-stdin
+                     read the Roku developer password from stdin, one line (pipe it
+                     in): never a flag, which shell history and process lists keep
 EOF
     ;;
   esac
@@ -245,8 +250,8 @@ device() {
 # lists would keep. A VPN holding the default route gets a warning once setup is done.
 setup() {
   case " $* " in *" -h "*|*" --help "*) usage setup; return ;; esac
-  case " $* " in *" --roku-password"*)
-    die "the Roku password is never a flag: pipe it to roxy setup, or run roxy setup in a terminal" ;;
+  case " $* " in *" --roku-password "*|*" --roku-password="*)
+    die "the Roku password is never a flag: pipe it to roxy setup --roku-password-stdin, or run roxy setup in a terminal" ;;
   esac
   proxy_cli setup "$@"
   warn_of_a_vpn

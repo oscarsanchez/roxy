@@ -225,7 +225,8 @@ class SettingsRoot:
             notes.append("kept ROKU_DEV_PASSWORD")
         else:
             warnings.append(
-                "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
+                "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal,"
+                " or pipes it to roxy setup --roku-password-stdin"
             )
         if cloud and not env.get("LAB_SECRET"):
             changes["LAB_SECRET"] = self.new_secret()

@@ -654,10 +654,11 @@ setup() { ROXY_CONFIG_DIR="$TMP/setup-settings" FAKE_MAC_ADDRESSES="${FAKE_MAC_A
 mkdir -p "$TMP/setup-settings"
 cp -R "$REPO/settings.example/." "$TMP/setup-settings"
 secret() { bash -c '. "$1"; printf %s "${!2}"' - "$TMP/setup-settings/secrets.env" "$1"; }
-# Flags only, stdin empty: the mitmweb password generated, never printed, the file private;
-# the example devices gone; this Mac alone in lan_subnets; the Roku password handed to the
-# user, on stderr.
-out="$(setup --this-mac-only --roku-user dev < /dev/null 2>"$TMP/setup.err")" || fail "setup: $out $(cat "$TMP/setup.err")"
+# Flags only: the mitmweb password generated, never printed, the file private; the example
+# devices gone; this Mac alone in lan_subnets; stdin never read without
+# --roku-password-stdin, so the Roku password is handed to the user, on stderr.
+out="$(echo unread | setup --this-mac-only --roku-user dev 2>"$TMP/setup.err")" || fail "setup: $out $(cat "$TMP/setup.err")"
+[ -z "$(secret ROKU_DEV_PASSWORD)" ] || fail "setup without --roku-password-stdin read the Roku password from stdin"
 password="$(secret MITMWEB_PASSWORD)"
 [ ${#password} -ge 16 ] || fail "setup did not generate a mitmweb password"
 case "$out$(cat "$TMP/setup.err")" in *"$password"*) fail "setup printed the mitmweb password" ;; esac
@@ -669,12 +670,13 @@ for want in "generated MITMWEB_PASSWORD (in $TMP/setup-settings/secrets.env; the
 $out"
 done
 jq -e '. == {}' "$TMP/setup-settings/devices.json" >/dev/null || fail "setup left devices.json as: $(cat "$TMP/setup-settings/devices.json")"
-grep -q "^warning: no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup" "$TMP/setup.err" \
+grep -q "^warning: no Roku developer password (ROKU_DEV_PASSWORD): .*roxy setup --roku-password-stdin" "$TMP/setup.err" \
   || fail "setup did not hand the Roku password to the user: $(cat "$TMP/setup.err")"
 jq -e '.lan_subnets == ["10.0.0.23/32"] and .grid_devices.physical == "Living Room"' \
   "$TMP/setup-settings/settings.json" >/dev/null || fail "setup left settings.json as: $(cat "$TMP/setup-settings/settings.json")"
-# The Roku password piped in, never printed; a trusted network; the mitmweb password kept.
-out="$(printf '%s\n' "p@ss w'rd" | setup --trusted-network 2>&1)" || fail "setup, password piped: $out"
+# The Roku password piped in with --roku-password-stdin, never printed; a trusted network;
+# the mitmweb password kept.
+out="$(printf '%s\n' "p@ss w'rd" | setup --trusted-network --roku-password-stdin 2>&1)" || fail "setup, password piped: $out"
 [ "$(secret ROKU_DEV_PASSWORD)" = "p@ss w'rd" ] || fail "setup did not save the piped Roku password"
 case "$out" in *"p@ss w'rd"*) fail "setup printed the Roku password" ;; esac
 [ "$(secret MITMWEB_PASSWORD)" = "$password" ] || fail "setup, run again, replaced the mitmweb password"
@@ -688,7 +690,7 @@ for args in "--roku-password hunter2" "--roku-password=hunter2" "--trusted-netwo
   [ "$(cat "$TMP/setup-settings/secrets.env" "$TMP/setup-settings/settings.json")" = "$before" ] || fail "setup $args changed the settings"
 done
 case "$(setup --roku-password hunter2 2>&1)" in *"never a flag"*) ;; *) fail "setup --roku-password said: $(setup --roku-password hunter2 2>&1)" ;; esac
-echo "ok: setup with no terminal generates the mitmweb password, allows this Mac, takes the Roku password from stdin only"
+echo "ok: setup with no terminal generates the mitmweb password, allows this Mac, takes the Roku password from stdin only when told to"
 
 # setup with a VPN holding the default route (utun4) and the Thunderbolt Bridge up: this Mac's
 # /32 is its Wi-Fi address, and setup warns without refusing. With no VPN, no warning.
