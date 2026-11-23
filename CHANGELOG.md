@@ -6,6 +6,7 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 ### Added
 
+- Proxy Routing, for Mobile Devices: a Product App's iOS and Android debug builds set the lab's new Proxy Routing listener (port 8090, always on) as their HTTP proxy and trust the lab's CA from `http://mitm.it`. Their flows keep their Origin URLs, unrewritten, and the active Scenarios act on them; the LAN guards apply. `roxy start` and `roxy status` print `Proxy Routing: <mac-ip>:8090`, and `roxy status --json` gains `proxy_routing_port`. How-to: `docs/mobile-devices.md`.
 - `scripts/check docs`: every relative link and `#anchor` in the Markdown resolves, and this changelog has a section for the plugin's version.
 - `docs/troubleshooting.md`: symptom, cause and fix for every known failure, the `X-Lab-Blocked` refusals first.
 - `scripts/deploy --help`; `scripts/grid --help` lists every flavour, Target Device kind and traffic class.

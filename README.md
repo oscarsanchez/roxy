@@ -1,6 +1,6 @@
 # roxy
 
-A mitmproxy/mitmweb lab on your Mac for inspecting and manipulating the traffic of Roku apps, on Physical Devices and on Roku Cloud Emulator (Cloud Devices). The app calls Prefixed URLs (`<Proxy Base>/<Origin URL>`), so no device proxy setting or CA is needed.
+A mitmproxy/mitmweb lab on your Mac for inspecting and manipulating the traffic of Roku apps, on Physical Devices and on Roku Cloud Emulator (Cloud Devices). The app calls Prefixed URLs (`<Proxy Base>/<Origin URL>`), so no device proxy setting or CA is needed. The same product's iOS and Android debug builds, on Mobile Devices, set the lab as their HTTP proxy instead (Proxy Routing).
 
 Vocabulary: [GLOSSARY.md](GLOSSARY.md). Code conventions: [CODING_STANDARDS.md](CODING_STANDARDS.md). Changes: [CHANGELOG.md](CHANGELOG.md).
 
@@ -10,6 +10,7 @@ Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To repor
 
 - Every kind of Outbound Traffic: JSON APIs, images, HLS, DASH, Widevine licenses, RAF ads (VAST, VAST wrappers, VMAP) and their beacons.
 - Inspection in mitmweb, and Manipulation: mocked or map-local responses, rewritten headers and bodies, injected faults (status, latency, drops), edited manifests, held-and-edited flows, and Recordings replayed or exported as HAR files.
+- Mobile Devices: a Product App's iOS and Android debug builds, through Proxy Routing; their store builds and apps that pin certificates are out of scope.
 - Two disposable Lab Apps (classic BrightScript/SceneGraph and RSG 2.0) exercise every traffic class and serve as the regression grid. Store apps and Roku OS's own traffic are out of scope.
 
 ## How it works
@@ -18,19 +19,22 @@ Issues are welcome on GitHub Issues; pull requests aren't accepted yet. To repor
 flowchart LR
   PD["Physical Device"] -- "Prefixed URL, over the LAN" --> LAN
   CD["Cloud Device (RCE)"] -- "Prefixed URL, behind the secret" --> CF["cloudflared quick tunnel (Public Endpoint)"]
+  MD["Mobile Device"] -- "Origin URL, lab as HTTP proxy" --> PR
   CF --> TUN
   subgraph Mac["Your Mac: mitmweb"]
     LAN["LAN listeners :8080 and :8888"]
     TUN["tunnel listener :8082, loopback only"]
+    PR["Proxy Routing listener :8090"]
     CHAIN["Origin decoding, Target Device, Guards, header cleanup, header and body rewriting, Scenarios"]
     UI["mitmweb UI, 127.0.0.1:8081 only"]
     LAN --> CHAIN
     TUN --> CHAIN
+    PR --> CHAIN
   end
   CHAIN --> O["Origin"]
 ```
 
-The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>` (or `<Proxy Base>/;<Origin URL>`, as a Charles-enabled build does): this is Prefix Routing, and it works on every Target Device. The lab recovers the Origin, applies its guards, rewrites URLs in responses so follow-up requests come back through it, then applies the active Scenarios. CA Routing, for Physical Devices only, uses DNS and the lab's CA instead. The full picture: [How it works](docs/how-it-works.md).
+The app puts the Proxy Base in front of every URL it builds, `<Proxy Base>/<Origin URL>` (or `<Proxy Base>/;<Origin URL>`, as a Charles-enabled build does): this is Prefix Routing, and it works on every Target Device. The lab recovers the Origin, applies its guards, rewrites URLs in responses so follow-up requests come back through it, then applies the active Scenarios. CA Routing, for Physical Devices only, uses DNS and the lab's CA instead; Proxy Routing, for Mobile Devices, the Mobile Device's HTTP proxy setting and the lab's CA, with no rewriting. The full picture: [How it works](docs/how-it-works.md).
 
 ## Quickstart
 
@@ -66,7 +70,7 @@ Your settings live in the **settings root**, `~/.config/roxy/`, never in the rep
 roxy start
 ```
 
-You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP` and two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`. A missing setting stops it before mitmweb starts, naming the setting. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
+You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP`, two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`, and the `Proxy Routing` address for Mobile Devices, `<mac-ip>:8090`. A missing setting stops it before mitmweb starts, naming the setting. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
 
 From another terminal, send a Prefixed URL from the Mac itself, no Roku needed:
 
@@ -101,6 +105,7 @@ You should see `status=503` in the result line, and under `json-503` in `roxy st
 - [Scenarios](docs/scenarios.md): write your own, with mocks, throttles and manifest edits.
 - [Prefix Routing guide](docs/prefix-routing.md): route a Product App, with its Charles hook or the kit.
 - [Cloud Devices](docs/cloud-devices.md): the same on Roku Cloud Emulator.
+- [Mobile Devices](docs/mobile-devices.md): your app's iOS and Android debug builds through the same lab.
 - [Agents](docs/agent-setup.md): let Claude Code or Cursor drive the lab.
 
 ## Documentation

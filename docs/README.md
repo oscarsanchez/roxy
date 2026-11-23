@@ -8,6 +8,7 @@ New to roxy? Start with the [Quickstart](../README.md#quickstart). Vocabulary: [
 - [Prefix Routing guide](prefix-routing.md): wire an app, with its Charles hook or with the kit.
 - [CA Routing guide](ca-routing.md): route by DNS and the lab's CA instead, Physical Devices only.
 - [Cloud Devices](cloud-devices.md): run an app on Roku Cloud Emulator through the Public Endpoint.
+- [Mobile Devices](mobile-devices.md): see an iOS or Android debug build's traffic through Proxy Routing.
 - [Scenarios](scenarios.md): make an Origin fail, slow down, answer from a mock, or edit a manifest.
 - [Recordings](recordings.md): replay a Lab Session offline, or export it as a HAR file.
 - [Agents](agent-setup.md): give Claude Code or Cursor the lab, and read its flows as JSON.
