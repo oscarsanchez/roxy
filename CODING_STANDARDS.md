@@ -19,7 +19,7 @@ The judgement calls a reviewer checks. Mechanical rules (tests, shell syntax, Co
 
 ## Tests
 
-- **Tests write only to temp roots.** A test points all three roots the scripts write to at temp folders: the settings root (`ROXY_CONFIG_DIR`), the user data directory (`XDG_DATA_HOME`) and the build output and logs (`ROXY_OUT_DIR`, the checkout's `out/` by default), as `scripts/check` does. A script that writes one of them goes through its variable in `scripts/lib.sh`, never a path of its own.
+- **Tests write only to temp roots.** A test points all three roots the scripts write to at temp folders: the settings root (`ROXY_CONFIG_DIR`), the user data directory (`XDG_DATA_HOME`) and the build output and logs (`ROXY_OUT_DIR`, the checkout's `out/` by default), as `scripts/check` does. A script that writes one of them goes through its variable in `scripts/lib.sh`, never a path of its own. A test that runs `roxy start` (`scripts/start-lab`) moves the lab's ports to free ones too (`scripts/tests/lab-ports.sh`): the start checks its ports, and a test must never see a lab the user is running.
 
 - **Fixtures from real material are rewritten whole.** A test fixture or doc example derived from a Product App's traffic, rules or config replaces every identifying part, not just the hostname: paths, tokens, IDs, query values and file names become made-up ones on documentation hosts (example.com/.net/.org). The leak check only knows the terms on its list; a client-specific path shape passes it.
 
