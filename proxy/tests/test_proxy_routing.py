@@ -1,6 +1,7 @@
 """Proxy Routing: a Mobile Device sets the lab's Proxy Routing listener as its HTTP
 proxy, so its requests arrive as the Origin URLs they are. No Proxy Base, no Prefixed URLs."""
 
+import pytest
 from mitmproxy import http
 from mitmproxy.test import tutils
 
@@ -142,3 +143,17 @@ def test_a_public_origin_off_the_allowlist_is_forwarded():
 
     assert forwarded.url == "https://not-allowlisted.example/json"
     assert not flow.marked
+
+
+THIS_MAC = {"IPv4": ("127.0.0.1", 51000), "IPv6": ("::1", 51000, 0, 0)}  # an iOS Simulator or Android Emulator
+
+
+@pytest.mark.parametrize("peer", THIS_MAC.values(), ids=THIS_MAC.keys())
+def test_a_mobile_device_on_this_mac_is_forwarded_and_named_this_mac(peer):
+    flow = proxy_routing_flow("https://httpbin.org/json", peer=peer)
+
+    forwarded = run(flow)
+
+    assert forwarded.url == "https://httpbin.org/json"
+    assert flow.comment == "This Mac"
+    assert [summary["device"] for summary in flows_summary(flow)] == ["This Mac"]

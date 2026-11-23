@@ -5,6 +5,8 @@ bandwidth per key), and a name from the user's devices registry
 (<settings root>/devices.json), None when nothing names it:
 - A Physical Device is its client IP, named by `ip` in the registry. It opens a
   connection per parallel request, each from its own port.
+- An iOS Simulator or Android Emulator on this Mac reaches the Proxy Routing listener from
+  loopback, named "This Mac".
 - Every Cloud Device reaches the lab through cloudflared, so all share its peer. One is
   the device slug in its Proxy Base, https://<tunnel-host>/<secret>/<slug> (scripts/launch
   adds it), named by `slug` in the registry; else its tunnel client IP (Cloud Devices
@@ -19,11 +21,12 @@ Scenario rules that acted on the flow (annotate); `roxy flows` reads target_devi
 
 from typing import NamedTuple
 
-from lab.clients import from_rce_egress_ip, ip_address, through_tunnel, tunnel_client_ip
+from lab.clients import from_rce_egress_ip, ip_address, through_proxy_routing, through_tunnel, tunnel_client_ip
 from lab.config import load_settings
 from lab.prefixed_url import client_proxy_base, device_slug
 
 CLOUD_DEVICE = "Cloud Device"  # the name of an RCE egress IP's device without a known slug
+THIS_MAC = "This Mac"  # the name of an iOS Simulator or Android Emulator on this Mac, through Proxy Routing
 
 
 class TargetDevice(NamedTuple):
@@ -68,6 +71,8 @@ class TargetDevices:
     def identify(self, flow):
         if not through_tunnel(flow):
             ip = ip_address(flow.client_conn.peername[0])
+            if through_proxy_routing(flow) and ip.is_loopback:
+                return TargetDevice(f"ip {ip}", THIS_MAC)
             return TargetDevice(f"ip {ip}", self.physical_devices.get(ip))
         client = client_proxy_base(flow)
         unnamed = CLOUD_DEVICE if from_rce_egress_ip(flow) else None
