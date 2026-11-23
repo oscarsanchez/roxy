@@ -7,13 +7,31 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 | File | Holds |
 |---|---|
 | `secrets.env` | `MITMWEB_PASSWORD` (mitmweb UI), `LAB_SECRET` (secret path segment of the public Proxy Base, Cloud Devices), `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD` (sideloading to Physical Devices; a Cloud Device's dev password is kept by `rce`) |
-| `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`), `{"ip": ..., "kind": "proxied"}` for a Proxied Device (no `kind` means a Roku; `"kind": "mobile"`, as roxy 0.2.0 wrote it, means a Proxied Device too; `scripts/deploy`, `roxy launch` and `roxy console` refuse a Proxied Device: not a Roku) |
-| `settings.json` | `lan_subnets`: your LAN's subnets (CIDR), the clients allowed on the LAN listener. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
+| `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`), `{"ip": ..., "kind": "proxied"}` for a Proxied Device (no `kind` means a Roku; `"kind": "mobile"`, as roxy 0.2.0 wrote it, means a Proxied Device too; `scripts/deploy`, `roxy launch` and `roxy console` refuse a Proxied Device: not a Roku). `roxy device` edits it for you (see [Target Devices](#target-devices)) |
+| `settings.json` | `lan_subnets`: your LAN's subnets (CIDR), the clients allowed on the LAN listener; `roxy device add` and `remove` keep a device's `/32` in step. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
 | `apps/<name>/` | App Profiles, made by `roxy app new` (see [App Profiles](#app-profiles)) |
 
 - `roxy start` stops before mitmweb starts if a file, a secret it needs or `lan_subnets` is missing, and names it.
 - The RCE token is `rce`'s (`rce token set`), not the lab's. Keep `RCE_TOKEN` out of `secrets.env`: the scripts export it, and `rce` takes `RCE_TOKEN` over its stored token.
 - The lab's own defaults, the same for everyone, stay in the repo: `proxy/config/guards.json` (RCE egress IPs and the Origin allowlist, see [Guards](guards.md)). Restart the lab after editing a setting.
+
+## Target Devices
+
+`roxy device` registers your Target Devices in `devices.json` without editing JSON, and keeps `lan_subnets` in step. It never prompts, so an agent can run it too:
+
+```sh
+roxy device add "Living Room" --ip 192.0.2.54             # a Roku on your LAN: a Physical Device
+roxy device add Phone --ip 192.0.2.60 --proxied           # a phone, tablet or TV box: a Proxied Device
+roxy device add "Cloud Device" --rce player                # a Cloud Device, by its rce Device Name; slug cloud-device
+roxy device add "Cloud Device" --rce player --slug desk    # the same, with the slug you choose
+roxy device list                                           # each device, its IP or rce Device Name, and its kind
+roxy device remove Phone
+```
+
+- `add` refuses a name that exists, an IP that is not one, and a slug that is taken or is not lowercase letters, digits and single dashes. A Cloud Device's slug, the last segment of its public Proxy Base, defaults to its name in lowercase with dashes.
+- `add` asks a Roku's ECP (`http://<ip>:8060/query/device-info`, never through a proxy) and a Cloud Device's `rce device resolve`. A Roku that does not answer or is not in developer mode, or a Device Name `rce` does not know, is registered anyway with a warning: it may only be off, or on another network, today.
+- `add` with an IP that no `lan_subnets` entry covers appends `<ip>/32` to them, and says so. `remove` drops a `/32` equal to the device's IP when no other device has that IP; it never touches a wider subnet, so a trusted network you allowed stays allowed.
+- Both keep every other key and entry of both files (`grid_devices` included), and end by reminding you to restart a running lab: it reads them when it starts.
 
 ## App Profiles
 
