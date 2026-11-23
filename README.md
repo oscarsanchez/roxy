@@ -83,7 +83,7 @@ Every command and field: [Settings](docs/settings.md).
 roxy start
 ```
 
-You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP`, two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`, and the `Proxy Routing` address for Proxied Devices, `<mac-ip>:8090`. A missing setting stops it before mitmweb starts, naming the setting and the command that fills it in. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
+You should see the mitmweb UI (`http://127.0.0.1:8081`), your `Proxy IP`, two `LAN Proxy Bases`, `http://<mac-ip>:8080` and `:8888`, and the `Proxy Routing` address for Proxied Devices, `<mac-ip>:8090`. A missing setting stops it before mitmweb starts, naming the setting and the command that fills it in; so does a port another process holds, naming the process. The lab runs in the foreground until Ctrl-C; every Lab Session is saved as a Recording ([Recordings](docs/recordings.md)).
 
 From another terminal, send a Prefixed URL from the Mac itself, no Roku needed:
 

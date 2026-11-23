@@ -14,6 +14,7 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 - `./install.sh` seeds no made-up devices or `lan_subnets`: `devices.json` is empty, `lan_subnets` too, and it points at `roxy setup`. `settings.example/` stays as documentation.
 - `roxy start` also refuses an empty device list, and names each missing setting with the command that fills it in. The README quickstart's settings step is `roxy setup`, then `roxy device add` or `discover`.
+- `roxy start` stops before mitmweb starts when a port it listens on is in use, naming each busy port, its role and the process holding it (Troubleshooting).
 
 - Mobile Devices are now Proxied Devices: any device that is not a Roku (phone, tablet, Android TV, Google TV, Fire TV, Apple TV, console, computer) goes through Proxy Routing. `devices.json` registers one with `"kind": "proxied"`; `"kind": "mobile"` from 0.2.0 still counts. The how-to moved to `docs/proxied-devices.md`, with a section for TV boxes (Apple TV unverified), and the glossary lint now flags the old name. <!-- glossary-ok: names the old term -->
 

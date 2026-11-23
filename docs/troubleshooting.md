@@ -25,6 +25,15 @@ error: missing setting lan_subnets (the LAN subnets allowed to use the lab, CIDR
 A bad App Profile `fallback_origin` or a profile Scenario named like one of the lab's own stops it too, naming the profile.
 **Fix:** run the command it names: `roxy setup` (`--cloud` for `LAB_SECRET`), then `roxy device add` or `roxy device discover`. A missing file: run `./install.sh` to seed it ([Settings](settings.md#setup)).
 
+## `roxy start` says a port is in use
+
+**Cause:** another process listens on a port the lab needs: 8080 or 8888 (the LAN listeners; 8888 is Charles's port), 8090 (Proxy Routing), 8081 (the mitmweb UI), 8082 (the tunnel listener), or with `--ca-routing` 443 and 80. Often Charles, a lab already running in another terminal, or `docker compose up`. The start stops before mitmweb starts, naming every busy port in one run, its role, and the process holding it:
+```
+error: port 8888 (Charles's port, the second LAN listener) is in use by Charles (pid 4211): quit it, then start again (docs/troubleshooting.md)
+```
+A process of another user (a root process on 443 or 80) is named by the port alone, with the `sudo lsof` command that names it.
+**Fix:** quit that process (`roxy status` says whether a lab is already up; `docker compose down` stops the Compose one), then start again. The ports are fixed.
+
 ## `roxy setup` warns
 
 Setup still finishes; each warning says what is left:
