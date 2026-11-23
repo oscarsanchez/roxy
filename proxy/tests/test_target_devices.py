@@ -2,6 +2,8 @@
 `roxy flows` show its name; the throttle shares a cap on its key, so two devices with one name
 still get a cap each. One decision gives both."""
 
+import json
+
 import pytest
 from mitmproxy import http
 from mitmproxy.test import tutils
@@ -32,8 +34,8 @@ def cloud(slug=None, client_ip=RCE_EGRESS_IP):
     return tunnel_flow(f"/{SECRET}/{slug + '/' if slug else ''}{SEGMENT}", client_ip=client_ip)
 
 
-def mobile(ip="192.0.2.60"):
-    """A request through Proxy Routing, from a Mobile Device at IP."""
+def proxied(ip="192.0.2.60"):
+    """A request through Proxy Routing, from a Proxied Device at IP."""
     return proxy_routing_flow(SEGMENT, peer=(ip, 51000))
 
 
@@ -56,7 +58,7 @@ TARGET_DEVICES = {
     "a tunnel client from another IP, unnamed": (lambda: cloud(client_ip="198.51.100.7"), None),
     "a LAN client that is no Target Device, unnamed": (lambda: physical("192.0.2.10"), None),
     "a LAN client sending tunnel headers, by its LAN IP": (lan_client_with_tunnel_headers, "Living Room"),
-    "a Mobile Device through Proxy Routing, by its IP": (mobile, "Phone"),
+    "a Proxied Device through Proxy Routing, by its IP": (proxied, "Phone"),
 }
 
 
@@ -68,6 +70,17 @@ def test_mitmweb_and_roxy_flows_name_each_flows_target_device(make_flow, name):
 
     assert flow.comment == (name or "")
     assert [summary["device"] for summary in flows_summary(flow)] == [name]
+
+
+@pytest.mark.parametrize("kind", ["proxied", "mobile"], ids=["kind proxied", "kind mobile, as 0.2.0 wrote it"])
+def test_a_proxied_device_is_named_by_its_ip_whichever_kind_registered_it(settings, kind):
+    (settings / "devices.json").write_text(json.dumps({"Tablet": {"ip": "192.0.2.61", "kind": kind}}))
+    flow = proxied("192.0.2.61")
+
+    run_chain(flow, origin_segment(), **PROXY_ROUTING_OPTIONS)
+
+    assert flow.comment == "Tablet"
+    assert [summary["device"] for summary in flows_summary(flow)] == ["Tablet"]
 
 
 ONE_DEVICE = {

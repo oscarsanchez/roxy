@@ -17,7 +17,7 @@ RECORDINGS_DIR="$RECORDINGS_ROOT/${LAB_APP:-no-profile}"
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
 LAB_WEB_PORT="${LAB_WEB_PORT:-8081}"  # mitmweb UI, localhost only; LAB_WEB_PORT overrides it (tests)
-LAB_PROXY_ROUTING_PORT=8090  # Proxy Routing listener: the HTTP proxy a Mobile Device sets, LAN only
+LAB_PROXY_ROUTING_PORT=8090  # Proxy Routing listener: the HTTP proxy a Proxied Device sets, LAN only
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
@@ -203,15 +203,15 @@ require_public_proxy_base() {
 }
 
 # device_field DEVICE-NAME FIELD : a field of a named Roku (a Physical or Cloud Device),
-# empty if unset. Every script that drives a device looks it up here, so a Mobile Device
-# ("kind": "mobile") is refused before any device or rce call.
+# empty if unset. Every script that drives a device looks it up here, so a Proxied Device
+# ("kind": "proxied", or "mobile" as 0.2.0 wrote it) is refused before any device or rce call.
 device_field() {
   require_jq
   require_setting_file "$DEVICES_FILE"
   jq -e --arg n "$1" 'has($n)' "$DEVICES_FILE" >/dev/null \
     || die "unknown device '$1'. Known: $(jq -r 'keys | join(", ")' "$DEVICES_FILE")"
-  jq -e --arg n "$1" '.[$n].kind != "mobile"' "$DEVICES_FILE" >/dev/null \
-    || die "'$1' is a Mobile Device, not a Roku"
+  jq -e --arg n "$1" '.[$n].kind | IN("proxied", "mobile") | not' "$DEVICES_FILE" >/dev/null \
+    || die "'$1' is a Proxied Device, not a Roku"
   jq -r --arg n "$1" --arg f "$2" '.[$n][$f] // empty' "$DEVICES_FILE"
 }
 
