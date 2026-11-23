@@ -140,8 +140,8 @@ require_lab_settings() {
   [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }
 
-# proxy_cli ARG... : App Profiles, their Scenarios, the running Lab Session and Recordings
-# (proxy/cli.py describes the commands), run in the caller's folder, which resolving, app new
+# proxy_cli ARG... : App Profiles, their Scenarios, Target Devices, the running Lab Session
+# and Recordings (proxy/cli.py describes the commands), run in the caller's folder, which resolving, app new
 # and export read. It loads secrets.env first, when there is one, for MITMWEB_PASSWORD and
 # LAB_SECRET, and passes LAB_WEB_PORT and RECORDINGS_ROOT.
 # Refusals print error: ... and exit 1.

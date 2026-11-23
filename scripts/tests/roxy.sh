@@ -46,6 +46,9 @@ case "$url" in
   # A device whose ECP is "limited" refuses exit-app (and keypresses) but still launches.
   *:8060/exit-app/*) [ -z "${FAKE_ECP_LIMITED:-}" ] \
     || { echo "curl: (22) The requested URL returned error: 403" >&2; exit 22; } ;;
+  # A Roku in developer mode, unless FAKE_ECP_DOWN is set: then it does not answer.
+  *:8060/query/device-info) [ -z "${FAKE_ECP_DOWN:-}" ] || { echo "curl: (28) Connection timed out" >&2; exit 28; }
+    printf '<device-info><model-name>Roku Ultra</model-name><developer-enabled>true</developer-enabled></device-info>\n' ;;
 esac
 EOF
 cat > "$TMP/bin/rce" <<'EOF'
@@ -122,7 +125,7 @@ lab_up() {
 }
 
 # --help works for roxy and every subcommand, on stdout; an unknown subcommand is refused.
-for args in "" start status scenario launch flows export console app; do
+for args in "" start status scenario launch flows export console app device; do
   # shellcheck disable=SC2086
   out="$("$ROXY" $args --help)" || fail "roxy $args --help exited non-zero"
   case "$out" in *"usage: roxy ${args:-}"*) ;; *) fail "roxy $args --help printed: $out" ;; esac
@@ -326,6 +329,65 @@ for device in Phone "Old Phone"; do
   refuses_proxied "$device" "$ROXY" console "$device"
 done
 echo "ok: deploy, launch and console refuse a Proxied Device, kind proxied or mobile, before any device or rce call"
+
+# device add, list and remove, with no terminal: one smoke check per kind of Target Device.
+# proxy/tests/test_settings_root.py covers validation, warnings and lan_subnets at
+# SettingsRoot's interface. Each change says what it did, then to restart a running lab.
+RESTART_HINT="restart the lab if it is running (roxy start), to use the change"
+device() { "$ROXY" device "$@" < /dev/null; }
+# A Roku by its IP, outside lan_subnets (192.0.2.0/24): ECP is asked, never through a proxy.
+: > "$CURL_LOG.urls"
+out="$(http_proxy=http://127.0.0.1:9 device add Den --ip 198.51.100.7 2>&1)" || fail "device add Den: $out"
+[ "$out" = "registered 'Den' (198.51.100.7) as a Physical Device
+allowed 198.51.100.7/32 in lan_subnets
+$RESTART_HINT" ] || fail "device add Den said: $out"
+grep -qx "http://198.51.100.7:8060/query/device-info" "$CURL_LOG.urls" || fail "device add Den did not ask ECP: $(cat "$CURL_LOG.urls")"
+[ "$(jq -c .Den "$ROXY_CONFIG_DIR/devices.json")" = '{"ip":"198.51.100.7"}' ] || fail "device add Den wrote: $(cat "$ROXY_CONFIG_DIR/devices.json")"
+jq -e '.lan_subnets == ["192.0.2.0/24", "198.51.100.7/32"] and .grid_devices.physical == "Living Room"' \
+  "$ROXY_CONFIG_DIR/settings.json" >/dev/null || fail "device add Den left settings.json as: $(cat "$ROXY_CONFIG_DIR/settings.json")"
+# A Proxied Device; a Roku that does not answer ECP, registered with a warning on stderr;
+# a Cloud Device, checked with rce device resolve, its slug made from its name.
+out="$(device add Tablet --ip 192.0.2.80 --proxied)" || fail "device add Tablet --proxied: $out"
+[ "$out" = "registered 'Tablet' (192.0.2.80) as a Proxied Device
+$RESTART_HINT" ] || fail "device add Tablet --proxied said: $out"
+err="$(FAKE_ECP_DOWN=1 device add Attic --ip 192.0.2.81 2>&1 >/dev/null)" || fail "device add Attic, off: $err"
+[ "$err" = "warning: Attic (192.0.2.81) did not answer ECP: registered anyway (is it on, and on this network?)" ] \
+  || fail "device add of a Roku that does not answer warned: $err"
+: > "$RCE_LOG"
+out="$(device add "Office Stick" --rce office-player)" || fail "device add Office Stick --rce: $out"
+[ "$out" = "registered 'Office Stick' (rce office-player, slug office-stick) as a Cloud Device
+$RESTART_HINT" ] || fail "device add Office Stick --rce said: $out"
+[ "$(cat "$RCE_LOG")" = "$(printf '%q ' device resolve office-player)" ] || fail "device add --rce ran: $(cat "$RCE_LOG")"
+# list: each device with its address or rce Device Name, and its kind.
+out="$(device list)" || fail "device list: $out"
+for want in "Den  *198.51.100.7  *Physical Device" "Tablet  *192.0.2.80  *Proxied Device" \
+  "Office Stick  *rce office-player, slug office-stick  *Cloud Device" "Old Phone  *192.0.2.61  *Proxied Device"; do
+  grep -qx "$want" <<< "$out" || fail "device list lacks '$want':
+$out"
+done
+# remove drops the /32 add allowed; refusals are errors, and change nothing.
+out="$(device remove Den)" || fail "device remove Den: $out"
+[ "$out" = "removed 'Den'
+dropped 198.51.100.7/32 from lan_subnets
+$RESTART_HINT" ] || fail "device remove Den said: $out"
+jq -e '.lan_subnets == ["192.0.2.0/24"]' "$ROXY_CONFIG_DIR/settings.json" >/dev/null || fail "device remove Den left lan_subnets: $(cat "$ROXY_CONFIG_DIR/settings.json")"
+before="$(cat "$ROXY_CONFIG_DIR/devices.json")"
+refuses_device() {
+  local want="$1" err
+  shift
+  if err="$(device "$@" 2>&1)"; then fail "device $* exited 0: $err"; fi
+  case "$err" in *"$want"*) ;; *) fail "device $* said: $err" ;; esac
+  [ "$(cat "$ROXY_CONFIG_DIR/devices.json")" = "$before" ] || fail "device $* changed devices.json"
+}
+refuses_device "error: the device 'Tablet' already exists" add Tablet --ip 192.0.2.82
+refuses_device "error: not an IP address: '192.0.2'" add Hall --ip 192.0.2
+refuses_device "error: unknown device 'Den'" remove Den
+refuses_device "--proxied goes with --ip" add Hall --rce hall-player --proxied
+refuses_device "--slug goes with --rce" add Hall --ip 192.0.2.82 --slug hall
+refuses_device "usage: roxy device" add Hall
+refuses_device "usage: roxy device" explode
+case "$(device add --help)" in "usage: roxy device add NAME (--ip IP"*) ;; *) fail "device add --help printed: $(device add --help)" ;; esac
+echo "ok: device add, list and remove each kind of Target Device, keeping lan_subnets in step"
 
 # App Profiles, in a temp app repo: one smoke check per command. proxy/tests/test_app_profiles.py
 # covers resolution, refusals and clashes at AppProfiles' interface.

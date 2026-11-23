@@ -1,10 +1,14 @@
-"""App Profiles, their Scenarios, the running Lab Session and Recordings, for bin/roxy and
+"""App Profiles, their Scenarios, Target Devices, the running Lab Session and Recordings, for bin/roxy and
 the scripts, which run it through proxy_cli (scripts/lib.sh) in the caller's folder. Needs
 ROXY_CONFIG_DIR and LAB_WEB_PORT, MITMWEB_PASSWORD for the Lab Session, and RECORDINGS_ROOT
 and LAB_SECRET for export, as proxy_cli passes them.
 
   cli.py app new NAME                    create App Profile NAME for the git repo of this folder
   cli.py app list                        each App Profile and its repo
+  cli.py device add NAME (--ip IP [--proxied] | --rce DEVICE_NAME [--slug SLUG])
+                                         register a Target Device (roxy device --help)
+  cli.py device list                     each Target Device, its address and its kind
+  cli.py device remove NAME              unregister the Target Device NAME
   cli.py scenario list [--app NAME]      the Scenarios of NAME (else the profile resolve
                                          finds) and the lab's own, each once with its source
   cli.py scenario set NAME...            make NAMEs the running lab's active Scenarios, in that
@@ -24,7 +28,8 @@ and LAB_SECRET for export, as proxy_cli passes them.
                                          a Recording as a HAR file (roxy export --help)
   cli.py run-id                          a fresh roxy launch run id
 
-The scenario commands print the active Scenarios after the change, as
+The device add and remove commands print what they changed, warnings on stderr, then a
+restart hint. The scenario commands print the active Scenarios after the change, as
 `scenario=A,B` (`scenario=none` for none). A refusal prints `error: ...` and exits 1; with the lab down, a Lab Session command prints
 the `lab: down (...)` line instead.
 """
@@ -44,6 +49,7 @@ from lab.app_profiles import AppProfileError, AppProfiles, ScenarioInBoth
 from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
+from lab.settings_root import CLOUD_DEVICE, SettingsRoot, SettingsRootError, ecp_device_info, rce_knows
 
 REFUSED = "refused: in both (rename the profile's)"
 REDACTED_SECRET = "<secret>"
@@ -76,6 +82,50 @@ def app_list(args):
         print("no App Profiles (roxy app new NAME, in an app's repo)")
     for name in names:
         print(f"{name:<20} {profiles.profile(name).repo}")
+
+
+def settings():
+    return SettingsRoot(settings_root(), ecp_device_info=ecp_device_info, rce_knows=rce_knows)
+
+
+def device_add(args):
+    root = settings()
+    if args.ip:
+        change = root.add_device(args.name, args.ip, proxied=args.proxied)
+    else:
+        change = root.add_cloud_device(args.name, args.rce_device_name, slug=args.slug)
+    device = next(device for device in root.devices() if device.name == args.name)
+    print(f"registered '{device.name}' ({device_address(device)}) as a {device.kind}")
+    print_change(change)
+
+
+def device_list(args):
+    devices = settings().devices()
+    if not devices:
+        print("no Target Devices (roxy device add NAME --ip IP)")
+    for device in devices:
+        print(f"{device.name:<20} {device_address(device):<36} {device.kind}")
+
+
+def device_remove(args):
+    change = settings().remove_device(args.name)
+    print(f"removed '{args.name}'")
+    print_change(change)
+
+
+def device_address(device):
+    """Where the lab finds DEVICE: its IP, or a Cloud Device's rce Device Name and slug."""
+    return f"rce {device.rce_device_name}, slug {device.slug}" if device.kind == CLOUD_DEVICE else device.ip
+
+
+def print_change(change):
+    """A Settings Root Change's notes, its warnings on stderr, then the restart hint: the
+    lab reads its settings when it starts."""
+    for note in change.notes:
+        print(note)
+    for warning in change.warnings:
+        print(f"warning: {warning}", file=sys.stderr)
+    print("restart the lab if it is running (roxy start), to use the change")
 
 
 def scenario_list(args):
@@ -257,6 +307,19 @@ def main():
     app_new_parser.add_argument("name")
     app_new_parser.set_defaults(run=app_new)
     app.add_parser("list").set_defaults(run=app_list)
+    device = commands.add_parser("device").add_subparsers(required=True)
+    device_add_parser = device.add_parser("add", prog="roxy device add")
+    device_add_parser.add_argument("name")
+    where = device_add_parser.add_mutually_exclusive_group(required=True)
+    where.add_argument("--ip")
+    where.add_argument("--rce", dest="rce_device_name", metavar="DEVICE_NAME")
+    device_add_parser.add_argument("--proxied", action="store_true")
+    device_add_parser.add_argument("--slug")
+    device_add_parser.set_defaults(run=device_add)
+    device.add_parser("list").set_defaults(run=device_list)
+    device_remove_parser = device.add_parser("remove")
+    device_remove_parser.add_argument("name")
+    device_remove_parser.set_defaults(run=device_remove)
     scenario = commands.add_parser("scenario").add_subparsers(required=True)
     scenario_list_parser = scenario.add_parser("list")
     scenario_list_parser.add_argument("--app")
@@ -290,11 +353,15 @@ def main():
     export_parser.set_defaults(run=export)
     commands.add_parser("run-id").set_defaults(run=run_id)
     args = parser.parse_args()
+    if args.run == device_add and args.proxied and not args.ip:
+        device_add_parser.error("--proxied goes with --ip")
+    if args.run == device_add and args.slug and args.ip:
+        device_add_parser.error("--slug goes with --rce")
     try:
         args.run(args)
     except LabDown:
         sys.exit(lab_down())
-    except (AppProfileError, LabSessionError, ExportRefused) as e:
+    except (AppProfileError, SettingsRootError, LabSessionError, ExportRefused) as e:
         sys.exit("\n".join(f"error: {line}" for line in str(e).splitlines()))
 
 
