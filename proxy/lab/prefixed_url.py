@@ -11,7 +11,7 @@ the rewriters reach build through prefixed_for_client.
 
 It also owns where a flow keeps its client's Proxy Base and separator:
 remember_client writes them, client_proxy_base reads them; and whether the
-flow arrived as a Nested Prefixed URL: mark_double_prefixed, double_prefixed.
+flow arrived as a Nested Prefixed URL: strip_nested marks it, double_prefixed reads it.
 """
 
 import re
@@ -74,13 +74,23 @@ def remember_client(flow, parsed):
     flow.metadata["separator"] = parsed.separator
 
 
-def mark_double_prefixed(flow):
-    """Keep that `flow` arrived as a Nested Prefixed URL, which the Origin decoder unwrapped."""
-    flow.metadata["lab_double_prefixed"] = True
+def strip_nested(flow, parsed):
+    """The PrefixedUrl `parsed`, that `flow` arrived as, stripped back to the real Origin.
+
+    While its Origin URL is itself a Prefixed URL with the same Proxy Base (an app that
+    prefixed a URL twice, in either form, at any depth), the inner Origin URL replaces it,
+    and the flow is marked double-prefixed. The Proxy Base and separator stay the client's.
+    A nested Prefixed URL with another Proxy Base stays: the guards judge it, and the lab
+    never fetches through another proxy.
+    """
+    while (inner := parse_prefixed_url(parsed.origin_url)) and inner.proxy_base == parsed.proxy_base:
+        parsed = parsed._replace(origin_url=inner.origin_url)
+        flow.metadata["lab_double_prefixed"] = True  # a plain value: Recordings keep it
+    return parsed
 
 
 def double_prefixed(flow):
-    """True if `flow` arrived as a Nested Prefixed URL (mark_double_prefixed)."""
+    """True if `flow` arrived as a Nested Prefixed URL (strip_nested)."""
     return flow.metadata.get("lab_double_prefixed", False)
 
 

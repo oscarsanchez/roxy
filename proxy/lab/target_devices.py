@@ -50,8 +50,8 @@ def annotate(flow, applied):
     is marked unless it has a mark (a refusal keeps its own). Nothing reads the comment
     back; the mark narrows what roxy status fetches (LabSession.scenario_rules)."""
     device = target_device(flow)
-    nested = double_prefixed(flow) and "double-prefixed"
-    flow.comment = " | ".join(filter(None, [device and device.name, ", ".join(applied), nested]))
+    double_prefixed_label = "double-prefixed" if double_prefixed(flow) else None
+    flow.comment = " | ".join(filter(None, [device and device.name, ", ".join(applied), double_prefixed_label]))
     if applied:
         flow.marked = flow.marked or ":test_tube:"
 

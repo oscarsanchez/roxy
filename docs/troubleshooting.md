@@ -63,8 +63,8 @@ Setup still finishes; each warning says what is left:
 ## A flow is marked double-prefixed
 
 Its mitmweb comment ends in `double-prefixed`, and `roxy flows --json` shows `"double_prefixed": true`. The flow itself succeeded.
-**Cause:** the app put the Proxy Base in front of a URL that already had it (a Nested Prefixed URL): its Charles hook or URL wrapper runs on every URL, including ones the lab already rewrote in a response, or a config value already carries the Proxy Base. The lab strips the extra Proxy Base and serves the real Origin, as Charles does over two hops ([Nested Prefixed URLs](prefix-routing.md#nested-prefixed-urls)).
-**Fix:** in the app, fix the "already prefixed?" check, so a URL that starts with the Proxy Base, in either form (`/` or `/;`), is left alone. The kit does this already ([The kit](prefix-routing.md#the-kit-apps-without-a-charles-hook)). A nested Prefixed URL with another Proxy Base is not unwrapped: it shows as a refusal (`origin-address`, or `origin-host` on the Public Endpoint).
+**Cause:** the app put the Proxy Base in front of a URL that already had it (a Nested Prefixed URL): its Charles hook or URL helper runs on every URL, including ones the lab already rewrote in a response, or a config value already carries the Proxy Base. The lab strips the extra Proxy Base and serves the real Origin, as Charles does over two hops ([Nested Prefixed URLs](prefix-routing.md#nested-prefixed-urls)).
+**Fix:** in the app, fix the "already prefixed?" check, so a URL that starts with the Proxy Base, in either form (`/` or `/;`), is left alone. The kit does this already ([The kit](prefix-routing.md#the-kit-apps-without-a-charles-hook)). A nested Prefixed URL with another Proxy Base is not stripped: it shows as a refusal (`origin-address`, or `origin-host` on the Public Endpoint).
 
 ## A Scenario seems to do nothing
 

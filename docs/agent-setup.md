@@ -52,4 +52,4 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 | `duration_ms` | from the request's start to the response's end at the client (a `throttle` rule's pacing included), `null` without a complete response |
 | `refusal` | the reason the lab refused it (its `X-Lab-Blocked` value, such as `origin-address`), `null` if it did not; an `X-Lab-Blocked` header from an Origin or a Scenario is not a refusal |
 | `scenario_rules` | the active Scenarios' rules that acted on it, each named `<scenario>/<rule>`, in the order they first did; `[]` for none |
-| `double_prefixed` | `true` if the request arrived as a Nested Prefixed URL (the app prefixed a URL twice, [Prefix Routing guide](prefix-routing.md#nested-prefixed-urls)), which the lab unwrapped to the Origin; `false` otherwise |
+| `double_prefixed` | `true` if the request arrived as a Nested Prefixed URL (the app prefixed a URL twice, [Prefix Routing guide](prefix-routing.md#nested-prefixed-urls)), which the lab stripped back to the Origin; `false` otherwise |

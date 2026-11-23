@@ -1,5 +1,5 @@
 """Nested Prefixed URLs: an app that prefixed a URL twice reaches the real Origin, marked
-double-prefixed. Only a Prefixed URL nested with the client's own Proxy Base is unwrapped."""
+double-prefixed. Only a Prefixed URL nested with the client's own Proxy Base is stripped."""
 
 import pytest
 from mitmproxy import http
@@ -42,58 +42,74 @@ def test_a_url_prefixed_three_times_reaches_the_real_origin_marked():
 
     assert forwarded.url == "https://httpbin.org/json?a=1"
     assert flow.comment == "Living Room | double-prefixed"
+    [summary] = flows_summary(flow)
+    assert summary["double_prefixed"] is True
 
 
-def test_a_nested_prefixed_url_through_the_public_endpoint_reaches_the_real_origin_marked():
-    flow = tunnel_flow(f"/{SECRET}/cloud-device/{CLOUD_PROXY_BASE}/;https://httpbin.org/json")
+@pytest.mark.parametrize(
+    "path",
+    [
+        f"/{SECRET}/cloud-device/{CLOUD_PROXY_BASE}/;https://httpbin.org/json",  # twice
+        f"/{SECRET}/cloud-device/;{CLOUD_PROXY_BASE}/{CLOUD_PROXY_BASE}/;https://httpbin.org/json",  # three times
+    ],
+)
+def test_a_nested_prefixed_url_through_the_public_endpoint_reaches_the_real_origin_marked(path):
+    flow = tunnel_flow(path)
 
     forwarded = run_chain(flow, origin_json(), **TUNNEL_OPTIONS)
 
     assert forwarded.url == "https://httpbin.org/json"
     assert flow.comment == "Cloud Device | double-prefixed"
-    assert [summary["double_prefixed"] for summary in flows_summary(flow)] == [True]
+    [summary] = flows_summary(flow)
+    assert summary["double_prefixed"] is True
 
 
 @pytest.mark.parametrize(
-    "nested_base",
+    "nested_base, host",
     [
-        "http://192.0.2.10:8888",  # this Mac, another port
-        "http://192.0.2.11:8080",  # another Mac
+        ("http://192.0.2.10:8888", "192.0.2.10"),  # this Mac, another port
+        ("http://192.0.2.11:8080", "192.0.2.11"),  # another Mac
     ],
 )
-def test_a_nested_prefixed_url_with_another_proxy_base_is_refused_as_its_origin(dns, nested_base):
-    """The lab never fetches through another proxy: the nested Proxy Base is the Origin."""
-    host = nested_base.removeprefix("http://").split(":")[0]
+def test_a_nested_prefixed_url_with_another_proxy_base_is_refused_as_its_origin(dns, nested_base, host):
+    """The lab never fetches through another proxy: the nested Proxy Base is taken for the Origin."""
     dns[host] = [host]  # an IP literal resolves to itself
     flow = lab_flow(f"/{nested_base}/https://httpbin.org/json")
 
     forwarded = run_chain(flow, origin_json())
 
     assert_refused(flow, forwarded, "origin-address")
-    assert [summary["double_prefixed"] for summary in flows_summary(flow)] == [False]
+    [summary] = flows_summary(flow)
+    assert summary["double_prefixed"] is False
 
 
 def test_a_nested_prefixed_url_with_another_cloud_devices_slug_is_refused_through_the_public_endpoint():
     flow = tunnel_flow(f"/{SECRET}/cloud-device/https://{TUNNEL_HOST}/{SECRET}/other-device/https://httpbin.org/json")
 
     assert_refused(flow, run_chain(flow, origin_json(), **TUNNEL_OPTIONS), "origin-host")
+    [summary] = flows_summary(flow)
+    assert summary["double_prefixed"] is False
 
 
-def test_a_prefixed_url_in_the_query_is_not_unwrapped():
+def test_a_prefixed_url_in_the_query_is_not_stripped():
     origin_url = f"https://httpbin.org/redirect-to?url={LAN_PROXY_BASE}/https://httpbin.org/json"
     flow = lab_flow(f"/{origin_url}")
 
     forwarded = run_chain(flow, origin_json())
 
     assert forwarded.url == origin_url
-    assert [summary["double_prefixed"] for summary in flows_summary(flow)] == [False]
+    [summary] = flows_summary(flow)
+    assert summary["double_prefixed"] is False
 
 
-def test_a_private_real_origin_in_a_nested_prefixed_url_is_refused(dns):
+def test_a_private_real_origin_in_a_nested_prefixed_url_is_refused_and_marked(dns):
     dns["router.example"] = ["192.0.2.200"]
     flow = lab_flow(f"/{LAN_PROXY_BASE}/http://router.example/admin")
 
     assert_refused(flow, run_chain(flow, origin_json()), "origin-address")
+    assert flow.comment == "Living Room | double-prefixed"
+    [summary] = flows_summary(flow)
+    assert (summary["url"], summary["double_prefixed"]) == ("http://router.example/admin", True)
 
 
 def test_urls_in_the_response_are_prefixed_once_in_the_form_the_client_used():
@@ -127,4 +143,5 @@ def test_an_ordinary_flow_is_not_double_prefixed():
     run_chain(flow, origin_json())
 
     assert flow.comment == "Living Room"
-    assert [summary["double_prefixed"] for summary in flows_summary(flow)] == [False]
+    [summary] = flows_summary(flow)
+    assert summary["double_prefixed"] is False
