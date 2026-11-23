@@ -142,6 +142,13 @@ def test_the_state_of_a_lab_without_either_is_none_and_no_scenarios():
     assert (state.app, state.scenarios, state.ca_routing) == (None, [], False)
 
 
+def test_a_lab_started_before_proxy_routing_has_no_proxy_routing_listener():
+    lab = FakeMitmweb()
+    del lab.options["lab_proxy_routing_port"]  # a lab started before Proxy Routing existed
+
+    assert LabSession(lab).state().proxy_routing_port == 0
+
+
 EVERY_OPERATION = {
     "state": lambda session: session.state(),
     "set_scenarios": lambda session: session.set_scenarios(["json-503"]),
