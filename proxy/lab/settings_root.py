@@ -65,6 +65,14 @@ class Change(NamedTuple):
     warnings: list
 
 
+class SetupValues(NamedTuple):
+    lan_subnets: list | None
+    this_mac_only: str | None
+    this_mac_network: str | None
+    roku_user: str | None
+    roku_password_set: bool
+
+
 class SettingsRoot:
     def __init__(self, root, *, ecp_device_info, rce_knows, this_mac, new_secret):
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
@@ -132,11 +140,13 @@ class SettingsRoot:
         self._save(registry, settings)
         return Change(notes, [])
 
-    def setup(self, *, trusted_network=None):
+    def setup(self, *, trusted_network=None, roku_user=None, roku_password=None):
         """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
-        when there is none, and lan_subnets for the network this Mac is on, when there are
+        when there is none; lan_subnets for the network this Mac is on, when there are
         none, they are the examples', or TRUSTED_NETWORK (True: the Mac's whole subnet;
-        False: the Mac's /32) chooses. Returns the Change."""
+        False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default: the
+        examples') and ROKU_PASSWORD, each when given. A Roku password there is none of is
+        a warning: only the user can give it. Returns the Change."""
         settings, notes, warnings = self._lan_setup(trusted_network)
         if settings is not None:
             _write(self.settings_file, settings)
@@ -147,21 +157,58 @@ class SettingsRoot:
             notes.append(f"generated MITMWEB_PASSWORD (in {self.secrets_file}; the mitmweb UI asks for it)")
         else:
             notes.append("kept MITMWEB_PASSWORD")
+        if roku_user or not env.get("ROKU_DEV_USER"):
+            changes["ROKU_DEV_USER"] = roku_user or _read_env(EXAMPLES / "secrets.env")["ROKU_DEV_USER"]
+            notes.append(f"ROKU_DEV_USER: {changes['ROKU_DEV_USER']}")
+        else:
+            notes.append(f"kept ROKU_DEV_USER: {env['ROKU_DEV_USER']}")
+        if roku_password:
+            changes["ROKU_DEV_PASSWORD"] = roku_password
+            notes.append("set ROKU_DEV_PASSWORD")
+        elif env.get("ROKU_DEV_PASSWORD"):
+            notes.append("kept ROKU_DEV_PASSWORD")
+        else:
+            warnings.append(
+                "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
+            )
         _write_env(self.secrets_file, changes)
         return Change(notes, warnings)
+
+    def setup_values(self):
+        """What setup would keep, for a person to confirm or change: the lan_subnets (None:
+        none, or the examples'), this Mac's /32 and its whole subnet (None: on no network),
+        ROKU_DEV_USER and whether there is a ROKU_DEV_PASSWORD. Never a secret."""
+        settings, networks = self._lan_subnets()
+        mac = self._mac()
+        env = _read_env(self.secrets_file)
+        return SetupValues(
+            settings["lan_subnets"] if self._set_up(networks) else None,
+            mac and str(ip_network(mac.ip)),
+            mac and str(mac.network),
+            env.get("ROKU_DEV_USER"),
+            bool(env.get("ROKU_DEV_PASSWORD")),
+        )
+
+    def _set_up(self, networks):
+        """Whether the lan_subnets NETWORKS are the user's own: some, and none the examples'."""
+        examples = [ip_network(subnet) for subnet in self._read(EXAMPLES / "settings.json")["lan_subnets"]]
+        return bool(networks) and not set(networks) & set(examples)
+
+    def _mac(self):
+        """This Mac's address on its network, as an interface (None: on no network)."""
+        mac = self.this_mac()
+        return mac and ip_interface("/".join(mac))
 
     def _lan_setup(self, trusted_network):
         """settings.json with lan_subnets for this Mac (None: kept as they are), and the
         note and warnings saying so. The Mac's entry replaces them, keeping each registered
         device's /32 it does not cover."""
         settings, networks = self._lan_subnets()
-        examples = [ip_network(subnet) for subnet in self._read(EXAMPLES / "settings.json")["lan_subnets"]]
-        if trusted_network is None and networks and not set(networks) & set(examples):
+        if trusted_network is None and self._set_up(networks):
             return None, [f"kept lan_subnets: {', '.join(settings['lan_subnets'])}"], []
-        mac = self.this_mac()
+        mac = self._mac()
         if mac is None:
             return None, [], ["could not find this Mac's address: lan_subnets left as they are"]
-        mac = ip_interface("/".join(mac))
         entry = mac.network if trusted_network else ip_network(mac.ip)
         device_ips = {ip_address(device.ip) for device in self.devices() if device.ip}
         kept = [

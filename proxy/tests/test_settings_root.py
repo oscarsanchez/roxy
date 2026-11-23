@@ -385,3 +385,50 @@ def test_setup_off_any_network_leaves_lan_subnets_and_warns(root, settings, mac)
 
     assert settings_file(settings) == before
     assert "could not find this Mac's address: lan_subnets left as they are" in change.warnings
+
+
+def test_setup_takes_the_roku_developer_login_and_never_says_the_password(root, settings):
+    password = "p a$s'w\"rd"
+
+    change = root.setup(roku_user="dev", roku_password=password)
+
+    assert (secrets_env(settings)["ROKU_DEV_USER"], secrets_env(settings)["ROKU_DEV_PASSWORD"]) == ("dev", password)
+    assert password not in said(change)
+    assert {"ROKU_DEV_USER: dev", "set ROKU_DEV_PASSWORD"} <= set(change.notes)
+
+
+def test_setup_without_a_roku_password_hands_that_step_to_the_user(root, settings):
+    change = root.setup()
+
+    assert secrets_env(settings)["ROKU_DEV_PASSWORD"] == ""
+    assert change.warnings == [
+        "no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup in a terminal, or pipes it to roxy setup"
+    ]
+
+
+def test_a_rerun_keeps_the_roku_login(root, settings):
+    root.setup(roku_user="dev", roku_password="first")
+
+    change = root.setup()
+
+    assert (secrets_env(settings)["ROKU_DEV_USER"], secrets_env(settings)["ROKU_DEV_PASSWORD"]) == ("dev", "first")
+    assert {"kept ROKU_DEV_USER: dev", "kept ROKU_DEV_PASSWORD"} <= set(change.notes)
+    assert change.warnings == []
+
+
+def test_setup_gives_the_roku_user_its_default_when_there_is_none(root, settings):
+    (settings / "secrets.env").write_text("MITMWEB_PASSWORD=\n")
+
+    root.setup()
+
+    assert secrets_env(settings)["ROKU_DEV_USER"] == "rokudev"
+
+
+def test_the_values_setup_would_keep_show_no_secret_and_no_example(root, settings):
+    assert root.setup_values() == (None, "198.51.100.23/32", "198.51.100.0/24", "rokudev", False)
+
+    root.setup(roku_password="first")
+
+    values = root.setup_values()
+    assert values == (["198.51.100.23/32"], "198.51.100.23/32", "198.51.100.0/24", "rokudev", True)
+    assert "first" not in repr(values)
