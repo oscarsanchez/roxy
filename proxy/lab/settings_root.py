@@ -32,6 +32,10 @@ from xml.etree import ElementTree
 
 # The examples roxy 0.2.0's install.sh seeded a settings root with: their values are no settings.
 EXAMPLES = Path(__file__).resolve().parents[2] / "settings.example"
+# The documentation ranges the examples' addresses are on: a device or lan_subnets entry on
+# one is an example value, never the user's own.
+DOCUMENTATION_RANGES = [ip_network(r) for r in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24")]
+ROKU_DEV_USER = "rokudev"  # the Roku developer web server's user: every Roku's own
 LAN_INTERFACE = Path(__file__).resolve().parents[2] / "scripts" / "lan-interface"  # the Mac's LAN interface
 PHYSICAL_DEVICE = "Physical Device"
 CLOUD_DEVICE = "Cloud Device"
@@ -113,8 +117,8 @@ class SettingsRoot:
     ):
         """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
         fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
-        `rce device resolve` knows it; THIS_MAC(), this Mac's address and netmask (None: it
-        is on no network); NEW_SECRET(), a new random secret; SSDP_ROKUS(), the IPs
+        `rce device resolve` knows it; THIS_MAC(), this Mac's address on its network, an
+        IPv4Interface (None: it is on no network); NEW_SECRET(), a new random secret; SSDP_ROKUS(), the IPs
         answering an SSDP search for roku:ecp on the LAN; HAS_TOOL(command), whether COMMAND
         is on the PATH; RCE_TOKEN_WORKS(), whether `rce token status` works."""
         self.devices_file = Path(root) / "devices.json"
@@ -140,11 +144,11 @@ class SettingsRoot:
         lan_subnets if they don't cover it. A Roku that does not answer ECP, or is not in
         developer mode, is registered with a warning: it may merely be off today. Returns
         the Change."""
-        registry = self._new_name(name)
         try:
             ip = str(ip_address(ip))
         except ValueError:
             raise BadDevice(f"not an IP address: {ip!r}") from None
+        registry = self._new_name(name, ip)
         settings, notes = self._allowing(ip)
         registry[name] = {"ip": ip, "kind": "proxied"} if proxied else {"ip": ip}
         self._save(registry, settings)
@@ -184,12 +188,14 @@ class SettingsRoot:
     def setup(self, *, trusted_network=None, roku_user=None, roku_password=None, cloud=False):
         """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
         when there is none; lan_subnets for the network this Mac is on, when there are
-        none, they are the examples', or TRUSTED_NETWORK (True: the Mac's whole subnet;
-        False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default: the
-        examples') and ROKU_PASSWORD, each when given. A Roku password there is none of is
+        none, any is an example value, or TRUSTED_NETWORK (True: the Mac's whole subnet;
+        False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default:
+        ROKU_DEV_USER) and ROKU_PASSWORD, each when given. The example devices go. A Roku password there is none of is
         a warning: only the user can give it. With CLOUD, for Cloud Devices too: a new
         LAB_SECRET when there is none. Returns the Change."""
-        settings, notes, warnings = self._lan_setup(trusted_network)
+        notes = self._drop_example_devices()
+        settings, lan_notes, warnings = self._lan_setup(trusted_network)
+        notes += lan_notes
         if settings is not None:
             _write(self.settings_file, settings)
         env = _read_env(self.secrets_file)
@@ -200,7 +206,7 @@ class SettingsRoot:
         else:
             notes.append("kept MITMWEB_PASSWORD")
         if roku_user or not env.get("ROKU_DEV_USER"):
-            changes["ROKU_DEV_USER"] = roku_user or _example_roku_user()
+            changes["ROKU_DEV_USER"] = roku_user or ROKU_DEV_USER
             notes.append(f"ROKU_DEV_USER: {changes['ROKU_DEV_USER']}")
         else:
             notes.append(f"kept ROKU_DEV_USER: {env['ROKU_DEV_USER']}")
@@ -241,37 +247,35 @@ class SettingsRoot:
     def setup_values(self):
         """What setup would keep, for a person to confirm or change: the lan_subnets (None:
         none, or the examples'), this Mac's /32 and its whole subnet (None: on no network),
-        ROKU_DEV_USER (default: the examples') and whether there is a ROKU_DEV_PASSWORD.
+        ROKU_DEV_USER (default: ROKU_DEV_USER) and whether there is a ROKU_DEV_PASSWORD.
         Never a secret."""
         settings, networks = self._lan_subnets()
-        mac = self._mac()
+        mac = self.this_mac()
         env = _read_env(self.secrets_file)
         return SetupValues(
-            settings["lan_subnets"] if self._set_up(networks) else None,
+            settings["lan_subnets"] if _users_own(networks) else None,
             mac and str(ip_network(mac.ip)),
             mac and str(mac.network),
-            env.get("ROKU_DEV_USER") or _example_roku_user(),
+            env.get("ROKU_DEV_USER") or ROKU_DEV_USER,
             bool(env.get("ROKU_DEV_PASSWORD")),
         )
 
-    def _set_up(self, networks):
-        """Whether the lan_subnets NETWORKS are the user's own: some, and none the examples'."""
-        examples = [ip_network(subnet) for subnet in self._read(EXAMPLES / "settings.json")["lan_subnets"]]
-        return bool(networks) and not set(networks) & set(examples)
-
-    def _mac(self):
-        """This Mac's address on its network, as an interface (None: on no network)."""
-        mac = self.this_mac()
-        return mac and ip_interface("/".join(mac))
+    def _drop_example_devices(self):
+        """Unregister the example devices (_example), with a note for each."""
+        registry = self._read(self.devices_file)
+        examples = [name for name, entry in registry.items() if _example(entry)]
+        if examples:
+            _write(self.devices_file, {name: e for name, e in registry.items() if name not in examples})
+        return [f"removed the example device {name!r}" for name in examples]
 
     def _lan_setup(self, trusted_network):
         """settings.json with lan_subnets for this Mac (None: kept as they are), and the
         note and warnings saying so. The Mac's entry replaces them, keeping each registered
         device's /32 it does not cover."""
         settings, networks = self._lan_subnets()
-        if trusted_network is None and self._set_up(networks):
+        if trusted_network is None and _users_own(networks):
             return None, [f"kept lan_subnets: {', '.join(settings['lan_subnets'])}"], []
-        mac = self._mac()
+        mac = self.this_mac()
         if mac is None:
             return None, [], ["could not find this Mac's address: lan_subnets left as they are"]
         entry = mac.network if trusted_network else ip_network(mac.ip)
@@ -328,11 +332,18 @@ class SettingsRoot:
             return [f"{name} ({ip}) is not in developer mode: registered anyway (deploy and launch need it)"]
         return []
 
-    def _new_name(self, name):
-        """The device registry, once NAME is known to be a new device name."""
+    def _new_name(self, name, ip=None):
+        """The device registry, once NAME is known to be a new device name; a device NAME
+        at an address other than IP is refused saying how to move it."""
         if not name.strip():
             raise BadDevice("a device needs a name")
         registry = self._read(self.devices_file)
+        held = registry.get(name, {}).get("ip")
+        if ip and held and held != ip:
+            raise DeviceExists(
+                f"the device {name!r} is registered at {held}: roxy device remove {_double_quoted(name)} first,"
+                f" then add it at {ip}"
+            )
         if name in registry:
             raise DeviceExists(f"the device {name!r} already exists (roxy device list shows them)")
         return registry
@@ -415,9 +426,9 @@ def rce_token_works():
 
 
 def this_mac():
-    """This Mac's address and netmask on its LAN interface, past any VPN, as `ipconfig` gives
-    them; the interface is the one scripts/lan-interface finds (as lan_ip in scripts/lib.sh
-    does). None when it is on no network."""
+    """This Mac's address on its LAN interface, past any VPN, as an IPv4Interface from what
+    `ipconfig` gives; the interface is the one scripts/lan-interface finds (as lan_ip in
+    scripts/lib.sh does). None when it is on no network."""
 
     def run(*command):
         answer = subprocess.run(command, capture_output=True, text=True)
@@ -426,7 +437,7 @@ def this_mac():
     interface = run(str(LAN_INTERFACE))
     address = interface and run("ipconfig", "getifaddr", interface)
     netmask = address and run("ipconfig", "getoption", interface, "subnet_mask")
-    return (address, netmask) if netmask else None
+    return ip_interface(f"{address}/{netmask}") if netmask else None
 
 
 def new_secret():
@@ -472,6 +483,28 @@ def _double_quoted(text):
     return '"' + re.sub(r'([\\"$`])', r"\\\1", text) + '"'
 
 
+def _example(entry):
+    """Whether the devices.json ENTRY is an example value: on a documentation range, or the
+    examples' Cloud Device."""
+    if "ip" in entry:
+        try:
+            return _documentation(ip_network(entry["ip"]))
+        except ValueError:
+            return False
+    examples = SettingsRoot._read(EXAMPLES / "devices.json").values()
+    return entry in [example for example in examples if "rce_device_name" in example]
+
+
+def _users_own(networks):
+    """Whether the lan_subnets NETWORKS are the user's own: some, and none an example value."""
+    return bool(networks) and not any(_documentation(network) for network in networks)
+
+
+def _documentation(network):
+    """Whether NETWORK lies inside a documentation range."""
+    return network.version == 4 and any(network.subnet_of(r) for r in DOCUMENTATION_RANGES)
+
+
 def _kind(entry):
     """A devices.json entry's kind of Target Device."""
     if "rce_device_name" in entry:
@@ -498,11 +531,6 @@ def _replace(file, text, mode):
     with os.fdopen(os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode), "w") as out:
         out.write(text)
     draft.replace(file)
-
-
-def _example_roku_user():
-    """The Roku developer web server's user the examples give, every Roku's own default."""
-    return _read_env(EXAMPLES / "secrets.env")["ROKU_DEV_USER"]
 
 
 ENV_LINE = re.compile(r"([A-Za-z_][A-Za-z0-9_]*)=(.*)")

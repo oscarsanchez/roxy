@@ -10,6 +10,7 @@ import itertools
 import json
 import os
 import subprocess
+from ipaddress import ip_interface
 from pathlib import Path
 
 import pytest
@@ -33,8 +34,8 @@ def rce():
 
 @pytest.fixture
 def mac():
-    """This Mac's address and netmask, as mac[0]; None: it is on no network."""
-    return [("198.51.100.23", "255.255.255.0")]
+    """This Mac's address on its network, as mac[0]; None: it is on no network."""
+    return [ip_interface("10.0.0.23/24")]
 
 
 @pytest.fixture
@@ -153,6 +154,19 @@ def test_add_refuses_a_name_that_exists_or_is_blank(root, settings, name, refusa
     with pytest.raises(refusal):
         root.add_device(name, "192.0.2.70")
 
+    assert devices_file(settings) == before
+
+
+def test_add_of_a_name_registered_at_another_ip_says_where_and_how_to_move_it(root, settings):
+    before = devices_file(settings)
+
+    with pytest.raises(DeviceExists) as refused:
+        root.add_device("Living Room", "192.0.2.70")
+
+    assert str(refused.value) == (
+        "the device 'Living Room' is registered at 192.0.2.54: roxy device remove \"Living Room\" first,"
+        " then add it at 192.0.2.70"
+    )
     assert devices_file(settings) == before
 
 
@@ -321,8 +335,8 @@ def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_changing_nothing(root,
     assert settings_file(settings) == {"lan_subnets": ["my LAN"]}
 
 
-# roxy setup: the secrets and lan_subnets for this Mac (faked: 198.51.100.23, netmask
-# 255.255.255.0), keeping what is there and replacing the examples' values.
+# roxy setup: the secrets and lan_subnets for this Mac (faked: 10.0.0.23/24), keeping what
+# is there and replacing the examples' values.
 
 SECRET_NAMES = ("MITMWEB_PASSWORD", "LAB_SECRET", "ROKU_DEV_USER", "ROKU_DEV_PASSWORD")
 
@@ -380,43 +394,92 @@ def test_setup_into_a_settings_root_without_secrets_env_creates_it_private(tmp_p
 def test_setup_allows_only_this_mac_by_default_in_place_of_the_examples_subnet(root, settings):
     change = root.setup()
 
-    assert settings_file(settings)["lan_subnets"] == ["198.51.100.23/32"]
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32"]
     assert settings_file(settings)["grid_devices"]["physical"] == "Living Room"
-    assert "lan_subnets: 198.51.100.23/32 (this Mac only)" in change.notes
+    assert "lan_subnets: 10.0.0.23/32 (this Mac only)" in change.notes
 
 
 def test_setup_on_a_trusted_network_allows_this_macs_whole_subnet(root, settings):
     change = root.setup(trusted_network=True)
 
-    assert settings_file(settings)["lan_subnets"] == ["198.51.100.0/24"]
-    assert "lan_subnets: 198.51.100.0/24 (this Mac's network, trusted)" in change.notes
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.0/24"]
+    assert "lan_subnets: 10.0.0.0/24 (this Mac's network, trusted)" in change.notes
 
 
 def test_a_rerun_keeps_the_lan_subnets_there_are(root, settings, mac):
     root.setup(trusted_network=True)
-    mac[0] = ("203.0.113.5", "255.255.255.0")
+    mac[0] = ip_interface("10.2.0.5/24")
 
     change = root.setup()
 
-    assert settings_file(settings)["lan_subnets"] == ["198.51.100.0/24"]
-    assert "kept lan_subnets: 198.51.100.0/24" in change.notes
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.0/24"]
+    assert "kept lan_subnets: 10.0.0.0/24" in change.notes
 
 
 def test_setup_replaces_the_examples_subnet_keeping_each_devices_32_beside_it(root, settings):
-    root.add_device("Den", "203.0.113.9")
+    root.add_device("Den", "10.1.0.9")
 
     root.setup()
 
-    assert settings_file(settings)["lan_subnets"] == ["198.51.100.23/32", "203.0.113.9/32"]
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
 
 
 def test_a_network_choice_replaces_lan_subnets_keeping_each_devices_32(root, settings):
     root.setup(trusted_network=True)
-    root.add_device("Den", "203.0.113.9")
+    root.add_device("Den", "10.1.0.9")
 
     root.setup(trusted_network=False)
 
-    assert settings_file(settings)["lan_subnets"] == ["198.51.100.23/32", "203.0.113.9/32"]
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
+
+
+def test_setup_removes_the_examples_devices_and_says_so(root, settings):
+    root.add_device("Den", "10.1.0.9")
+
+    change = root.setup()
+
+    assert devices_file(settings) == {"Den": {"ip": "10.1.0.9"}}
+    assert {
+        "removed the example device 'Living Room'",
+        "removed the example device 'Cloud Device'",
+        "removed the example device 'Phone'",
+    } <= set(change.notes)
+
+
+def test_a_device_on_a_documentation_range_or_the_examples_cloud_device_is_an_example(root, settings):
+    (settings / "devices.json").write_text(
+        json.dumps({
+            "Den": {"ip": "203.0.113.9"},
+            "Kids": {"ip": "198.51.100.7", "kind": "proxied"},
+            "Player": {"rce_device_name": "player", "slug": "cloud-device"},
+            "Office": {"ip": "10.1.0.9"},
+            "Stick": {"rce_device_name": "office-player", "slug": "stick"},
+        })
+    )
+
+    root.setup()
+
+    assert list(devices_file(settings)) == ["Office", "Stick"]
+
+
+def test_a_rerun_with_nothing_left_of_the_examples_keeps_the_devices(root, settings):
+    root.setup()
+    root.add_device("Den", "10.1.0.9")
+    before = (settings / "devices.json").read_text()
+
+    change = root.setup()
+
+    assert (settings / "devices.json").read_text() == before
+    assert not [note for note in change.notes if "example" in note]
+
+
+@pytest.mark.parametrize("subnet", ["203.0.113.0/25", "198.51.100.7/32", "192.0.2.0/24"])
+def test_a_lan_subnets_entry_inside_a_documentation_range_is_an_example(root, settings, subnet):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["10.0.0.0/24", subnet]}))
+
+    root.setup()
+
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32"]
 
 
 def test_setup_off_any_network_leaves_lan_subnets_and_warns(root, settings, mac):
@@ -527,12 +590,12 @@ def test_setup_without_cloud_devices_says_nothing_of_them(root, settings, on_pat
 
 
 def test_the_values_setup_would_keep_show_no_secret_and_no_example(root, settings):
-    assert root.setup_values() == (None, "198.51.100.23/32", "198.51.100.0/24", "rokudev", False)
+    assert root.setup_values() == (None, "10.0.0.23/32", "10.0.0.0/24", "rokudev", False)
 
     root.setup(roku_password="first")
 
     values = root.setup_values()
-    assert values == (["198.51.100.23/32"], "198.51.100.23/32", "198.51.100.0/24", "rokudev", True)
+    assert values == (["10.0.0.23/32"], "10.0.0.23/32", "10.0.0.0/24", "rokudev", True)
     assert "first" not in repr(values)
 
 
@@ -629,7 +692,8 @@ def test_a_roku_found_under_a_name_that_exists_is_left_with_a_warning_and_the_ne
     assert devices_file(settings)["Living Room"] == {"ip": "192.0.2.54"}
     assert devices_file(settings)["Kids"] == {"ip": "198.51.100.8"}
     assert change.warnings[0] == (
-        "198.51.100.7 not registered: the device 'Living Room' already exists (roxy device list shows them)"
+        "198.51.100.7 not registered: the device 'Living Room' is registered at 192.0.2.54:"
+        ' roxy device remove "Living Room" first, then add it at 198.51.100.7'
     )
 
 
@@ -661,13 +725,13 @@ def test_this_mac_is_its_wi_fi_address_past_a_vpn_holding_the_default_route(mac_
     mac_network.setenv("FAKE_DEFAULT_ROUTE", "utun4")
     mac_network.setenv("FAKE_MAC_ADDRESSES", "utun4=203.0.113.5 bridge0=203.0.113.6 en0=192.0.2.10")
 
-    assert this_mac() == ("192.0.2.10", "255.255.255.0")
+    assert this_mac() == ip_interface("192.0.2.10/24")
 
 
 def test_this_mac_with_ethernet_and_wi_fi_up_is_the_first_in_the_service_order(mac_network):
     mac_network.setenv("FAKE_MAC_ADDRESSES", "en0=192.0.2.10 en5=192.0.2.20")
 
-    assert this_mac() == ("192.0.2.20", "255.255.255.0")
+    assert this_mac() == ip_interface("192.0.2.20/24")
 
 
 def test_this_mac_with_only_a_vpn_up_is_on_no_network(mac_network):

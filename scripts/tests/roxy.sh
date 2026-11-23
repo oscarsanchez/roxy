@@ -380,7 +380,7 @@ refuses_device() {
   case "$err" in *"$want"*) ;; *) fail "device $* said: $err" ;; esac
   [ "$(cat "$ROXY_CONFIG_DIR/devices.json")" = "$before" ] || fail "device $* changed devices.json"
 }
-refuses_device "error: the device 'Tablet' already exists" add Tablet --ip 192.0.2.82
+refuses_device "error: the device 'Tablet' is registered at 192.0.2.80: roxy device remove \"Tablet\" first" add Tablet --ip 192.0.2.82
 refuses_device "error: not an IP address: '192.0.2'" add Hall --ip 192.0.2
 refuses_device "error: unknown device 'Den'" remove Den
 refuses_device "--proxied goes with --ip" add Hall --rce hall-player --proxied
@@ -645,34 +645,38 @@ shown="$(LAB_SECRET=test-secret bash -c '. "$1"; redact_secret "$2"' lab "$REPO/
 echo "ok: redact_secret and export --har show the lab secret alike"
 
 # setup, with no terminal, in its own settings root seeded from the examples, the Mac at
-# 198.51.100.23/24: one smoke check per way in. proxy/tests/test_settings_root.py covers
+# 10.0.0.23/24 (off the documentation ranges, whose addresses are example values): one
+# smoke check per way in. proxy/tests/test_settings_root.py covers
 # what setup keeps and replaces at SettingsRoot's interface.
-setup() { ROXY_CONFIG_DIR="$TMP/setup-settings" FAKE_MAC_ADDRESSES="${FAKE_MAC_ADDRESSES:-en0=198.51.100.23}" "$ROXY" setup "$@"; }
+setup() { ROXY_CONFIG_DIR="$TMP/setup-settings" FAKE_MAC_ADDRESSES="${FAKE_MAC_ADDRESSES:-en0=10.0.0.23}" "$ROXY" setup "$@"; }
 mkdir -p "$TMP/setup-settings"
 cp -R "$REPO/settings.example/." "$TMP/setup-settings"
 secret() { bash -c '. "$1"; printf %s "${!2}"' - "$TMP/setup-settings/secrets.env" "$1"; }
 # Flags only, stdin empty: the mitmweb password generated, never printed, the file private;
-# this Mac alone in lan_subnets; the Roku password handed to the user, on stderr.
+# the example devices gone; this Mac alone in lan_subnets; the Roku password handed to the
+# user, on stderr.
 out="$(setup --this-mac-only --roku-user dev < /dev/null 2>"$TMP/setup.err")" || fail "setup: $out $(cat "$TMP/setup.err")"
 password="$(secret MITMWEB_PASSWORD)"
 [ ${#password} -ge 16 ] || fail "setup did not generate a mitmweb password"
 case "$out$(cat "$TMP/setup.err")" in *"$password"*) fail "setup printed the mitmweb password" ;; esac
 [ "$(stat -f %Lp "$TMP/setup-settings/secrets.env")" = 600 ] || fail "setup left secrets.env readable by others"
 for want in "generated MITMWEB_PASSWORD (in $TMP/setup-settings/secrets.env; the mitmweb UI asks for it)" \
-  "lan_subnets: 198.51.100.23/32 (this Mac only)" "ROKU_DEV_USER: dev" "$RESTART_HINT"; do
+  "removed the example device 'Living Room'" "lan_subnets: 10.0.0.23/32 (this Mac only)" "ROKU_DEV_USER: dev" \
+  "$RESTART_HINT"; do
   grep -qxF "$want" <<< "$out" || fail "setup did not say '$want':
 $out"
 done
+jq -e '. == {}' "$TMP/setup-settings/devices.json" >/dev/null || fail "setup left devices.json as: $(cat "$TMP/setup-settings/devices.json")"
 grep -q "^warning: no Roku developer password (ROKU_DEV_PASSWORD): the user runs roxy setup" "$TMP/setup.err" \
   || fail "setup did not hand the Roku password to the user: $(cat "$TMP/setup.err")"
-jq -e '.lan_subnets == ["198.51.100.23/32"] and .grid_devices.physical == "Living Room"' \
+jq -e '.lan_subnets == ["10.0.0.23/32"] and .grid_devices.physical == "Living Room"' \
   "$TMP/setup-settings/settings.json" >/dev/null || fail "setup left settings.json as: $(cat "$TMP/setup-settings/settings.json")"
 # The Roku password piped in, never printed; a trusted network; the mitmweb password kept.
 out="$(printf '%s\n' "p@ss w'rd" | setup --trusted-network 2>&1)" || fail "setup, password piped: $out"
 [ "$(secret ROKU_DEV_PASSWORD)" = "p@ss w'rd" ] || fail "setup did not save the piped Roku password"
 case "$out" in *"p@ss w'rd"*) fail "setup printed the Roku password" ;; esac
 [ "$(secret MITMWEB_PASSWORD)" = "$password" ] || fail "setup, run again, replaced the mitmweb password"
-jq -e '.lan_subnets == ["198.51.100.0/24"]' "$TMP/setup-settings/settings.json" >/dev/null \
+jq -e '.lan_subnets == ["10.0.0.0/24"]' "$TMP/setup-settings/settings.json" >/dev/null \
   || fail "setup --trusted-network left lan_subnets as: $(cat "$TMP/setup-settings/settings.json")"
 # Never the Roku password as a flag; refusals change nothing.
 before="$(cat "$TMP/setup-settings/secrets.env" "$TMP/setup-settings/settings.json")"
@@ -687,9 +691,9 @@ echo "ok: setup with no terminal generates the mitmweb password, allows this Mac
 # setup with a VPN holding the default route (utun4) and the Thunderbolt Bridge up: this Mac's
 # /32 is its Wi-Fi address, and setup warns without refusing. With no VPN, no warning.
 grep -qF "$VPN_WARNING" "$TMP/setup.err" && fail "setup warns of a VPN with none: $(cat "$TMP/setup.err")"
-out="$(FAKE_DEFAULT_ROUTE=utun4 FAKE_MAC_ADDRESSES="utun4=203.0.113.5 bridge0=203.0.113.6 en0=198.51.100.24" \
+out="$(FAKE_DEFAULT_ROUTE=utun4 FAKE_MAC_ADDRESSES="utun4=203.0.113.5 bridge0=203.0.113.6 en0=10.0.0.24" \
   setup --this-mac-only < /dev/null 2>&1)" || fail "setup on a VPN: $out"
-jq -e '.lan_subnets == ["198.51.100.24/32"]' "$TMP/setup-settings/settings.json" >/dev/null \
+jq -e '.lan_subnets == ["10.0.0.24/32"]' "$TMP/setup-settings/settings.json" >/dev/null \
   || fail "setup on a VPN left lan_subnets as: $(cat "$TMP/setup-settings/settings.json")"
 grep -qxF "$VPN_WARNING" <<< "$out" || fail "setup on a VPN does not warn: $out"
 echo "ok: setup on a VPN allows this Mac's Wi-Fi address, and warns"
