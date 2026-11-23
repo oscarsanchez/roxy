@@ -21,7 +21,10 @@ cat > "$TMP/bin/uv" <<'EOF'
 #!/usr/bin/env bash
 printf '%s\n' "$@" > "$UV_LOG"
 EOF
-chmod +x "$TMP/bin/uv"
+# route and ipconfig give the Mac the LAN IP 192.0.2.10, whatever network this Mac is on.
+printf '#!/usr/bin/env bash\necho "  interface: en0"\n' > "$TMP/bin/route"
+printf '#!/usr/bin/env bash\necho 192.0.2.10\n' > "$TMP/bin/ipconfig"
+chmod +x "$TMP/bin/"*
 export PATH="$TMP/bin:$PATH"
 
 # seeded DIR : a settings root seeded from the repo's examples, with a mitmweb password.
