@@ -33,7 +33,7 @@ and LAB_SECRET for export, as proxy_cli passes them.
   cli.py run-id                          a fresh roxy launch run id
 
 The device add and remove commands and setup print what they changed, warnings on stderr,
-then a restart hint; setup never prints a secret. The scenario commands print the active Scenarios after the change, as
+then a restart hint when they changed a setting; setup never prints a secret. The scenario commands print the active Scenarios after the change, as
 `scenario=A,B` (`scenario=none` for none). A refusal prints `error: ...` and exits 1; with the lab down, a Lab Session command prints
 the `lab: down (...)` line instead.
 """
@@ -54,7 +54,7 @@ from lab.app_profiles import AppProfileError, AppProfiles, ScenarioInBoth
 from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
-from lab.settings_root import CLOUD_DEVICE, NO_ROKU_FOUND, SSDP_SECONDS, Change, SettingsRoot, SettingsRootError
+from lab.settings_root import CLOUD_DEVICE, NO_ROKU_FOUND, SSDP_SECONDS, SettingsRoot, SettingsRootError
 from lab.settings_root import ecp_device_info, has_tool, new_secret, rce_knows, rce_token_works, ssdp_rokus, this_mac
 
 REFUSED = "refused: in both (rename the profile's)"
@@ -173,7 +173,7 @@ def setup(args):
         except (EOFError, KeyboardInterrupt):
             print_change(change)
             sys.exit("\nsetup stopped offering Rokus: roxy device list shows the ones registered")
-        change = Change(change.notes + found.notes, change.warnings + found.warnings)
+        change = change.merged(found)
     print_change(change)
 
 
@@ -205,13 +205,15 @@ def ask_setup(values, trusted_network, roku_user):
 
 
 def print_change(change):
-    """A Settings Root Change's notes, its warnings on stderr, then the restart hint: the
-    lab reads its settings when it starts."""
+    """A Settings Root Change's notes, its warnings on stderr, in that order, then the
+    restart hint when it changed the settings: the lab reads them when it starts."""
     for note in change.notes:
         print(note)
+    sys.stdout.flush()
     for warning in change.warnings:
         print(f"warning: {warning}", file=sys.stderr)
-    print("restart the lab if it is running (roxy start), to use the change")
+    if change.changed:
+        print("restart the lab if it is running (roxy start), to use the change")
 
 
 def scenario_list(args):

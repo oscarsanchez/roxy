@@ -15,7 +15,7 @@ from pathlib import Path
 
 import pytest
 
-from lab.settings_root import BadDevice, DeviceExists, SettingsRoot, SettingsRootError, UnknownDevice, this_mac
+from lab.settings_root import BadDevice, Change, DeviceExists, SettingsRoot, SettingsRootError, UnknownDevice, this_mac
 
 DEVELOPER_MODE = {"user-device-name": "Den", "model-name": "Roku Ultra", "developer-enabled": "true"}
 
@@ -184,7 +184,7 @@ def test_a_proxied_device_is_registered_as_kind_proxied_without_asking_ecp(root,
     change = root.add_device("Tablet", "198.51.100.8", proxied=True)
 
     assert devices_file(settings)["Tablet"] == {"ip": "198.51.100.8", "kind": "proxied"}
-    assert change == (["allowed 198.51.100.8/32 in lan_subnets"], [])
+    assert change == (["allowed 198.51.100.8/32 in lan_subnets"], [], True)
     assert ("Tablet", "Proxied Device", "198.51.100.8") in [(d.name, d.kind, d.ip) for d in root.devices()]
 
 
@@ -201,7 +201,7 @@ def test_a_cloud_device_is_registered_with_a_slug_made_from_its_name(root, setti
     change = root.add_cloud_device("Office  Stick 2", "office-player")
 
     assert devices_file(settings)["Office  Stick 2"] == {"rce_device_name": "office-player", "slug": "office-stick-2"}
-    assert change == ([], [])
+    assert change == ([], [], True)
     assert settings_file(settings) == before
     listed = {d.name: d for d in root.devices()}["Office  Stick 2"]
     assert (listed.kind, listed.rce_device_name, listed.slug) == ("Cloud Device", "office-player", "office-stick-2")
@@ -249,7 +249,7 @@ def test_remove_drops_the_device_and_the_32_that_allowed_it(root, settings):
 
     assert devices_file(settings) == {name: entry for name, entry in before.items() if name != "Den"}
     assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24"]
-    assert change == (["dropped 198.51.100.7/32 from lan_subnets"], [])
+    assert change == (["dropped 198.51.100.7/32 from lan_subnets"], [], True)
 
 
 def test_remove_keeps_a_32_another_device_still_has(root, settings):
@@ -259,7 +259,7 @@ def test_remove_keeps_a_32_another_device_still_has(root, settings):
     change = root.remove_device("Den")
 
     assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24", "198.51.100.7/32"]
-    assert change == ([], [])
+    assert change == ([], [], True)
 
 
 def test_remove_never_touches_a_broader_entry(root, settings):
@@ -273,7 +273,7 @@ def test_remove_never_touches_a_broader_entry(root, settings):
 def test_remove_of_a_cloud_device_leaves_lan_subnets_alone(root, settings):
     before = settings_file(settings)
 
-    assert root.remove_device("Cloud Device") == ([], [])
+    assert root.remove_device("Cloud Device") == ([], [], True)
 
     assert "Cloud Device" not in devices_file(settings)
     assert settings_file(settings) == before
@@ -671,7 +671,7 @@ def test_setup_offers_each_unregistered_roku_found_and_registers_it_as_device_ad
     assert devices_file(settings)["Den"] == {"ip": "198.51.100.7"}
     assert "198.51.100.8" not in [d.ip for d in root.devices()]
     assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24", "198.51.100.7/32"]
-    assert change == (["registered 'Den' (198.51.100.7)", "allowed 198.51.100.7/32 in lan_subnets"], [])
+    assert change == (["registered 'Den' (198.51.100.7)", "allowed 198.51.100.7/32 in lan_subnets"], [], True)
 
 
 def test_a_roku_found_is_registered_under_the_name_given_with_device_adds_warnings(root, settings, ssdp, ecp):
@@ -706,7 +706,27 @@ def test_setup_with_no_roku_answering_says_where_to_read_a_rokus_ip(root):
             " Settings → Network → About; then roxy device add NAME --ip IP"
         ],
         [],
+        False,
     )
+
+
+def test_a_change_says_whether_it_changed_the_settings(root, ssdp):
+    assert root.add_device("Den", "10.1.0.9").changed
+    assert root.setup(roku_password="first").changed
+    assert not root.setup().changed
+    assert not root.setup(trusted_network=False, roku_user="rokudev", roku_password="first").changed
+    assert not root.add_found_rokus(lambda found: pytest.fail("nothing to offer")).changed
+    ssdp.append("10.1.0.8")
+    assert not root.add_found_rokus(lambda found: None).changed
+    assert root.add_found_rokus(lambda found: "Kids").changed
+    assert root.remove_device("Kids").changed
+
+
+def test_changes_merge_into_one_saying_all_they_say(root):
+    first, then = Change(["kept MITMWEB_PASSWORD"], ["no password"], False), Change(["registered 'Den'"], [], True)
+
+    assert first.merged(then) == (["kept MITMWEB_PASSWORD", "registered 'Den'"], ["no password"], True)
+    assert not first.merged(first).changed
 
 
 @pytest.fixture

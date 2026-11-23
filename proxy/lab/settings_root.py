@@ -78,10 +78,15 @@ class Device(NamedTuple):
 
 class Change(NamedTuple):
     """What a change did beyond its own entry (notes), and what it found wrong but did anyway
-    (warnings): a line each, for the user."""
+    (warnings): a line each, for the user; and whether it changed the settings (changed)."""
 
     notes: list
     warnings: list
+    changed: bool
+
+    def merged(self, then):
+        """This Change followed by the Change THEN, as one."""
+        return Change(self.notes + then.notes, self.warnings + then.warnings, self.changed or then.changed)
 
 
 class SetupValues(NamedTuple):
@@ -152,7 +157,7 @@ class SettingsRoot:
         settings, notes = self._allowing(ip)
         registry[name] = {"ip": ip, "kind": "proxied"} if proxied else {"ip": ip}
         self._save(registry, settings)
-        return Change(notes, [] if proxied else self._roku_warnings(name, ip))
+        return Change(notes, [] if proxied else self._roku_warnings(name, ip), True)
 
     def add_cloud_device(self, name, rce_device_name, *, slug=None):
         """Register the Cloud Device NAME, rce's RCE_DEVICE_NAME, with SLUG in its Proxy Base
@@ -168,10 +173,10 @@ class SettingsRoot:
         registry[name] = {"rce_device_name": rce_device_name, "slug": slug}
         self._save(registry, None)
         if self.rce_knows(rce_device_name):
-            return Change([], [])
+            return Change([], [], True)
         return Change([], [
             f"rce device resolve does not know {rce_device_name!r}: registered anyway (rce device list shows the Device Names)"
-        ])
+        ], True)
 
     def remove_device(self, name):
         """Unregister the device NAME, dropping the /32 equal to its IP from lan_subnets when
@@ -183,7 +188,7 @@ class SettingsRoot:
         shared = ip in (entry.get("ip") for entry in registry.values())
         settings, notes = self._disallowing(ip) if ip and not shared else (None, [])
         self._save(registry, settings)
-        return Change(notes, [])
+        return Change(notes, [], True)
 
     def setup(self, *, trusted_network=None, roku_user=None, roku_password=None, cloud=False):
         """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
@@ -194,10 +199,12 @@ class SettingsRoot:
         a warning: only the user can give it. With CLOUD, for Cloud Devices too: a new
         LAB_SECRET when there is none. Returns the Change."""
         notes = self._drop_example_devices()
+        changed = bool(notes)
         settings, lan_notes, warnings = self._lan_setup(trusted_network)
         notes += lan_notes
         if settings is not None:
             _write(self.settings_file, settings)
+            changed = True
         env = _read_env(self.secrets_file)
         changes = {}
         if not env.get("MITMWEB_PASSWORD"):
@@ -205,12 +212,13 @@ class SettingsRoot:
             notes.append(f"generated MITMWEB_PASSWORD (in {self.secrets_file}; the mitmweb UI asks for it)")
         else:
             notes.append("kept MITMWEB_PASSWORD")
-        if roku_user or not env.get("ROKU_DEV_USER"):
-            changes["ROKU_DEV_USER"] = roku_user or ROKU_DEV_USER
-            notes.append(f"ROKU_DEV_USER: {changes['ROKU_DEV_USER']}")
+        roku_user = roku_user or env.get("ROKU_DEV_USER") or ROKU_DEV_USER
+        if roku_user != env.get("ROKU_DEV_USER"):
+            changes["ROKU_DEV_USER"] = roku_user
+            notes.append(f"ROKU_DEV_USER: {roku_user}")
         else:
-            notes.append(f"kept ROKU_DEV_USER: {env['ROKU_DEV_USER']}")
-        if roku_password:
+            notes.append(f"kept ROKU_DEV_USER: {roku_user}")
+        if roku_password and roku_password != env.get("ROKU_DEV_PASSWORD"):
             changes["ROKU_DEV_PASSWORD"] = roku_password
             notes.append("set ROKU_DEV_PASSWORD")
         elif env.get("ROKU_DEV_PASSWORD"):
@@ -224,13 +232,14 @@ class SettingsRoot:
             notes.append(f"generated LAB_SECRET (in {self.secrets_file}; the Public Endpoint's secret path segment)")
         elif cloud:
             notes.append("kept LAB_SECRET")
-        _write_env(self.secrets_file, changes)
+        if changes:
+            _write_env(self.secrets_file, changes)
         if cloud:
             missing = self._cloud_tools_missing()
             warnings += missing
             if not missing:
                 notes.append("rce and cloudflared installed, and rce token status works")
-        return Change(notes, warnings)
+        return Change(notes, warnings, changed or bool(changes))
 
     def _cloud_tools_missing(self):
         """A warning for each tool Cloud Devices need that is not installed, and for an RCE
@@ -287,7 +296,10 @@ class SettingsRoot:
             and network[0] in device_ips
             and network[0] not in entry
         ]
-        settings["lan_subnets"] = [str(entry), *kept]
+        lan_subnets = [str(entry), *kept]
+        if lan_subnets == settings.get("lan_subnets"):
+            return None, [f"kept lan_subnets: {', '.join(lan_subnets)}"], []
+        settings["lan_subnets"] = lan_subnets
         scope = "this Mac's network, trusted" if trusted_network else "this Mac only"
         return settings, [f"lan_subnets: {entry} ({scope})"], []
 
@@ -303,20 +315,19 @@ class SettingsRoot:
         Returns the Change of them all."""
         found = self.discover()
         if not found:
-            return Change([NO_ROKU_FOUND], [])
-        notes, warnings = [], []
+            return Change([NO_ROKU_FOUND], [], False)
+        change = Change([], [], False)
         for roku in found:
             name = None if roku.registered_as else name_for(roku)
             if name is None:
                 continue
             try:
-                change = self.add_device(name, roku.ip)
+                added = self.add_device(name, roku.ip)
             except (DeviceExists, BadDevice) as e:
-                warnings.append(f"{roku.ip} not registered: {e}")
+                change = change.merged(Change([], [f"{roku.ip} not registered: {e}"], False))
                 continue
-            notes += [f"registered {name!r} ({roku.ip})", *change.notes]
-            warnings += change.warnings
-        return Change(notes, warnings)
+            change = change.merged(Change([f"registered {name!r} ({roku.ip})"], [], True)).merged(added)
+        return change
 
     def _save(self, registry, settings):
         """Write devices.json, then settings.json unless SETTINGS is None."""

@@ -351,9 +351,11 @@ jq -e '.lan_subnets == ["192.0.2.0/24", "198.51.100.7/32"] and .grid_devices.phy
 out="$(device add Tablet --ip 192.0.2.80 --proxied)" || fail "device add Tablet --proxied: $out"
 [ "$out" = "registered 'Tablet' (192.0.2.80) as a Proxied Device
 $RESTART_HINT" ] || fail "device add Tablet --proxied said: $out"
-err="$(FAKE_ECP_DOWN=1 device add Attic --ip 192.0.2.81 2>&1 >/dev/null)" || fail "device add Attic, off: $err"
-[ "$err" = "warning: Attic (192.0.2.81) did not answer ECP: registered anyway (is it on, and on this network?)" ] \
-  || fail "device add of a Roku that does not answer warned: $err"
+# The warning comes in order, after what the change did, before the restart hint.
+out="$(FAKE_ECP_DOWN=1 device add Attic --ip 192.0.2.81 2>&1)" || fail "device add Attic, off: $out"
+[ "$out" = "registered 'Attic' (192.0.2.81) as a Physical Device
+warning: Attic (192.0.2.81) did not answer ECP: registered anyway (is it on, and on this network?)
+$RESTART_HINT" ] || fail "device add of a Roku that does not answer said: $out"
 : > "$RCE_LOG"
 out="$(device add "Office Stick" --rce office-player)" || fail "device add Office Stick --rce: $out"
 [ "$out" = "registered 'Office Stick' (rce office-player, slug office-stick) as a Cloud Device
@@ -712,6 +714,8 @@ out="$(PATH="$TMP/cloud-bin:$PATH" FAKE_RCE_NO_TOKEN=1 setup --cloud < /dev/null
 [ "$(secret LAB_SECRET)" = "$lab_secret" ] || fail "setup --cloud, run again, replaced the lab secret"
 grep -qxF "warning: rce token status fails: the user runs rce token set (pbpaste | rce token set)" <<< "$out" \
   || fail "setup --cloud did not warn of the RCE token: $out"
+# Run again with nothing to change: no restart hint.
+grep -qxF "$RESTART_HINT" <<< "$out" && fail "setup --cloud changed nothing, yet hints at a restart: $out"
 echo "ok: setup --cloud generates the lab secret once and warns of an RCE token rce does not take"
 
 # install, in a temp HOME with the default settings root: links roxy into ~/.local/bin and
