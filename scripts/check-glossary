@@ -43,6 +43,14 @@ def glossary() -> tuple[list[str], list[str]]:
 
 def main() -> int:
     terms, avoid = glossary()
+    # A note beside an avoid term ("Mobile Device (its old name)") becomes part of the phrase,
+    # which then matches nothing: the term would pass the lint unseen.
+    noted = [a for a in avoid if "(" in a or ")" in a]
+    for a in noted:
+        print(f"GLOSSARY.md: _Avoid_ '{a}' carries a note the lint cannot match; "
+              "move the note into the definition (only '(unqualified)' is understood)", file=sys.stderr)
+    if noted:
+        return 1
     allowed = [line.split("#")[0].strip() for line in ALLOW_FILE.read_text().splitlines()]
     longest_first = sorted(terms + [a for a in allowed if a], key=len, reverse=True)
     exempt = re.compile("|".join(phrase(p) for p in longest_first), re.I)
