@@ -18,6 +18,10 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 - Mobile Devices are now Proxied Devices: any device that is not a Roku (phone, tablet, Android TV, Google TV, Fire TV, Apple TV, console, computer) goes through Proxy Routing. `devices.json` registers one with `"kind": "proxied"`; `"kind": "mobile"` from 0.2.0 still counts. The how-to moved to `docs/proxied-devices.md`, with a section for TV boxes (Apple TV unverified), and the glossary lint now flags the old name. <!-- glossary-ok: names the old term -->
 
+### Fixed
+
+- With a VPN connected, the Proxy IP, the LAN Proxy Bases, `roxy launch`'s `proxyBase` and the address `roxy setup` allows in `lan_subnets` were the VPN's. They are now the Mac's LAN address: the first active Wi-Fi or Ethernet interface in macOS's network service order. `roxy start` and `roxy setup` warn when a VPN holds the default route, since Rokus reach the lab only through a split tunnel (Troubleshooting).
+
 ## [0.2.0] - 2026-11-23
 
 Mobile Devices through Proxy Routing, and the docs reorganised around a one-path quickstart. <!-- glossary-ok: released text keeps its words -->

@@ -34,6 +34,14 @@ error: port 8888 (Charles's port, the second LAN listener) is in use by Charles 
 A process of another user (a root process on 443 or 80) is named by the port alone, with the `sudo lsof` command that names it.
 **Fix:** quit that process (`roxy status` says whether a lab is already up; `docker compose down` stops the Compose one), then start again. The ports are fixed.
 
+## `roxy start` or `roxy setup` warns that a VPN holds the default route
+
+```
+warning: a VPN holds the default route: Rokus reach the lab only if it allows local LAN access (split tunnel); otherwise disconnect it while you use the lab
+```
+**Cause:** a VPN is connected on the Mac. The Proxy IP, the LAN Proxy Bases and the address setup allows in `lan_subnets` are still the Mac's own: the first active Wi-Fi or Ethernet interface in macOS's network service order (System Settings → Network → ⋯ → Set Service Order), never the VPN's. But a VPN that sends all traffic through its tunnel drops the replies to devices on the LAN, so Rokus and Proxied Devices time out against the lab.
+**Fix:** allow local LAN access in the VPN's settings (split tunnel), or disconnect it while you use the lab. Nothing to change in roxy; the start and setup go on ([Prefix Routing](prefix-routing.md)).
+
 ## `roxy setup` warns
 
 Setup still finishes; each warning says what is left:

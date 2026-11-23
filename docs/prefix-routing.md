@@ -31,7 +31,7 @@ A Prefixed URL is the Proxy Base, a separator, then the Origin URL, byte for byt
 | Charles-style | `http://<proxy-ip>:8888/;https://cdn.example/a.m3u8` | Product Apps with a Charles hook (unchanged) or with the kit; the Lab Apps launched with `separator=/;` |
 
 - Both listeners (8080 and 8888) run the same lab and take either form. 8888 is Charles's port, which Charles hooks usually hardcode.
-- `roxy start` prints the Proxy IP (the Mac's LAN address, to type into an app's debug proxy setting) and both LAN Proxy Bases.
+- `roxy start` prints the Proxy IP (the Mac's LAN address, to type into an app's debug proxy setting) and both LAN Proxy Bases. The LAN address is the first active Wi-Fi or Ethernet interface's in macOS's network service order, never a VPN's; a VPN holding the default route gets a warning ([Troubleshooting](troubleshooting.md#roxy-start-or-roxy-setup-warns-that-a-vpn-holds-the-default-route)).
 - A Cloud Device uses the Public Endpoint instead (`https://<tunnel-host>/<secret>/<device-slug>`). A Charles hook builds `http://<ip>:8888/;` and cannot express it, so a Product App with only a Charles hook works on Physical Devices only.
 
 ## Switching the Charles-style hook on
