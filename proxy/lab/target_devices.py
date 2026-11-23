@@ -25,7 +25,7 @@ from typing import NamedTuple
 
 from lab.clients import from_rce_egress_ip, from_this_mac, ip_address, through_tunnel, tunnel_client_ip
 from lab.config import load_settings
-from lab.prefixed_url import client_proxy_base, device_slug
+from lab.prefixed_url import client_proxy_base, device_slug, double_prefixed
 
 CLOUD_DEVICE = "Cloud Device"  # the name of an RCE egress IP's device without a known slug
 THIS_MAC = "This Mac"  # the name of an iOS Simulator or Android Emulator on this Mac, through Proxy Routing
@@ -45,11 +45,13 @@ def target_device(flow):
 def annotate(flow, applied):
     """Show the flow in mitmweb with APPLIED, the Scenario rules that acted on it (passed in:
     lab.scenarios, which owns them, imports this module through the throttle). The comment
-    is `<name> | <scenario>/<rule>, ...`, either part left out when empty, and a flow a rule
-    acted on is marked unless it has a mark (a refusal keeps its own). Nothing reads the
-    comment back; the mark narrows what roxy status fetches (LabSession.scenario_rules)."""
+    is `<name> | <scenario>/<rule>, ... | double-prefixed`, each part left out when empty (the
+    last when the flow did not arrive as a Nested Prefixed URL), and a flow a rule acted on
+    is marked unless it has a mark (a refusal keeps its own). Nothing reads the comment
+    back; the mark narrows what roxy status fetches (LabSession.scenario_rules)."""
     device = target_device(flow)
-    flow.comment = " | ".join(filter(None, [device and device.name, ", ".join(applied)]))
+    nested = double_prefixed(flow) and "double-prefixed"
+    flow.comment = " | ".join(filter(None, [device and device.name, ", ".join(applied), nested]))
     if applied:
         flow.marked = flow.marked or ":test_tube:"
 

@@ -58,6 +58,7 @@ status = 503
 - `status` null: no response (dropped, or the connection failed).
 - `refusal` set: the lab refused it with a 403 or 400. `origin-host`: a Cloud Device request to a host off the allowlist; add it to `origin_allowlist` in the App Profile's `profile.json` and restart the lab. `origin-address`: the Origin resolves to a private address. `not-prefixed`: the request was not a Prefixed URL. `client-ip`, `secret-segment`: the client or the Public Endpoint secret was wrong.
 - `scenario_rules`: the active Scenarios' rules that acted on it, each named `<scenario>/<rule>`.
+- `double_prefixed` true: the app put the Proxy Base in front of a URL twice; the lab unwrapped it and served the real Origin, so the flow worked. Tell the user to report it to the app's developer: the app's "already prefixed?" check misses URLs that already carry the Proxy Base ([Troubleshooting](docs/troubleshooting.md#a-flow-is-marked-double-prefixed)).
 - A request missing from the output went straight to its Origin: it was built outside the Charles hook or the kit (Prefix Routing guide, What the lab never sees).
 - Lab down: it says so and exits non-zero.
 

@@ -21,6 +21,7 @@ from urllib.request import ProxyHandler, Request, build_opener
 
 from mitmproxy import http, io
 
+from lab.prefixed_url import double_prefixed
 from lab.refusal import refusal_reason
 from lab.scenarios import applied_rules, find_scenario, load_scenario, scenario_names, scenario_value
 from lab.target_devices import target_device
@@ -213,6 +214,7 @@ def _summary(flow):
         "duration_ms": response and response.timestamp_end and _duration_ms(flow),
         "refusal": refusal_reason(flow),
         "scenario_rules": applied_rules(flow),
+        "double_prefixed": double_prefixed(flow),
     }
 
 

@@ -58,6 +58,10 @@ _Avoid_: proxy URL, proxy host, prefix
 An Origin URL with the Proxy Base in front of it, joined by `/` or, in the Charles convention, `/;`, so the request reaches the lab and the lab can recover the Origin from the path.
 _Avoid_: proxied URL, wrapped URL, rewritten URL
 
+**Nested Prefixed URL**:
+A Prefixed URL whose Origin URL is itself a Prefixed URL for the same client, made by an app that prefixed a URL twice; the lab strips it back to the Origin and marks the flow double-prefixed.
+_Avoid_: double-wrapped URL, re-prefixed URL
+
 **Public Endpoint**:
 The internet-reachable hostname that lets Cloud Devices reach the lab; never exposes the lab's own UI.
 _Avoid_: tunnel URL, ngrok URL

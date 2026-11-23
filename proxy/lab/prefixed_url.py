@@ -10,7 +10,8 @@ Every addon that reads or writes Prefixed URLs uses these two functions;
 the rewriters reach build through prefixed_for_client.
 
 It also owns where a flow keeps its client's Proxy Base and separator:
-remember_client writes them, client_proxy_base reads them.
+remember_client writes them, client_proxy_base reads them; and whether the
+flow arrived as a Nested Prefixed URL: mark_double_prefixed, double_prefixed.
 """
 
 import re
@@ -71,6 +72,16 @@ def remember_client(flow, parsed):
     """
     flow.metadata["proxy_base"] = parsed.proxy_base
     flow.metadata["separator"] = parsed.separator
+
+
+def mark_double_prefixed(flow):
+    """Keep that `flow` arrived as a Nested Prefixed URL, which the Origin decoder unwrapped."""
+    flow.metadata["lab_double_prefixed"] = True
+
+
+def double_prefixed(flow):
+    """True if `flow` arrived as a Nested Prefixed URL (mark_double_prefixed)."""
+    return flow.metadata.get("lab_double_prefixed", False)
 
 
 def client_proxy_base(flow):

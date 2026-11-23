@@ -1,6 +1,8 @@
 """Origin decoding: point each incoming request at its Origin.
 
-Prefix Routing: the Origin comes from the Prefixed URL path.
+Prefix Routing: the Origin comes from the Prefixed URL path. A Nested Prefixed URL (its
+Origin URL a Prefixed URL for the same Proxy Base, at any depth) is unwrapped to the real
+Origin, and the flow marked double-prefixed.
 CA Routing (option lab_ca_routing): a request that is not a Prefixed URL
 is an Origin URL the Lab App called directly, sent here by DNS; its Origin comes
 from Host, else SNI.
@@ -16,7 +18,7 @@ alone. A Prefixed-looking path there is an ordinary Origin path.
 from mitmproxy import ctx
 
 from lab.clients import client_scheme, through_proxy_routing, through_tunnel
-from lab.prefixed_url import PrefixedUrl, parse_prefixed_url, remember_client
+from lab.prefixed_url import PrefixedUrl, mark_double_prefixed, parse_prefixed_url, remember_client
 from lab.refusal import refuse
 
 
@@ -41,7 +43,7 @@ class OriginDecoder:
         proxy_base = f"{client_scheme(flow)}://{flow.request.host_header}"
         parsed = parse_prefixed_url(f"{proxy_base}{flow.request.path}")
         if parsed is not None:
-            self._to_origin(flow, parsed)
+            self._to_origin(flow, self._unwrapped(flow, parsed))
         elif (host := self._ca_routed_host(flow)) is not None:
             flow.request.url = f"{client_scheme(flow)}://{host}{flow.request.path}"
             flow.request.host_header = host  # an SNI-only request still tells the Origin its Host
@@ -53,6 +55,17 @@ class OriginDecoder:
             self._to_origin(flow, PrefixedUrl(proxy_base, "/;", origin_url))
         else:
             refuse(flow, 400, "not-prefixed")
+
+    @staticmethod
+    def _unwrapped(flow, parsed):
+        """`parsed` with its Origin URL stripped of any Prefixed URL nested in it for the
+        same Proxy Base (an app that prefixed twice, in either form, at any depth); the flow
+        is then marked double-prefixed. A nested Prefixed URL with another Proxy Base stays:
+        the guards judge it, and the lab never fetches through another proxy."""
+        while (inner := parse_prefixed_url(parsed.origin_url)) and inner.proxy_base == parsed.proxy_base:
+            parsed = parsed._replace(origin_url=inner.origin_url)
+            mark_double_prefixed(flow)
+        return parsed
 
     @staticmethod
     def _to_origin(flow, parsed):

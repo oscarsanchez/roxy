@@ -255,12 +255,13 @@ def test_flows_are_summed_up_in_the_documented_shape_oldest_first(recorded_flows
     assert {k: v for k, v in flows[0].items() if k != "id"} == {
         "time": "2025-11-20T10:00:00.000Z", "device": "Living Room", "method": "POST", "url": "https://httpbin.org/post",
         "status": 200, "request_bytes": 8, "response_bytes": 12, "duration_ms": 250, "refusal": None, "scenario_rules": [],
+        "double_prefixed": False,
     }
     # The example flow in docs/agent-setup.md.
     assert {k: v for k, v in flows[2].items() if k != "id"} == {
         "time": "2025-11-20T10:02:00.000Z", "device": "Living Room", "method": "GET", "url": "https://httpbin.org/json",
         "status": 503, "request_bytes": 0, "response_bytes": 17, "duration_ms": 250, "refusal": None,
-        "scenario_rules": ["json-503/httpbin json fails"],
+        "scenario_rules": ["json-503/httpbin json fails"], "double_prefixed": False,
     }
 
 

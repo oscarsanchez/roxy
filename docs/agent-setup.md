@@ -37,7 +37,7 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 `--filter` is applied by mitmweb, then `--since` and `--limit` (the last N flows). The output is one JSON array, one flow per line:
 
 ```json
-[{"id": "35f7b2d8-754f-43c6-9044-607c1660affb", "time": "2025-11-20T10:02:00.000Z", "device": "Living Room", "method": "GET", "url": "https://httpbin.org/json", "status": 503, "request_bytes": 0, "response_bytes": 17, "duration_ms": 250, "refusal": null, "scenario_rules": ["json-503/httpbin json fails"]}]
+[{"id": "35f7b2d8-754f-43c6-9044-607c1660affb", "time": "2025-11-20T10:02:00.000Z", "device": "Living Room", "method": "GET", "url": "https://httpbin.org/json", "status": 503, "request_bytes": 0, "response_bytes": 17, "duration_ms": 250, "refusal": null, "scenario_rules": ["json-503/httpbin json fails"], "double_prefixed": false}]
 ```
 
 | Field | Value |
@@ -52,3 +52,4 @@ roxy flows --json --filter '~comment "Living Room" & ~d httpbin.org' --limit 20 
 | `duration_ms` | from the request's start to the response's end at the client (a `throttle` rule's pacing included), `null` without a complete response |
 | `refusal` | the reason the lab refused it (its `X-Lab-Blocked` value, such as `origin-address`), `null` if it did not; an `X-Lab-Blocked` header from an Origin or a Scenario is not a refusal |
 | `scenario_rules` | the active Scenarios' rules that acted on it, each named `<scenario>/<rule>`, in the order they first did; `[]` for none |
+| `double_prefixed` | `true` if the request arrived as a Nested Prefixed URL (the app prefixed a URL twice, [Prefix Routing guide](prefix-routing.md#nested-prefixed-urls)), which the lab unwrapped to the Origin; `false` otherwise |

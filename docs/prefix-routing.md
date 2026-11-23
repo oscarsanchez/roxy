@@ -55,6 +55,15 @@ Charles needs an imported Rewrite set for these; the lab does them for every req
 - **Cookies.** `Set-Cookie` loses its `Domain` and is scoped by path to the Prefixed URL. A cookie path cannot hold `;`, so a Charles-style cookie is scoped to the Proxy Base (`Path=/`). With `/;`, then, every Origin behind the Proxy Base shares one cookie scope: a cookie one Origin sets is sent to the others too.
 - **Bodies.** URLs in HLS playlists (variant, segment, key and map URIs), DASH manifests (`BaseURL`, `Location`, segment templates), VAST and other XML (media files, tracking, wrappers) and JSON (absolute URL values) become Prefixed URLs. Relative URLs stay as they are: they already resolve through the Prefixed URL.
 - **No double Proxy Base.** A URL that already carries this client's Proxy Base, in either form, is never given another one: it comes back with the separator the request used.
+- **Prefixed twice.** A request whose URL the app prefixed twice still reaches its Origin, marked ([Nested Prefixed URLs](#nested-prefixed-urls)).
+
+## Nested Prefixed URLs
+
+Some apps put the Proxy Base in front of a URL that already has it: a Charles hook or a wrapper that runs on every URL, including one the lab already rewrote in a response, or a config value that already carries the Proxy Base. The request reaches the lab as a Nested Prefixed URL, `<Proxy Base>/<Proxy Base>/;<Origin URL>`. Charles serves it by looping through itself, stripping one Proxy Base per hop; the lab serves it in one hop and says so:
+
+- **Unwrapped to the Origin.** When the Origin URL is itself a Prefixed URL with the same Proxy Base the request used (scheme, host and port, and on the Public Endpoint the secret segment and device slug), the lab strips it, in either form, mixed, and at any depth. The guards, rewriting, Scenarios, throttle and Recordings then see an ordinary flow for the real Origin, and URLs in the response get the Proxy Base once, with the separator of the outermost Prefixed URL.
+- **Marked.** The flow's mitmweb comment ends in `double-prefixed` (filter `~comment double-prefixed`), and `roxy flows --json` gives it `"double_prefixed": true`. The flow succeeds; the mark is there so the app's developer sees the bug ([Troubleshooting](troubleshooting.md#a-flow-is-marked-double-prefixed)).
+- **Only the same Proxy Base.** A nested Prefixed URL with another Proxy Base (another Mac, another port, another Cloud Device's slug) is left as it is: that Proxy Base is taken for the Origin, and the guards refuse it (`origin-address` on the LAN, `origin-host` on the Public Endpoint). The lab never fetches through another proxy. A Prefixed URL inside the query (`?next=http://...`) is never unwrapped either.
 
 ## What the lab never sees
 
