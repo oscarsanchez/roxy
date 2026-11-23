@@ -8,10 +8,12 @@ fails here, while the harness keeps passing. Real time: about 1 s of pacing.
 
 It also checks the Proxy Routing listener, the one listener in mitmproxy's `regular`
 mode: a real proxy client's request on it is told apart by its listener, as the harness
-assumes, and answered by a Scenario.
+assumes, and answered by a Scenario, over HTTP and over HTTPS through a CONNECT (the client
+trusting the test mitmdump's own CA).
 """
 
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -105,16 +107,40 @@ def wait_for_listener(lab, port, log, timeout=15):
 def exchange(port, request):
     """Send REQUEST to the lab on PORT as a raw HTTP/1 client; returns what came back
     once mitmproxy ended the connection, with the seconds to its first and last byte."""
-    with socket.socket() as client:
-        client.settimeout(5)
-        client.connect(("127.0.0.1", port))
-        started = time.monotonic()
-        client.sendall(request)
-        received, first_byte_at = b"", None
-        while chunk := client.recv(65536):  # b"": mitmproxy ended the connection (a reset raises)
-            first_byte_at = first_byte_at or time.monotonic() - started
-            received += chunk
-        return received, first_byte_at, time.monotonic() - started
+    with connect(port) as client:
+        return send(client, request)
+
+
+def exchange_through_connect(port, authority, request, cafile):
+    """As an HTTPS proxy client: CONNECT to AUTHORITY (host:port) through the lab on PORT,
+    then TLS trusting only CAFILE, and REQUEST inside; returns what exchange returns."""
+    with connect(port) as client:
+        client.sendall(b"CONNECT %s HTTP/1.1\r\nHost: %s\r\n\r\n" % (authority, authority))
+        connected = b""
+        while not connected.endswith(b"\r\n\r\n"):
+            connected += client.recv(1)
+        assert connected.startswith(b"HTTP/1.1 200 "), connected
+        tls = ssl.create_default_context(cafile=cafile)
+        with tls.wrap_socket(client, server_hostname=authority.decode().rsplit(":", 1)[0]) as secure:
+            return send(secure, request)
+
+
+def connect(port):
+    """A client socket connected to the lab on PORT (by IP: the stubbed DNS resolves no name)."""
+    client = socket.socket()
+    client.settimeout(5)
+    client.connect(("127.0.0.1", port))
+    return client
+
+
+def send(client, request):
+    started = time.monotonic()
+    client.sendall(request)
+    received, first_byte_at = b"", None
+    while chunk := client.recv(65536):  # b"": mitmproxy ended the connection (a reset raises)
+        first_byte_at = first_byte_at or time.monotonic() - started
+        received += chunk
+    return received, first_byte_at, time.monotonic() - started
 
 
 def test_a_throttled_answer_reaches_a_real_client_paced_and_the_connection_ends_cleanly(lab_ports):
@@ -136,6 +162,18 @@ def test_a_proxied_request_to_the_proxy_routing_listener_is_answered_by_a_scenar
         b"GET http://origin.invalid/video/segment-1.ts HTTP/1.1\r\n"
         b"Host: origin.invalid\r\nConnection: close\r\n\r\n"
     ))
+
+    head, _, body = received.partition(b"\r\n\r\n")
+    assert head.startswith(b"HTTP/1.1 200 ")
+    assert body == BODY
+
+
+def test_an_https_request_through_connect_on_the_proxy_routing_listener_is_answered_by_a_scenario(lab_ports, tmp_path):
+    """A Mobile Device's HTTPS request: a CONNECT, then TLS with the lab's CA, which the device trusts."""
+    received, _, _ = exchange_through_connect(lab_ports.proxy_routing, b"origin.invalid:443", (
+        b"GET /video/segment-1.ts HTTP/1.1\r\n"
+        b"Host: origin.invalid\r\nConnection: close\r\n\r\n"
+    ), cafile=tmp_path / "mitmproxy" / "mitmproxy-ca-cert.pem")
 
     head, _, body = received.partition(b"\r\n\r\n")
     assert head.startswith(b"HTTP/1.1 200 ")
