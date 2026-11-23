@@ -73,7 +73,7 @@ class FakeMitmweb:
 
     def __init__(self, flows=(), **options):
         self.options = {"lab_app": "", "lab_scenario": "", "lab_ca_routing": False,
-                        "lab_scenarios_dir": str(LAB_SCENARIOS), **options}
+                        "lab_proxy_routing_port": 8090, "lab_scenarios_dir": str(LAB_SCENARIOS), **options}
         self.flows = list(flows)
         self.up = True
         self.signed_in = True  # False: the password LabSession signs in with is wrong
@@ -124,10 +124,13 @@ class FakeMitmweb:
 
 
 def test_the_state_names_the_loaded_app_profile_the_active_scenarios_in_order_and_where_they_are():
-    lab = FakeMitmweb(lab_app="example-app", lab_scenario="json-503,hls-404", lab_ca_routing=True)
+    lab = FakeMitmweb(
+        lab_app="example-app", lab_scenario="json-503,hls-404", lab_ca_routing=True, lab_proxy_routing_port=8091,
+    )
 
     assert LabSession(lab).state() == LabState(
-        app="example-app", scenarios=["json-503", "hls-404"], ca_routing=True, scenarios_dir=str(LAB_SCENARIOS),
+        app="example-app", scenarios=["json-503", "hls-404"], ca_routing=True, proxy_routing_port=8091,
+        scenarios_dir=str(LAB_SCENARIOS),
     )
 
 

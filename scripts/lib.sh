@@ -17,6 +17,7 @@ RECORDINGS_DIR="$RECORDINGS_ROOT/${LAB_APP:-no-profile}"
 LAB_PORT=8080      # LAN listener (Prefix Routing)
 LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
 LAB_WEB_PORT="${LAB_WEB_PORT:-8081}"  # mitmweb UI, localhost only; LAB_WEB_PORT overrides it (tests)
+LAB_PROXY_ROUTING_PORT=8090  # Proxy Routing listener: the HTTP proxy a Mobile Device sets, LAN only
 LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
 LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
@@ -165,11 +166,12 @@ lan_proxy_base() {
   echo "http://$ip:${2:-$LAB_PORT}"
 }
 
-# print_lan_addresses IP : the Proxy IP and LAN Proxy Bases lines, as start-lab and
-# roxy status print them.
+# print_lan_addresses IP : the Proxy IP, LAN Proxy Bases and Proxy Routing lines, as
+# start-lab and roxy status print them.
 print_lan_addresses() {
   echo "Proxy IP:          $1  (for an app's debug proxy setting)"
   echo "LAN Proxy Bases:   $(lan_proxy_base "$1")  $(lan_proxy_base "$1" "$LAB_CHARLES_PORT")  (each takes the / and /; forms)"
+  echo "Proxy Routing:     $1:$LAB_PROXY_ROUTING_PORT  (a Mobile Device's HTTP proxy)"
 }
 
 # tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.

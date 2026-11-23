@@ -113,7 +113,7 @@ export LAB_WEB_PORT="$("$REAL_UV" run --quiet --project "$REPO/proxy" python -c 
 # lab's own Scenarios in $LAB_SCENARIOS.
 LAB_SCENARIOS="$REPO/proxy/scenarios"
 lab_up() {
-  printf '{"lab_app": {"value": "%s"}, "lab_scenario": {"value": "%s"}, "lab_ca_routing": {"value": false}, "lab_scenarios_dir": {"value": "%s"}}' \
+  printf '{"lab_app": {"value": "%s"}, "lab_scenario": {"value": "%s"}, "lab_ca_routing": {"value": false}, "lab_proxy_routing_port": {"value": 8090}, "lab_scenarios_dir": {"value": "%s"}}' \
     "$1" "$2" "$LAB_SCENARIOS" > "$FAKE_OPTIONS"
   shift 2
   LAB_WEB_PORT="$MITMWEB_PORT" "$@"
@@ -144,6 +144,7 @@ out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503,hls-404 "$ROXY" status
 want="lab: up (mitmweb UI http://127.0.0.1:$MITMWEB_PORT)
 Proxy IP:          192.0.2.10  (for an app's debug proxy setting)
 LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888  (each takes the / and /; forms)
+Proxy Routing:     192.0.2.10:8090  (a Mobile Device's HTTP proxy)
 Public Proxy Base: https://tunnel.example/<secret>
 App Profile:       none
 Scenarios:         json-503  (lab)
@@ -168,7 +169,7 @@ out="$(lab_up "" json-503 "$ROXY" status --since 176363286012345)" || fail "stat
 case "$out" in *"httpbin json fails  0 flows"*) ;; *) fail "status --since a run id lacks the rule: $out" ;; esac
 if err="$(lab_up "" "" "$ROXY" status --since yesterday 2>&1)"; then fail "status took --since yesterday"; fi
 case "$err" in *"--since"*"yesterday"*) ;; *) fail "status --since yesterday said: $err" ;; esac
-echo "ok: status reports the Proxy IP, the Proxy Bases (the secret only with --show-secret) and the Scenarios in order, with their rules"
+echo "ok: status reports the Proxy IP, the Proxy Bases, the Proxy Routing address (the secret only with --show-secret) and the Scenarios in order, with their rules"
 
 # status --json: the lab down says so on stderr; the lab up prints its state as one JSON object.
 if err="$("$ROXY" status --json 2>&1 >/dev/null)"; then fail "status --json exited 0 with the lab down"; fi
@@ -180,7 +181,7 @@ echo '{"repo": "/repos/example", "origin_allowlist": []}' > "$ROXY_CONFIG_DIR/ap
 out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up app-x json-503,hls-404 "$ROXY" status --json)" \
   || fail "status --json with the lab up: $out"
 rm -r "$ROXY_CONFIG_DIR/apps/app-x"
-want="{\"app\": \"app-x\", \"scenarios\": [\"json-503\", \"hls-404\"], \"ca_routing\": false, \"scenarios_dir\": \"$LAB_SCENARIOS\", \"rules\": [{\"scenario\": \"json-503\", \"rule\": \"httpbin json fails\", \"flows\": 0}, {\"scenario\": \"hls-404\", \"rule\": \"mux master playlist missing\", \"flows\": 0}]}"
+want="{\"app\": \"app-x\", \"scenarios\": [\"json-503\", \"hls-404\"], \"ca_routing\": false, \"proxy_routing_port\": 8090, \"scenarios_dir\": \"$LAB_SCENARIOS\", \"rules\": [{\"scenario\": \"json-503\", \"rule\": \"httpbin json fails\", \"flows\": 0}, {\"scenario\": \"hls-404\", \"rule\": \"mux master playlist missing\", \"flows\": 0}]}"
 [ "$out" = "$want" ] || fail "status --json with the lab up said:
 $out
 not:

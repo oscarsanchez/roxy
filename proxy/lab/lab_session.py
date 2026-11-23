@@ -53,6 +53,7 @@ class LabState(NamedTuple):
     app: str | None  # the loaded App Profile
     scenarios: list  # the active Scenarios' names, in order
     ca_routing: bool  # whether the lab is in CA Routing
+    proxy_routing_port: int  # the Proxy Routing listener's port
     scenarios_dir: str  # the folder of the lab's own Scenarios
 
 
@@ -106,6 +107,7 @@ class LabSession:
             app=options["lab_app"]["value"] or None,
             scenarios=scenario_names(options["lab_scenario"]["value"]),
             ca_routing=options["lab_ca_routing"]["value"],
+            proxy_routing_port=options["lab_proxy_routing_port"]["value"],
             scenarios_dir=options["lab_scenarios_dir"]["value"],
         )
 

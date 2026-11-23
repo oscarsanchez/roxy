@@ -13,7 +13,8 @@ usage() {
 usage: roxy <subcommand> [args...]
 The roxy lab from any terminal. roxy <subcommand> --help describes one.
   start      run the lab in the foreground, until Ctrl-C
-  status     whether the lab is up, its Proxy IP, Proxy Bases, App Profile and Scenarios
+  status     whether the lab is up, its Proxy IP, Proxy Bases, Proxy Routing address,
+             App Profile and Scenarios
   scenario   list the Scenarios, or set, add, remove or clear the active ones
   launch     launch the dev channel on a Target Device, with its Proxy Base
   flows      the running lab's flows as JSON, for agents (read-only)
@@ -24,7 +25,8 @@ EOF
     ;;
     start) cat <<'EOF'
 usage: roxy start [--app NAME] [--tunnel] [--ca-routing] [--replay RECORDING]
-Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI and the Proxy Bases.
+Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI, the Proxy Bases
+and the Proxy Routing address (the HTTP proxy a Mobile Device sets).
   --app NAME        load the App Profile NAME; without it, the profile whose repo holds
                     the current folder, if any (roxy app list)
   --tunnel          also open the Public Endpoint, for Cloud Devices
@@ -35,15 +37,16 @@ EOF
     ;;
     status) cat <<'EOF'
 usage: roxy status [--json] [--since RUN|TIME] [--show-secret]
-Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its App Profile
-and the active Scenarios in order, each with its source and its rules, with how many
-flows each rule acted on: a rule that acted on none is flagged. Exits 1 when the lab
-is down. After a roxy launch, check roxy status --since <run>. The public Proxy Base
+Whether the lab is up and, when it is, its Proxy IP, its Proxy Bases, its Proxy Routing
+address, its App Profile and the active Scenarios in order, each with its source and its
+rules, with how many flows each rule acted on: a rule that acted on none is flagged.
+Exits 1 when the lab is down. After a roxy launch, check roxy status --since <run>. The public Proxy Base
 shows its secret segment as <secret>.
   --json            the running lab's state as one JSON object, for tools: its App
                     Profile (app, null for none), its active Scenarios in order
-                    (scenarios), whether it is in CA Routing (ca_routing), the folder of
-                    its own Scenarios (scenarios_dir), and the active Scenarios' rules in
+                    (scenarios), whether it is in CA Routing (ca_routing), its Proxy
+                    Routing listener's port (proxy_routing_port), the folder of its own
+                    Scenarios (scenarios_dir), and the active Scenarios' rules in
                     Scenario then file order (rules: [{"scenario", "rule", "flows"}])
   --since RUN|TIME  count only flows since a roxy launch run id, or a time like
                     2026-11-20T10:00:00Z
@@ -121,7 +124,7 @@ EOF
 }
 
 # status [options] : the lab, App Profile and Scenario lines from the Lab Session
-# (proxy/cli.py, which checks the other options), with the Proxy IP and Proxy Bases lines
+# (proxy/cli.py, which checks the other options), with the Proxy IP, Proxy Bases and Proxy Routing lines
 # after the first; --show-secret keeps the secret in the public Proxy Base.
 status() {
   local lab public show_secret=false arg args=()
