@@ -6,7 +6,18 @@ import pytest
 from mitmproxy import http
 from mitmproxy.test import tutils
 
-from chain import RCE_EGRESS_IP, SECRET, TUNNEL_OPTIONS, Lab, flows_summary, lab_flow, run_chain, tunnel_flow
+from chain import (
+    PROXY_ROUTING_OPTIONS,
+    RCE_EGRESS_IP,
+    SECRET,
+    TUNNEL_OPTIONS,
+    Lab,
+    flows_summary,
+    lab_flow,
+    proxy_routing_flow,
+    run_chain,
+    tunnel_flow,
+)
 
 SEGMENT = "https://test-streams.mux.dev/video/720p/segment-1.ts"
 SEGMENT_BYTES = 500_000
@@ -19,6 +30,11 @@ def physical(ip="192.0.2.54"):
 def cloud(slug=None, client_ip=RCE_EGRESS_IP):
     """A request through the tunnel, with SLUG in its Proxy Base (None: no slug)."""
     return tunnel_flow(f"/{SECRET}/{slug + '/' if slug else ''}{SEGMENT}", client_ip=client_ip)
+
+
+def mobile(ip="192.0.2.60"):
+    """A request through Proxy Routing, from a Mobile Device at IP."""
+    return proxy_routing_flow(SEGMENT, peer=(ip, 51000))
 
 
 def lan_client_with_tunnel_headers():
@@ -40,6 +56,7 @@ TARGET_DEVICES = {
     "a tunnel client from another IP, unnamed": (lambda: cloud(client_ip="198.51.100.7"), None),
     "a LAN client that is no Target Device, unnamed": (lambda: physical("192.0.2.10"), None),
     "a LAN client sending tunnel headers, by its LAN IP": (lan_client_with_tunnel_headers, "Living Room"),
+    "a Mobile Device through Proxy Routing, by its IP": (mobile, "Phone"),
 }
 
 
@@ -47,7 +64,7 @@ TARGET_DEVICES = {
 def test_mitmweb_and_roxy_flows_name_each_flows_target_device(make_flow, name):
     flow = make_flow()
 
-    run_chain(flow, origin_segment(), **TUNNEL_OPTIONS)
+    run_chain(flow, origin_segment(), **TUNNEL_OPTIONS, **PROXY_ROUTING_OPTIONS)
 
     assert flow.comment == (name or "")
     assert [summary["device"] for summary in flows_summary(flow)] == [name]

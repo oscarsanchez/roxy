@@ -296,6 +296,23 @@ echo "ok: launch refuses a Cloud Device without a tunnel, and a param without ="
 [ "$(tail -1 "$RCE_LOG")" = "$(printf '%q ' console player)" ] || fail "console on a Cloud Device ran: $(cat "$RCE_LOG")"
 echo "ok: console on a Cloud Device goes through rce console"
 
+# A Mobile Device ("kind": "mobile") is no Roku: deploy, launch and console refuse it,
+# naming it, before any call to a device (curl) or to rce.
+mkdir -p "$TMP/mobile-app"
+printf 'title=mobile test\n' > "$TMP/mobile-app/manifest"
+refuses_mobile() {
+  local err
+  : > "$CURL_LOG.urls"
+  : > "$RCE_LOG"
+  if err="$("$@" 2>&1)"; then fail "$* took a Mobile Device: $err"; fi
+  case "$err" in *"'Phone'"*"not a Roku"*) ;; *) fail "$* refused a Mobile Device saying: $err" ;; esac
+  [ ! -s "$CURL_LOG.urls" ] && [ ! -s "$RCE_LOG" ] || fail "$* called a device or rce: $(cat "$CURL_LOG.urls" "$RCE_LOG")"
+}
+refuses_mobile "$REPO/scripts/deploy" Phone "$TMP/mobile-app"
+refuses_mobile "$ROXY" launch Phone case=json_get
+refuses_mobile "$ROXY" console Phone
+echo "ok: deploy, launch and console refuse a Mobile Device before any device or rce call"
+
 # App Profiles, in a temp app repo: one smoke check per command. proxy/tests/test_app_profiles.py
 # covers resolution, refusals and clashes at AppProfiles' interface.
 # A git hook (scripts/check from the pre-commit hook) exports the checkout's GIT_DIR, which

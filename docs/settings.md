@@ -7,7 +7,7 @@ Your secrets, devices and LAN subnets live in the **settings root**, `~/.config/
 | File | Holds |
 |---|---|
 | `secrets.env` | `MITMWEB_PASSWORD` (mitmweb UI), `LAB_SECRET` (secret path segment of the public Proxy Base, Cloud Devices), `ROKU_DEV_USER` and `ROKU_DEV_PASSWORD` (sideloading to Physical Devices; a Cloud Device's dev password is kept by `rce`) |
-| `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`) |
+| `devices.json` | Target Devices by name: `{"ip": ...}` for a Physical Device, `{"rce_device_name": ..., "slug": ...}` for a Cloud Device (its rce Device Name, see `rce device list`; the scripts check it with `rce device resolve`), `{"ip": ..., "kind": "mobile"}` for a Mobile Device (no `kind` means a Roku; `scripts/deploy`, `roxy launch` and `roxy console` refuse a Mobile Device: not a Roku) |
 | `settings.json` | `lan_subnets`: your LAN's subnets (CIDR), the clients allowed on the LAN listener. `grid_devices`: the Target Device the grid runner uses for each kind (`physical`, `cloud`, `ca-routing`) |
 | `apps/<name>/` | App Profiles, made by `roxy app new` (see [App Profiles](#app-profiles)) |
 
