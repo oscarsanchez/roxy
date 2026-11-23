@@ -2,7 +2,8 @@
 flows and the flows each active Scenario rule acted on, for bin/roxy and scripts/launch (through proxy/cli.py).
 
 LabSession talks to mitmweb through a transport: get(path) and put(path, json), each
-returning (HTTP status, body bytes) and raising only LabDown when nothing answers.
+returning (HTTP status, body bytes) and raising LabDown when nothing answers, or
+LabSessionError when the lab's refusal answers in mitmweb's stead.
 HttpTransport is the running lab's; tests use one in memory.
 """
 
@@ -16,7 +17,7 @@ from pathlib import Path
 from typing import NamedTuple
 from urllib.error import HTTPError
 from urllib.parse import quote
-from urllib.request import Request, urlopen
+from urllib.request import ProxyHandler, Request, build_opener
 
 from mitmproxy import http, io
 
@@ -70,11 +71,14 @@ class ScenarioRules(NamedTuple):
 
 
 class HttpTransport:
-    """The running lab's mitmweb API, on this Mac's 127.0.0.1:PORT, signed in with PASSWORD."""
+    """The running lab's mitmweb API, on this Mac's 127.0.0.1:PORT, signed in with PASSWORD.
+    It never goes through a proxy: with the Mac's web proxies (or http_proxy) pointed at
+    the lab's Proxy Routing listener, the lab would refuse the call (origin-address)."""
 
     def __init__(self, port, password):
         self.url = f"http://127.0.0.1:{port}"
         self.password = password
+        self.opener = build_opener(ProxyHandler({}))
 
     def get(self, path):
         return self._call(Request(f"{self.url}/{path}"))
@@ -87,9 +91,11 @@ class HttpTransport:
     def _call(self, request):
         request.add_header("Authorization", f"Bearer {self.password}")
         try:
-            with urlopen(request, timeout=30) as response:
+            with self.opener.open(request, timeout=30) as response:
                 return response.status, response.read()
         except HTTPError as e:
+            if reason := e.headers.get("X-Lab-Blocked"):  # not mitmweb: the lab's proxy refused the call
+                raise LabSessionError(f"the lab refused the call to {self.url} ({reason}), not mitmweb") from e
             return e.code, e.read()
         except OSError as e:  # URLError included: nothing answers
             raise LabDown(f"nothing answers on {self.url}: {e}") from e

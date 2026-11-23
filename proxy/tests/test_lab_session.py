@@ -11,6 +11,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 from io import BytesIO
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
+from urllib.request import install_opener
 
 import pytest
 from mitmproxy import flowfilter, http, io
@@ -23,6 +24,7 @@ from lab.lab_session import (
     HttpTransport,
     LabDown,
     LabSession,
+    LabSessionError,
     LabState,
     RuleFlows,
     ScenarioRefused,
@@ -452,7 +454,32 @@ def mitmweb_port(recorded_flows, localhost):
         def log_message(self, *args):
             pass
 
-    server = HTTPServer(("127.0.0.1", 0), Mitmweb)
+    yield from serve(Mitmweb)
+
+
+@pytest.fixture
+def lab_refusal_port(localhost):
+    """A port that answers every call as the lab answers a request it refuses (refuse()):
+    what a proxy pointed at the lab's Proxy Routing listener answers in mitmweb's stead."""
+
+    class LabRefusal(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = b"lab refused: origin-address\n"
+            self.send_response(403)
+            self.send_header("X-Lab-Blocked", "origin-address")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *args):
+            pass
+
+    yield from serve(LabRefusal)
+
+
+def serve(handler):
+    """Serve HANDLER on a free 127.0.0.1 port, yielding the port until the test ends."""
+    server = HTTPServer(("127.0.0.1", 0), handler)
     thread = threading.Thread(target=server.serve_forever)
     thread.start()
     yield server.server_address[1]
@@ -475,10 +502,31 @@ def test_over_http_a_wrong_password_is_named(mitmweb_port):
         LabSession(HttpTransport(mitmweb_port, "wrong")).state()
 
 
-def test_over_http_a_port_nothing_listens_on_is_a_lab_down(localhost):
+def test_over_http_a_call_the_lab_refuses_names_the_refusal_not_the_password(lab_refusal_port):
+    with pytest.raises(LabSessionError, match="origin-address") as refused:
+        LabSession(HttpTransport(lab_refusal_port, PASSWORD)).state()
+
+    assert not isinstance(refused.value, WrongPassword)
+
+
+def free_port():
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
-        port = probe.getsockname()[1]  # free once the probe closes
+        return probe.getsockname()[1]  # free once the probe closes
 
+
+def test_over_http_a_port_nothing_listens_on_is_a_lab_down(localhost):
     with pytest.raises(LabDown):
-        LabSession(HttpTransport(port, PASSWORD)).state()
+        LabSession(HttpTransport(free_port(), PASSWORD)).state()
+
+
+def test_over_http_the_session_reaches_mitmweb_past_any_proxy_set_for_this_mac(mitmweb_port, monkeypatch):
+    # As when the Mac's web proxies point at the lab's Proxy Routing listener.
+    dead_proxy = f"http://127.0.0.1:{free_port()}"
+    for name in ("http_proxy", "HTTP_PROXY", "all_proxy", "ALL_PROXY"):
+        monkeypatch.setenv(name, dead_proxy)
+    for name in ("no_proxy", "NO_PROXY"):
+        monkeypatch.delenv(name, raising=False)
+    install_opener(None)  # urlopen's cached opener read the proxies before they were set
+
+    assert LabSession(HttpTransport(mitmweb_port, PASSWORD)).state().scenarios == []
