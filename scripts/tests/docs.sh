@@ -3,6 +3,9 @@
 # checked as its target, external URLs and code are skipped; the changelog has the plugin version.
 # Usage: scripts/tests/docs.sh   (run by scripts/check)
 set -euo pipefail
+# A git hook (scripts/check from the pre-commit hook) exports the checkout's GIT_INDEX_FILE,
+# absolute in a worktree: git add in a temp tree would overwrite the commit's index.
+unset GIT_DIR GIT_INDEX_FILE GIT_WORK_TREE
 CHECK_DOCS="$(cd "$(dirname "$0")/.." && pwd)/check-docs"
 TMP="$(mktemp -d)"
 trap 'rm -rf "$TMP"' EXIT
