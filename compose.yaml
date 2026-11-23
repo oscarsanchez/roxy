@@ -11,7 +11,7 @@
 # persistent mitmproxy confdir volume (/home/mitmproxy/.mitmproxy): the container
 # makes a new CA each time otherwise, and the CA Routing build ships that CA.
 # Proxy Routing is not reachable here: run-mitmweb starts its listener, 8090, in the
-# container, but it is not published, so no Mobile Device reaches it; use scripts/start-lab.
+# container, but it is not published, so no Proxied Device reaches it; use scripts/start-lab.
 name: roxy
 
 services:

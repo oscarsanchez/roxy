@@ -5,3 +5,4 @@ Roku Cloud Emulator  # the product's name (Cloud Device is ours)
 HAR  # the file format roxy export --har writes from a Recording; a Recording itself is never called one
 iOS Simulator  # Apple's product name for a simulated iPhone on the Mac (Cloud Device is ours)
 Android Emulator  # Google's product name for an emulated Android device on the Mac (Cloud Device is ours)
+TV box  # an Android TV, Google TV, Fire TV or Apple TV device, a Proxied Device; a Roku is never called one

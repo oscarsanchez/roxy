@@ -13,7 +13,7 @@ How a request reaches the lab and what the lab does to it. Vocabulary: [GLOSSARY
 
 **CA Routing** (Physical Devices only): DNS on the router points Origins at the Mac, and a CA Routing build of the app calls Origin URLs directly while trusting the lab's CA on every agent. See [CA Routing](ca-routing.md).
 
-**Proxy Routing** (Mobile Devices only): the Mobile Device sets the lab's Proxy Routing listener, `<mac-lan-ip>:8090`, as its HTTP proxy and trusts the lab's CA, the same one CA Routing uses. Its requests arrive as the Origin URLs they are, with no Proxy Base, so the lab rewrites nothing in their responses. See [Mobile Devices](mobile-devices.md).
+**Proxy Routing** (Proxied Devices only): the Proxied Device sets the lab's Proxy Routing listener, `<mac-lan-ip>:8090`, as its HTTP proxy and trusts the lab's CA, the same one CA Routing uses. Its requests arrive as the Origin URLs they are, with no Proxy Base, so the lab rewrites nothing in their responses. See [Proxied Devices](proxied-devices.md).
 
 ## What the lab does to a request
 

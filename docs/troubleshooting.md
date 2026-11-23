@@ -9,7 +9,7 @@ A refused request is marked ⛔ in mitmweb, carries an `X-Lab-Blocked` header, a
 | Refusal | Cause | Fix |
 |---|---|---|
 | `403 secret-segment` | Through the tunnel, the request lacks the secret path segment, or is not a Prefixed URL behind it. | Launch with `roxy launch`, which sends the real public Proxy Base. Pasting by hand: `roxy status --show-secret`. The tunnel hostname changes on every `roxy start`: relaunch after a restart. |
-| `403 client-ip` | On the LAN, the client is not on your `lan_subnets`: a Mobile Device on another Wi-Fi network than the Mac's too. Through the tunnel, its `CF-Connecting-IP` is not one of the RCE egress IPs. | Add the subnet to `lan_subnets` ([Settings](settings.md)) and restart the lab, or join the Mobile Device to the Mac's LAN ([Mobile Devices](mobile-devices.md#before-you-start)). RCE egress IPs may change: add the new one with mitmweb's `lab_rce_egress_ips` option, then in `proxy/config/guards.json`. |
+| `403 client-ip` | On the LAN, the client is not on your `lan_subnets`: a Proxied Device on another Wi-Fi network than the Mac's too. Through the tunnel, its `CF-Connecting-IP` is not one of the RCE egress IPs. | Add the subnet to `lan_subnets` ([Settings](settings.md)) and restart the lab, or join the Proxied Device to the Mac's LAN ([Proxied Devices](proxied-devices.md#before-you-start)). RCE egress IPs may change: add the new one with mitmweb's `lab_rce_egress_ips` option, then in `proxy/config/guards.json`. |
 | `403 origin-host` | Through the tunnel, the Origin host is not on the allowlist. | Add it to the App Profile's `origin_allowlist` (a leading dot allows any subdomain) and restart ([App Profiles](settings.md#app-profiles)). |
 | `403 origin-address` | The Origin resolves to a private, loopback, link-local or unique-local address. | By design: the lab never reaches private Origins, `map_remote` targets included. A `This Mac` flow to `127.0.0.1`: see [mitmweb says `lab refused: origin-address`](#mitmweb-says-lab-refused-origin-address-while-the-macs-web-proxies-point-at-the-lab). |
 | `400 not-prefixed` | A request reached a LAN listener with no Origin in its path: the app resolved a root-relative URL against the Proxy Base, or the app sent a URL without the Proxy Base. | Put the Proxy Base in front of that URL in the app ([Prefix Routing guide](prefix-routing.md)), or catch the bare path with the App Profile's [fallback Origin](settings.md#app-profiles). |
@@ -31,33 +31,33 @@ A refused request is marked ⛔ in mitmweb, carries an `X-Lab-Blocked` header, a
 
 ## A throttle is ignored
 
-**Cause:** the flow is HTTP/2: it shares its connection with other flows, so it is sent unthrottled, and the mitmweb event log says so. CA-routed flows from a Roku and a Mobile Device's HTTPS flows are usually HTTP/2; Prefixed URL flows and plain HTTP flows stay HTTP/1.1.
-**Fix:** throttle over Prefix Routing ([Scenarios](scenarios.md), [CA Routing guide](ca-routing.md)). A Mobile Device has no Prefix Routing: the lab cannot pace its HTTP/2 flows, but a `latency` rule still slows them ([Mobile Devices](mobile-devices.md#3-see-its-flows)).
+**Cause:** the flow is HTTP/2: it shares its connection with other flows, so it is sent unthrottled, and the mitmweb event log says so. CA-routed flows from a Roku and a Proxied Device's HTTPS flows are usually HTTP/2; Prefixed URL flows and plain HTTP flows stay HTTP/1.1.
+**Fix:** throttle over Prefix Routing ([Scenarios](scenarios.md), [CA Routing guide](ca-routing.md)). A Proxied Device has no Prefix Routing: the lab cannot pace its HTTP/2 flows, but a `latency` rule still slows them ([Proxied Devices](proxied-devices.md#3-see-its-flows)).
 
-## A Mobile Device shows no HTTPS flows, or its app reports TLS errors
+## A Proxied Device shows no HTTPS flows, or its app reports TLS errors
 
-**Cause:** the Mobile Device does not trust the lab's CA, so it ends each HTTPS connection at the TLS handshake, and the mitmweb event log says "The client does not trust the proxy's certificate for" the host. Plain HTTP flows still show. On iOS and iPadOS, the CA profile is often installed but not fully trusted; an iOS Simulator needs the CA added; on Android, see the next entry.
-**Fix:** with the proxy set, install the CA from `http://mitm.it`; on iOS and iPadOS, also turn on full trust in Certificate Trust Settings ([Mobile Devices](mobile-devices.md#2-install-and-trust-the-labs-ca)). On an iOS Simulator, `xcrun simctl keychain booted add-root-cert ~/.mitmproxy/mitmproxy-ca-cert.pem` ([iOS Simulator](mobile-devices.md#ios-simulator)).
+**Cause:** the Proxied Device does not trust the lab's CA, so it ends each HTTPS connection at the TLS handshake, and the mitmweb event log says "The client does not trust the proxy's certificate for" the host. Plain HTTP flows still show. On iOS and iPadOS, the CA profile is often installed but not fully trusted; an iOS Simulator needs the CA added; on Android, see the next entry.
+**Fix:** with the proxy set, install the CA from `http://mitm.it`; on iOS and iPadOS, also turn on full trust in Certificate Trust Settings ([Proxied Devices](proxied-devices.md#2-install-and-trust-the-labs-ca)). On an iOS Simulator, `xcrun simctl keychain booted add-root-cert ~/.mitmproxy/mitmproxy-ca-cert.pem` ([iOS Simulator](proxied-devices.md#ios-simulator)).
 
 ## An Android build's HTTPS fails, though the CA is installed
 
 **Cause:** since Android 7, apps ignore CAs the user installed unless their network security config opts in. Chrome trusts the CA, so `mitm.it` and websites work while the app's HTTPS requests fail, with the same event log line.
-**Fix:** let the debug build trust user CAs (`<certificates src="user" />` under `debug-overrides` in its network security config), then rebuild and reinstall it ([Mobile Devices](mobile-devices.md#android)).
+**Fix:** let the debug build trust user CAs (`<certificates src="user" />` under `debug-overrides` in its network security config), then rebuild and reinstall it ([Proxied Devices](proxied-devices.md#android)).
 
 ## One app's HTTPS fails while other apps' works
 
 **Cause:** the app pins its certificates: it accepts only its Origins' own, never one signed by the lab's CA, however trusted. Pinned apps are out of scope.
-**Fix:** none in the lab. A debug build with pinning turned off goes through it ([Mobile Devices](mobile-devices.md#before-you-start)).
+**Fix:** none in the lab. A debug build with pinning turned off goes through it ([Proxied Devices](proxied-devices.md#before-you-start)).
 
 ## mitmweb says `lab refused: origin-address` while the Mac's web proxies point at the lab
 
 **Cause:** with the Mac's web proxies set to the lab (for an iOS Simulator), the browser sends its request for mitmweb on `127.0.0.1:8081` through the Proxy Routing listener, which refuses a loopback Origin `origin-address`. macOS's default bypass list holds only `*.local` and `169.254/16`. `roxy` itself never goes through a proxy.
-**Fix:** add `127.0.0.1` and `localhost` to the bypass list (`networksetup -setproxybypassdomains Wi-Fi '*.local' 169.254/16 127.0.0.1 localhost`), or turn the web proxies off ([iOS Simulator](mobile-devices.md#ios-simulator)).
+**Fix:** add `127.0.0.1` and `localhost` to the bypass list (`networksetup -setproxybypassdomains Wi-Fi '*.local' 169.254/16 127.0.0.1 localhost`), or turn the web proxies off ([iOS Simulator](proxied-devices.md#ios-simulator)).
 
 ## `scripts/deploy`, `roxy launch` or `roxy console` says "not a Roku"
 
-**Cause:** the device it names is a Mobile Device (`"kind": "mobile"` in `devices.json`): `'<name>' is a Mobile Device, not a Roku`. Deploys, launches, the console and the grid runner drive Rokus only, and refuse before any device or rce call.
-**Fix:** name a Roku. A Mobile Device needs none of them: run the app with its own tooling, and its flows show as it sends them ([Settings](settings.md), [Mobile Devices](mobile-devices.md#3-see-its-flows)).
+**Cause:** the device it names is a Proxied Device (`"kind": "proxied"`, or `"mobile"` from roxy 0.2.0, in `devices.json`): `'<name>' is a Proxied Device, not a Roku`. Deploys, launches, the console and the grid runner drive Rokus only, and refuse before any device or rce call.
+**Fix:** name a Roku. A Proxied Device needs none of them: run the app with its own tooling, and its flows show as it sends them ([Settings](settings.md), [Proxied Devices](proxied-devices.md#3-see-its-flows)).
 
 ## No result line before the timeout
 
