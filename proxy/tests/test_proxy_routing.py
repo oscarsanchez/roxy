@@ -11,6 +11,7 @@ from chain import (
     assert_refused,
     fixture_response,
     flows_summary,
+    lab_flow,
     origin_json,
     proxy_routing_connect,
     proxy_routing_flow,
@@ -157,3 +158,19 @@ def test_a_mobile_device_on_this_mac_is_forwarded_and_named_this_mac(peer):
     assert forwarded.url == "https://httpbin.org/json"
     assert flow.comment == "This Mac"
     assert [summary["device"] for summary in flows_summary(flow)] == ["This Mac"]
+
+
+@pytest.mark.parametrize("peer", THIS_MAC.values(), ids=THIS_MAC.keys())
+def test_a_mobile_device_on_this_mac_gets_its_tunnel(peer):
+    flow = proxy_routing_connect("httpbin.org:443", peer=peer)
+
+    with Lab(**PROXY_ROUTING_OPTIONS) as lab:
+        assert lab.http_connect(flow)
+
+
+@pytest.mark.parametrize("peer", THIS_MAC.values(), ids=THIS_MAC.keys())
+def test_this_mac_on_the_lan_listener_is_still_refused(peer):
+    """Loopback is allowed on the Proxy Routing listener only."""
+    flow = lab_flow("/https://httpbin.org/json", peer=peer)
+
+    assert_refused(flow, run(flow), "client-ip")
