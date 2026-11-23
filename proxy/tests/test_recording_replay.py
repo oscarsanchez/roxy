@@ -8,7 +8,19 @@ those built-ins after the lab chain, as mitmweb does.
 from mitmproxy import http
 from mitmproxy.test import tutils
 
-from chain import LAN_PROXY_BASE, Lab, SECRET, TUNNEL_HOST, TUNNEL_PORT, lab_flow, tunnel_flow
+import pytest
+
+from chain import (
+    LAN_PROXY_BASE,
+    PROXY_ROUTING_OPTIONS,
+    SECRET,
+    TUNNEL_HOST,
+    TUNNEL_PORT,
+    Lab,
+    lab_flow,
+    proxy_routing_flow,
+    tunnel_flow,
+)
 
 
 REPLAY_MODE = {"server_replay_reuse": True, "server_replay_extra": "404"}  # as start-lab --replay sets it
@@ -41,6 +53,22 @@ def test_a_replayed_session_answers_with_the_recorded_response_after_the_origin_
             replies.append((forwarded, flow.response.content))
 
     assert replies == [(None, b'{"uuid": "recorded"}')] * 2  # the Origin is not contacted
+
+
+@pytest.mark.parametrize("replaying", [
+    lambda: proxy_routing_flow("https://httpbin.org/uuid"),
+    lambda: lab_flow("/https://httpbin.org/uuid"),
+], ids=["through Proxy Routing", "as a Prefixed URL"])
+def test_a_session_recorded_through_proxy_routing_replays_by_origin_url(tmp_path, replaying):
+    session = tmp_path / "session.mitm"
+    with Lab(save_stream_file=str(session), **PROXY_ROUTING_OPTIONS) as lab:
+        lab.run(proxy_routing_flow("https://httpbin.org/uuid"), uuid_response("recorded"))
+
+    with Lab(server_replay=[str(session)], **PROXY_ROUTING_OPTIONS, **REPLAY_MODE) as lab:
+        flow = replaying()
+        forwarded = lab.run(flow, uuid_response("changed"))
+
+    assert (forwarded, flow.response.content) == (None, b'{"uuid": "recorded"}')  # the Origin is not contacted
 
 
 def test_a_session_recorded_from_one_client_replays_with_the_replaying_clients_proxy_base(tmp_path):
