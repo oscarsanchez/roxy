@@ -116,8 +116,8 @@ EOF
 mitmweb_pid=$!
 until [ -s "$TMP/mitmweb.port" ]; do sleep 0.1; done
 MITMWEB_PORT="$(cat "$TMP/mitmweb.port")"
-export LAB_WEB_PORT="$("$REAL_UV" run --quiet --project "$REPO/proxy" python -c \
-  'import socket; s = socket.socket(); s.bind(("127.0.0.1", 0)); print(s.getsockname()[1])')"
+. "$REPO/scripts/tests/lab-ports.sh"
+export LAB_WEB_PORT="$(free_port)"
 # lab_up APP SCENARIOS COMMAND... : run COMMAND with the fake mitmweb up, App Profile APP
 # loaded and SCENARIOS active (comma-separated, '' for none), not in CA Routing, with the
 # lab's own Scenarios in $LAB_SCENARIOS.
@@ -449,7 +449,8 @@ case "$err" in "error: the App Profile 'app-a' already exists"*) ;; *) fail "app
 echo "ok: app new records the repo's git root, app list shows it, and a refusal is an error"
 
 # roxy start loads the profile whose repo holds the current folder, naming it and its repo.
-start_in() { local dir="$1"; shift; rm -f "$UV_LOG"; (cd "$dir" && "$ROXY" start "$@" 2>&1); }
+# It runs on test ports, as the start refuses a busy one.
+start_in() { local dir="$1"; shift; rm -f "$UV_LOG"; (cd "$dir" && use_test_ports && "$ROXY" start "$@" 2>&1); }
 started_app() { sed -n 's/^lab_app=//p' "$UV_LOG"; }
 out="$(start_in "$repo_a/src/nested")" || fail "start in app-a's repo: $out"
 [ "$(started_app)" = app-a ] || fail "start in a folder of app-a's repo loaded '$(started_app)'"

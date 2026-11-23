@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # scripts/start-lab and the user's settings: where they are read from, the fail-fast
 # start that names what is missing, and where the session is saved. mitmweb is a
-# fake on PATH that logs its arguments; no lab, no network, no real settings.
+# fake on PATH that logs its arguments; no lab, no network, no real settings. The lab's
+# ports are free test ports (lab-ports.sh), never those of a lab the user is running.
 # Usage: scripts/tests/settings.sh   (run by scripts/check)
 set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
@@ -13,6 +14,14 @@ unset ROXY_CONFIG_DIR LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER LAB_LAN_SUBNET
   MITMWEB_PASSWORD LAB_SECRET ROKU_DEV_USER ROKU_DEV_PASSWORD
 
 fail() { echo "FAIL: $*" >&2; exit 1; }
+
+# The lab's own ports, as roxy start uses them; every start below runs on test ports.
+unset LAB_PORT LAB_CHARLES_PORT LAB_WEB_PORT LAB_PROXY_ROUTING_PORT LAB_TUNNEL_PORT LAB_CA_ROUTING_PORTS
+ports="$(bash -c '. "$1"; echo "$LAB_PORT $LAB_CHARLES_PORT $LAB_PROXY_ROUTING_PORT $LAB_WEB_PORT $LAB_TUNNEL_PORT $LAB_CA_ROUTING_PORTS"' _ "$SCRIPTS/lib.sh")"
+[ "$ports" = "8080 8888 8090 8081 8082 443 80" ] || fail "the lab's ports are $ports"
+echo "ok: the lab listens on 8080, 8888 (Charles's port), 8090, 8081 (UI), 8082 (tunnel), and 443 and 80 for CA Routing"
+. "$SCRIPTS/tests/lab-ports.sh"
+use_test_ports
 
 # The fake uv stands in for `uv run mitmweb ...`: it logs one argument per line. Its empty
 # answer to start-lab's App Profile resolve (proxy/cli.py) means none, as these settings have none.
@@ -102,18 +111,18 @@ case "$session" in "$XDG_DATA_HOME/roxy/captures/no-profile/"*.mitm) ;; *) fail 
 grep -qx 'web_password=test-password' "$UV_LOG" || fail "mitmweb did not get the password from secrets.env"
 echo "ok: a session is saved in the user data directory"
 
-# Both LAN listeners start (8888 is Charles's port, which client hooks hardcode), and the
+# Both LAN listeners start (the second on Charles's port, which client hooks hardcode), and the
 # start prints the Proxy IP to type into an app's debug proxy setting and both LAN Proxy Bases.
-grep -qx 'reverse:http://127.0.0.1:9@8080' "$UV_LOG" || fail "mitmweb has no LAN listener on 8080"
-grep -qx 'reverse:http://127.0.0.1:9@8888' "$UV_LOG" || fail "mitmweb has no LAN listener on 8888"
+grep -qx "reverse:http://127.0.0.1:9@$LAB_PORT" "$UV_LOG" || fail "mitmweb has no LAN listener on $LAB_PORT"
+grep -qx "reverse:http://127.0.0.1:9@$LAB_CHARLES_PORT" "$UV_LOG" || fail "mitmweb has no LAN listener on $LAB_CHARLES_PORT"
 ip="$(printf '%s\n' "$out" | sed -n 's/^Proxy IP: *\([^ ]*\).*/\1/p')"
 [ -n "$ip" ] || fail "the start does not print the Proxy IP: $out"
-case "$out" in *"http://$ip:8080"*"http://$ip:8888"*) ;; *) fail "the start does not print both LAN Proxy Bases: $out" ;; esac
+case "$out" in *"http://$ip:$LAB_PORT"*"http://$ip:$LAB_CHARLES_PORT"*) ;; *) fail "the start does not print both LAN Proxy Bases: $out" ;; esac
 echo "ok: both LAN listeners start, and the start prints the Proxy IP and both LAN Proxy Bases"
 
 # The Proxy Routing listener starts too, an HTTP proxy on the LAN that the lab tells apart
 # by its port, and the start prints the address to set as a Proxied Device's HTTP proxy.
-grep -qx 'regular@8090' "$UV_LOG" || fail "mitmweb has no Proxy Routing listener on 8090"
-grep -qx 'lab_proxy_routing_port=8090' "$UV_LOG" || fail "the lab does not know the Proxy Routing listener's port"
-case "$out" in *"Proxy Routing:     $ip:8090"*) ;; *) fail "the start does not print the Proxy Routing address: $out" ;; esac
+grep -qx "regular@$LAB_PROXY_ROUTING_PORT" "$UV_LOG" || fail "mitmweb has no Proxy Routing listener on $LAB_PROXY_ROUTING_PORT"
+grep -qx "lab_proxy_routing_port=$LAB_PROXY_ROUTING_PORT" "$UV_LOG" || fail "the lab does not know the Proxy Routing listener's port"
+case "$out" in *"Proxy Routing:     $ip:$LAB_PROXY_ROUTING_PORT"*) ;; *) fail "the start does not print the Proxy Routing address: $out" ;; esac
 echo "ok: the Proxy Routing listener starts, and the start prints its address"

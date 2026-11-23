@@ -14,12 +14,14 @@ SETTINGS_FILE="$ROXY_CONFIG_DIR/settings.json"
 RECORDINGS_ROOT="${XDG_DATA_HOME:-$HOME/.local/share}/roxy/captures"
 RECORDINGS_DIR="$RECORDINGS_ROOT/${LAB_APP:-no-profile}"
 
-LAB_PORT=8080      # LAN listener (Prefix Routing)
-LAB_CHARLES_PORT=8888  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
-LAB_WEB_PORT="${LAB_WEB_PORT:-8081}"  # mitmweb UI, localhost only; LAB_WEB_PORT overrides it (tests)
-LAB_PROXY_ROUTING_PORT=8090  # Proxy Routing listener: the HTTP proxy a Proxied Device sets, LAN only
-LAB_TUNNEL_PORT=8082  # tunnel listener: only cloudflared dials it, never reachable from the LAN
-LAB_CA_ROUTING_PORTS="443 80"  # CA Routing listeners: Origin URLs that DNS sends to the lab
+# The lab's ports, fixed. Each variable set in the environment overrides its port: tests run
+# the lab on free ports (scripts/tests/lab-ports.sh), never those of a lab the user is running.
+LAB_PORT="${LAB_PORT:-8080}"  # LAN listener (Prefix Routing)
+LAB_CHARLES_PORT="${LAB_CHARLES_PORT:-8888}"  # second LAN listener, the same chain: Charles's port, which client hooks hardcode
+LAB_WEB_PORT="${LAB_WEB_PORT:-8081}"  # mitmweb UI, localhost only
+LAB_PROXY_ROUTING_PORT="${LAB_PROXY_ROUTING_PORT:-8090}"  # Proxy Routing listener: the HTTP proxy a Proxied Device sets, LAN only
+LAB_TUNNEL_PORT="${LAB_TUNNEL_PORT:-8082}"  # tunnel listener: only cloudflared dials it, never reachable from the LAN
+LAB_CA_ROUTING_PORTS="${LAB_CA_ROUTING_PORTS:-443 80}"  # CA Routing listeners: Origin URLs that DNS sends to the lab
 LAB_CA_CERT="$HOME/.mitmproxy/mitmproxy-ca-cert.pem"  # the lab's CA, created by mitmweb's first start
 TUNNEL_METRICS="127.0.0.1:20241"  # cloudflared's local metrics server: readiness and the quick tunnel hostname
 # Build output and logs: packages, the tunnel's log, console and grid evidence, in the
