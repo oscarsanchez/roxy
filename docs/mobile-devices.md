@@ -96,7 +96,7 @@ The iOS Simulator has no proxy setting of its own: it uses the Mac's.
    networksetup -setwebproxy Wi-Fi 127.0.0.1 8090
    networksetup -setsecurewebproxy Wi-Fi 127.0.0.1 8090
    ```
-   Add `127.0.0.1` and `localhost` to "Bypass proxy settings for these hosts & domains" (macOS's default list holds only `*.local` and `169.254/16`), so mitmweb and `roxy` reach the lab directly: through the proxy they would be refused `origin-address`, which `roxy` reports as a wrong password. From a terminal:
+   Add `127.0.0.1` and `localhost` to "Bypass proxy settings for these hosts & domains" (macOS's default list holds only `*.local` and `169.254/16`), so a browser opens mitmweb (`http://127.0.0.1:8081`) directly: through the proxy the lab refuses it `origin-address`. `roxy` itself never goes through a proxy. From a terminal:
    ```sh
    networksetup -setproxybypassdomains Wi-Fi '*.local' 169.254/16 127.0.0.1 localhost
    ```

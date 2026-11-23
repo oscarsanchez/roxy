@@ -11,7 +11,7 @@ A refused request is marked ⛔ in mitmweb, carries an `X-Lab-Blocked` header, a
 | `403 secret-segment` | Through the tunnel, the request lacks the secret path segment, or is not a Prefixed URL behind it. | Launch with `roxy launch`, which sends the real public Proxy Base. Pasting by hand: `roxy status --show-secret`. The tunnel hostname changes on every `roxy start`: relaunch after a restart. |
 | `403 client-ip` | On the LAN, the client is not on your `lan_subnets`: a Mobile Device on another Wi-Fi network than the Mac's too. Through the tunnel, its `CF-Connecting-IP` is not one of the RCE egress IPs. | Add the subnet to `lan_subnets` ([Settings](settings.md)) and restart the lab, or join the Mobile Device to the Mac's LAN ([Mobile Devices](mobile-devices.md#before-you-start)). RCE egress IPs may change: add the new one with mitmweb's `lab_rce_egress_ips` option, then in `proxy/config/guards.json`. |
 | `403 origin-host` | Through the tunnel, the Origin host is not on the allowlist. | Add it to the App Profile's `origin_allowlist` (a leading dot allows any subdomain) and restart ([App Profiles](settings.md#app-profiles)). |
-| `403 origin-address` | The Origin resolves to a private, loopback, link-local or unique-local address. | By design: the lab never reaches private Origins, `map_remote` targets included. A `This Mac` flow to `127.0.0.1`: see [`roxy` says the password is wrong](#roxy-says-the-password-is-wrong-while-the-macs-web-proxies-point-at-the-lab). |
+| `403 origin-address` | The Origin resolves to a private, loopback, link-local or unique-local address. | By design: the lab never reaches private Origins, `map_remote` targets included. A `This Mac` flow to `127.0.0.1`: see [mitmweb says `lab refused: origin-address`](#mitmweb-says-lab-refused-origin-address-while-the-macs-web-proxies-point-at-the-lab). |
 | `400 not-prefixed` | A request reached a LAN listener with no Origin in its path: the app resolved a root-relative URL against the Proxy Base, or the app sent a URL without the Proxy Base. | Put the Proxy Base in front of that URL in the app ([Prefix Routing guide](prefix-routing.md)), or catch the bare path with the App Profile's [fallback Origin](settings.md#app-profiles). |
 
 ## `roxy start` stops before mitmweb starts
@@ -49,9 +49,9 @@ A refused request is marked ⛔ in mitmweb, carries an `X-Lab-Blocked` header, a
 **Cause:** the app pins its certificates: it accepts only its Origins' own, never one signed by the lab's CA, however trusted. Pinned apps are out of scope.
 **Fix:** none in the lab. A debug build with pinning turned off goes through it ([Mobile Devices](mobile-devices.md#before-you-start)).
 
-## `roxy` says the password is wrong while the Mac's web proxies point at the lab
+## mitmweb says `lab refused: origin-address` while the Mac's web proxies point at the lab
 
-**Cause:** with the Mac's web proxies set to the lab (for an iOS Simulator), `roxy`'s own calls to mitmweb on `127.0.0.1:8081` go through the Proxy Routing listener, which refuses them `origin-address`, and `roxy` reads that 403 as a wrong password. macOS's default bypass list holds only `*.local` and `169.254/16`.
+**Cause:** with the Mac's web proxies set to the lab (for an iOS Simulator), the browser sends its request for mitmweb on `127.0.0.1:8081` through the Proxy Routing listener, which refuses a loopback Origin `origin-address`. macOS's default bypass list holds only `*.local` and `169.254/16`. `roxy` itself never goes through a proxy.
 **Fix:** add `127.0.0.1` and `localhost` to the bypass list (`networksetup -setproxybypassdomains Wi-Fi '*.local' 169.254/16 127.0.0.1 localhost`), or turn the web proxies off ([iOS Simulator](mobile-devices.md#ios-simulator)).
 
 ## `scripts/deploy`, `roxy launch` or `roxy console` says "not a Roku"

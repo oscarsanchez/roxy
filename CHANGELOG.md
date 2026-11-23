@@ -18,6 +18,10 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 - The README is a landing page with a one-path quickstart, starting with a Prefixed URL sent from the Mac; every other section moved to a page in `docs/`, indexed by kind in `docs/README.md`.
 - The `roxy` skill reaches `docs/` through one link and points to the new pages.
 
+### Fixed
+
+- `roxy` reaches the lab past any proxy set for the Mac (its web proxies, `http_proxy`): its calls to mitmweb and to cloudflared's metrics on `127.0.0.1` never go through one.
+
 ## [0.1.0] - 2026-11-22
 
 The first release: a mitmproxy/mitmweb lab on the Mac for the Outbound Traffic of Roku Lab Apps and Product Apps, on Physical Devices and Cloud Devices.
