@@ -100,7 +100,7 @@ case "$out" in *"http://$ip:8080"*"http://$ip:8888"*) ;; *) fail "the start does
 echo "ok: both LAN listeners start, and the start prints the Proxy IP and both LAN Proxy Bases"
 
 # The Proxy Routing listener starts too, an HTTP proxy on the LAN that the lab tells apart
-# by its port, and the start prints the address to set as a Mobile Device's HTTP proxy.
+# by its port, and the start prints the address to set as a Proxied Device's HTTP proxy.
 grep -qx 'regular@8090' "$UV_LOG" || fail "mitmweb has no Proxy Routing listener on 8090"
 grep -qx 'lab_proxy_routing_port=8090' "$UV_LOG" || fail "the lab does not know the Proxy Routing listener's port"
 case "$out" in *"Proxy Routing:     $ip:8090"*) ;; *) fail "the start does not print the Proxy Routing address: $out" ;; esac

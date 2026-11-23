@@ -42,7 +42,7 @@ TUNNEL_PEER = ("127.0.0.1", 52000)  # cloudflared on this Mac
 RCE_EGRESS_IP = "44.239.29.169"
 TUNNEL_OPTIONS = {"lab_secret": SECRET, "lab_tunnel_port": TUNNEL_PORT}  # as start-lab --tunnel sets them
 
-# Proxy Routing: a Mobile Device sets the lab's `regular` mode listener as its HTTP proxy.
+# Proxy Routing: a Proxied Device sets the lab's `regular` mode listener as its HTTP proxy.
 PROXY_ROUTING_PORT = 8090
 PROXY_ROUTING_LISTENER = ProxyMode.parse(f"regular@{PROXY_ROUTING_PORT}")
 PROXY_ROUTING_OPTIONS = {"lab_proxy_routing_port": PROXY_ROUTING_PORT}  # as start-lab sets it
@@ -81,7 +81,7 @@ def tunnel_flow(path, client_ip=RCE_EGRESS_IP, peer=TUNNEL_PEER, listener=TUNNEL
 
 
 def proxy_routing_flow(url, peer=LAN_CLIENT):
-    """A request as the Proxy Routing listener (`regular` mode) sees it at hook time: a Mobile
+    """A request as the Proxy Routing listener (`regular` mode) sees it at hook time: a Proxied
     Device that set the lab as its HTTP proxy, asking for an Origin URL (over HTTPS, inside
     the CONNECT tunnel mitmproxy terminates)."""
     request = http.Request.make("GET", url, headers={"host": urlsplit(url).netloc})
@@ -93,7 +93,7 @@ def proxy_routing_flow(url, peer=LAN_CLIENT):
 
 
 def proxy_routing_connect(authority, peer=LAN_CLIENT):
-    """A Mobile Device's CONNECT to the Proxy Routing listener, opening a tunnel to AUTHORITY
+    """A Proxied Device's CONNECT to the Proxy Routing listener, opening a tunnel to AUTHORITY
     (host:port), as the http_connect hook sees it. Run it with Lab.http_connect."""
     host, port = authority.rsplit(":", 1)
     request = tutils.treq(

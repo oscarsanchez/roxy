@@ -55,7 +55,7 @@ cd "$REPO_ROOT/proxy"
 # keep_host_header lets it see the client's Proxy Base; lazy never dials the dummy target.
 # Two LAN listeners for Physical Devices (8888 is Charles's port, which Charles hooks hardcode), and the
 # tunnel listener that only cloudflared dials, which is how the lab tells tunnel requests apart.
-# The Proxy Routing listener, in `regular` mode, is the HTTP proxy Mobile Devices set; the lab
+# The Proxy Routing listener, in `regular` mode, is the HTTP proxy Proxied Devices set; the lab
 # tells its requests apart by its port too (it also serves the lab's CA at http://mitm.it).
 exec "$@" \
   --mode "reverse:http://127.0.0.1:9@$LAB_PORT" \

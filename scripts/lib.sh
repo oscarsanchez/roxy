@@ -171,7 +171,7 @@ lan_proxy_base() {
 print_lan_addresses() {
   echo "Proxy IP:          $1  (for an app's debug proxy setting)"
   echo "LAN Proxy Bases:   $(lan_proxy_base "$1")  $(lan_proxy_base "$1" "$LAB_CHARLES_PORT")  (each takes the / and /; forms)"
-  echo "Proxy Routing:     $1:$LAB_PROXY_ROUTING_PORT  (a Mobile Device's HTTP proxy)"
+  echo "Proxy Routing:     $1:$LAB_PROXY_ROUTING_PORT  (a Proxied Device's HTTP proxy)"
 }
 
 # tunnel_host : the running quick tunnel's hostname; fails when no tunnel is up.

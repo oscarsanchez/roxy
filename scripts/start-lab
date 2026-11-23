@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Start the lab: mitmweb with the lab addon chain, listening on the LAN for Prefixed URLs,
-# and as an HTTP proxy for Mobile Devices (Proxy Routing).
+# and as an HTTP proxy for Proxied Devices (Proxy Routing).
 # Usage: scripts/start-lab [--app NAME] [--tunnel] [--ca-routing] [--replay SESSION]
 #   --app NAME loads the App Profile NAME; without it, the profile whose repo holds the
 #   current folder, if any (proxy/cli.py resolve); a Scenario in both the profile's and

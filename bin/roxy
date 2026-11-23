@@ -26,7 +26,7 @@ EOF
     start) cat <<'EOF'
 usage: roxy start [--app NAME] [--tunnel] [--ca-routing] [--replay RECORDING]
 Run the lab in the foreground until Ctrl-C. It prints the mitmweb UI, the Proxy Bases
-and the Proxy Routing address (the HTTP proxy a Mobile Device sets).
+and the Proxy Routing address (the HTTP proxy a Proxied Device sets).
   --app NAME        load the App Profile NAME; without it, the profile whose repo holds
                     the current folder, if any (roxy app list)
   --tunnel          also open the Public Endpoint, for Cloud Devices

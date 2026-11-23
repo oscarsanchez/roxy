@@ -157,7 +157,7 @@ def test_a_throttled_answer_reaches_a_real_client_paced_and_the_connection_ends_
 
 
 def test_a_proxied_request_to_the_proxy_routing_listener_is_answered_by_a_scenario(lab_ports):
-    """A Mobile Device's request, as an HTTP proxy client sends it (absolute-form)."""
+    """A Proxied Device's request, as an HTTP proxy client sends it (absolute-form)."""
     received, _, _ = exchange(lab_ports.proxy_routing, (
         b"GET http://origin.invalid/video/segment-1.ts HTTP/1.1\r\n"
         b"Host: origin.invalid\r\nConnection: close\r\n\r\n"
@@ -169,7 +169,7 @@ def test_a_proxied_request_to_the_proxy_routing_listener_is_answered_by_a_scenar
 
 
 def test_an_https_request_through_connect_on_the_proxy_routing_listener_is_answered_by_a_scenario(lab_ports, tmp_path):
-    """A Mobile Device's HTTPS request: a CONNECT, then TLS with the lab's CA, which the device trusts."""
+    """A Proxied Device's HTTPS request: a CONNECT, then TLS with the lab's CA, which the device trusts."""
     received, _, _ = exchange_through_connect(lab_ports.proxy_routing, b"origin.invalid:443", (
         b"GET /video/segment-1.ts HTTP/1.1\r\n"
         b"Host: origin.invalid\r\nConnection: close\r\n\r\n"

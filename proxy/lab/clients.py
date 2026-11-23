@@ -1,4 +1,4 @@
-"""Who sent a request: a LAN client directly, a Mobile Device through Proxy Routing,
+"""Who sent a request: a LAN client directly, a Proxied Device through Proxy Routing,
 or a Cloud Device through the tunnel.
 
 cloudflared dials its own listener, the tunnel listener (option
@@ -7,7 +7,7 @@ macOS, unpublished under Compose. A request on it "came through the tunnel"
 (the Public Endpoint), whatever its peer IP. Only then are the tunnel's headers
 trusted; a LAN client sending them is judged by its real IP.
 
-A Mobile Device sets the Proxy Routing listener (option lab_proxy_routing_port), a
+A Proxied Device sets the Proxy Routing listener (option lab_proxy_routing_port), a
 `regular` mode LAN listener, as its HTTP proxy: a request on it "came through Proxy
 Routing", and carries its Origin URL as is. From loopback, it came from This Mac: an
 iOS Simulator or Android Emulator on it.

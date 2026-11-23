@@ -31,7 +31,7 @@ class OriginDecoder:
         )
         loader.add_option(
             "lab_proxy_routing_port", int, 0,
-            "Port of the Proxy Routing listener, the HTTP proxy Mobile Devices set. 0: no Proxy Routing listener.",
+            "Port of the Proxy Routing listener, the HTTP proxy Proxied Devices set. 0: no Proxy Routing listener.",
         )
 
     def requestheaders(self, flow):

@@ -146,7 +146,7 @@ out="$(FAKE_TUNNEL_HOST=tunnel.example lab_up "" json-503,hls-404 "$ROXY" status
 want="lab: up (mitmweb UI http://127.0.0.1:$MITMWEB_PORT)
 Proxy IP:          192.0.2.10  (for an app's debug proxy setting)
 LAN Proxy Bases:   http://192.0.2.10:8080  http://192.0.2.10:8888  (each takes the / and /; forms)
-Proxy Routing:     192.0.2.10:8090  (a Mobile Device's HTTP proxy)
+Proxy Routing:     192.0.2.10:8090  (a Proxied Device's HTTP proxy)
 Public Proxy Base: https://tunnel.example/<secret>
 App Profile:       none
 Scenarios:         json-503  (lab)

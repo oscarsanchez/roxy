@@ -1,4 +1,4 @@
-"""Proxy Routing: a Mobile Device sets the lab's Proxy Routing listener as its HTTP
+"""Proxy Routing: a Proxied Device sets the lab's Proxy Routing listener as its HTTP
 proxy, so its requests arrive as the Origin URLs they are. No Proxy Base, no Prefixed URLs."""
 
 import pytest
@@ -150,7 +150,7 @@ THIS_MAC = {"IPv4": ("127.0.0.1", 51000), "IPv6": ("::1", 51000, 0, 0)}  # an iO
 
 
 @pytest.mark.parametrize("peer", THIS_MAC.values(), ids=THIS_MAC.keys())
-def test_a_mobile_device_on_this_mac_is_forwarded_and_named_this_mac(peer):
+def test_a_proxied_device_on_this_mac_is_forwarded_and_named_this_mac(peer):
     flow = proxy_routing_flow("https://httpbin.org/json", peer=peer)
 
     forwarded = run(flow)
@@ -161,7 +161,7 @@ def test_a_mobile_device_on_this_mac_is_forwarded_and_named_this_mac(peer):
 
 
 @pytest.mark.parametrize("peer", THIS_MAC.values(), ids=THIS_MAC.keys())
-def test_a_mobile_device_on_this_mac_gets_its_tunnel(peer):
+def test_a_proxied_device_on_this_mac_gets_its_tunnel(peer):
     flow = proxy_routing_connect("httpbin.org:443", peer=peer)
 
     with Lab(**PROXY_ROUTING_OPTIONS) as lab:

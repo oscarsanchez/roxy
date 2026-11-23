@@ -4,8 +4,9 @@ A Target Device has a key, which tells devices apart (the throttle shares a rule
 bandwidth per key), and a name from the user's devices registry
 (<settings root>/devices.json), None when nothing names it:
 - A Physical Device is its client IP, named by `ip` in the registry. It opens a
-  connection per parallel request, each from its own port. So is a Mobile Device
-  (`"kind": "mobile"` beside its `ip`), whose flows come through Proxy Routing.
+  connection per parallel request, each from its own port. So is a Proxied Device
+  (`"kind": "proxied"`, or `"mobile"` as 0.2.0 wrote it, beside its `ip`), whose flows come
+  through Proxy Routing.
 - An iOS Simulator or Android Emulator on this Mac reaches the Proxy Routing listener from
   loopback, named "This Mac".
 - Every Cloud Device reaches the lab through cloudflared, so all share its peer. One is
@@ -58,7 +59,7 @@ class TargetDevices:
     Proxy Base) and before the guards and Scenarios, which leave the client alone."""
 
     def __init__(self):
-        self.physical_devices = {}  # IP -> name, Mobile Devices included
+        self.physical_devices = {}  # IP -> name, Proxied Devices included
         self.cloud_devices = {}  # slug -> name
 
     def load(self, loader):
