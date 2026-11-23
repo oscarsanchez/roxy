@@ -8,7 +8,7 @@ set -euo pipefail
 SCRIPTS="$(cd "$(dirname "$0")/.." && pwd)"
 REPO="$(dirname "$SCRIPTS")"
 TMP="$(mktemp -d)"
-trap 'rm -rf "$TMP"' EXIT
+trap 'kill $(jobs -p) 2>/dev/null || true; rm -rf "$TMP"' EXIT
 export LAB_LOCK_DIR="$TMP/locks" XDG_CONFIG_HOME="$TMP/config" XDG_DATA_HOME="$TMP/data" UV_LOG="$TMP/uv.log"
 unset ROXY_CONFIG_DIR LAB_LOCK_TOKEN LAB_LOCK_WAIT LAB_LOCK_OWNER LAB_LAN_SUBNETS LAB_REPLAY \
   MITMWEB_PASSWORD LAB_SECRET ROKU_DEV_USER ROKU_DEV_PASSWORD
@@ -126,3 +126,24 @@ grep -qx "regular@$LAB_PROXY_ROUTING_PORT" "$UV_LOG" || fail "mitmweb has no Pro
 grep -qx "lab_proxy_routing_port=$LAB_PROXY_ROUTING_PORT" "$UV_LOG" || fail "the lab does not know the Proxy Routing listener's port"
 case "$out" in *"Proxy Routing:     $ip:$LAB_PROXY_ROUTING_PORT"*) ;; *) fail "the start does not print the Proxy Routing address: $out" ;; esac
 echo "ok: the Proxy Routing listener starts, and the start prints its address"
+
+# hold_port NAME : a test listener (perl) holds a free port, which becomes the lab port NAME;
+# held_pid is its pid.
+hold_port() {
+  rm -f "$TMP/held.port"
+  perl -MIO::Socket::INET -e '
+    $s = IO::Socket::INET->new(Listen => 1, LocalAddr => "127.0.0.1", LocalPort => 0) or die;
+    open F, ">", "$ARGV[0].tmp"; print F $s->sockport; close F; rename "$ARGV[0].tmp", $ARGV[0];
+    sleep' "$TMP/held.port" &
+  held_pid=$!
+  until [ -s "$TMP/held.port" ]; do sleep 0.1; done
+  export "$1=$(cat "$TMP/held.port")"
+}
+
+# A busy port stops the start before mitmweb starts, naming the port, its role and the
+# process holding it, and pointing at Troubleshooting.
+hold_port LAB_CHARLES_PORT
+refused "port $LAB_CHARLES_PORT (Charles's port, the second LAN listener) is in use by perl (pid $held_pid)" \
+  docs/troubleshooting.md
+kill "$held_pid"; wait "$held_pid" 2>/dev/null || true
+echo "ok: a busy port is named, with its role and the process holding it"

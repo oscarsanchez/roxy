@@ -121,11 +121,40 @@ require_env() {
   [ -z "$problem" ] || die "$problem"
 }
 
+# lab_listeners : the ports roxy start listens on, one "PORT ROLE" per line; the CA Routing
+# ports only with LAB_CA_ROUTING=true (start-lab --ca-routing).
+lab_listeners() {
+  local port
+  echo "$LAB_PORT the LAN listener"
+  echo "$LAB_CHARLES_PORT Charles's port, the second LAN listener"
+  echo "$LAB_PROXY_ROUTING_PORT the Proxy Routing listener"
+  echo "$LAB_WEB_PORT the mitmweb UI"
+  echo "$LAB_TUNNEL_PORT the tunnel listener"
+  if [ "${LAB_CA_ROUTING:-}" = true ]; then
+    for port in $LAB_CA_ROUTING_PORTS; do echo "$port a CA Routing listener"; done
+  fi
+}
+
+# busy_port_problem PORT ROLE : names PORT, its ROLE and each process listening on it (name
+# and pid, from lsof) when the port is busy; nothing when it is free. A holder lsof cannot
+# show this user (a root process on 443 or 80) still answers on the port: named by the port.
+busy_port_problem() {
+  local holders
+  holders="$(lsof +c 0 -nP -iTCP:"$1" -sTCP:LISTEN -Fpc 2>/dev/null \
+    | awk '/^p/ {pid = substr($0, 2)} /^c/ {h = h sep substr($0, 2) " (pid " pid ")"; sep = ", "} END {print h}')"
+  if [ -n "$holders" ]; then
+    echo "port $1 ($2) is in use by $holders: quit it, then start again (docs/troubleshooting.md)"
+  elif nc -z 127.0.0.1 "$1" 2>/dev/null; then
+    echo "port $1 ($2) is in use by a process this user cannot see (sudo lsof -nP -iTCP:$1 -sTCP:LISTEN names it): quit it, then start again (docs/troubleshooting.md)"
+  fi
+}
+
 # require_lab_settings SECRET... : what the lab needs to start, loading secrets.env. Fails
 # naming everything missing at once (settings files, the secrets SECRET..., Target Devices,
-# lan_subnets), each with the command that fills it in, so one run shows all there is to do.
+# lan_subnets), each with the command that fills it in, and every busy port the lab listens
+# on (lab_listeners), so one run shows all there is to do.
 require_lab_settings() {
-  local problems=() problem file
+  local problems=() problem file port role
   require_jq
   for file in "$SECRETS_FILE" "$DEVICES_FILE" "$SETTINGS_FILE"; do
     problem="$(setting_file_problem "$file")"
@@ -142,6 +171,10 @@ require_lab_settings() {
   if [ -f "$SETTINGS_FILE" ] && ! jq -e '.lan_subnets | length > 0' "$SETTINGS_FILE" >/dev/null 2>&1; then
     problems+=("missing setting lan_subnets (the LAN subnets allowed to use the lab, CIDR) in $SETTINGS_FILE (roxy setup sets them for this Mac's network)")
   fi
+  while read -r port role; do
+    problem="$(busy_port_problem "$port" "$role")"
+    [ -z "$problem" ] || problems+=("$problem")
+  done < <(lab_listeners)
   [ ${#problems[@]} -eq 0 ] || { printf 'error: %s\n' "${problems[@]}" >&2; exit 1; }
 }
 
