@@ -1,6 +1,6 @@
 ---
 name: roxy
-description: Use for a Roku app's network traffic through the roxy lab (mitmproxy) - seeing what the app requested, making an API or other Origin fail, slow down or answer from a mock (Scenarios), App Profiles, and routing an app through the lab (Proxy Base, Charles hook, the kit).
+description: Use for a Roku app's network traffic through the roxy lab (mitmproxy) - seeing what the app requested, making an API or other Origin fail, slow down or answer from a mock (Scenarios), App Profiles, and routing an app through the lab (Proxy Base, Charles hook, the kit). Also the same app's iOS or Android debug build on a phone, iOS Simulator or Android Emulator (Mobile Devices, Proxy Routing).
 ---
 
 # roxy: see and change a Roku app's traffic
@@ -9,7 +9,7 @@ roxy is a mitmproxy lab on the user's Mac. A Roku app that sends its Outbound Tr
 
 `roxy` comes from the user's roxy checkout, whose `./install.sh` links it into `~/.local/bin`; without it, ask the user to run that. Paths the guides name (such as `kit/`) are in that checkout: `realpath "$(command -v roxy)"` prints `<checkout>/bin/roxy`.
 
-Words: a **Target Device** is the Roku running the app, a Physical Device (on the LAN) or a Cloud Device (Roku Cloud Emulator, billed per Run: the `rce` skill). An **Origin** is the real server a request is for. The **Proxy Base** is the lab address the app puts in front of each Origin URL, making a **Prefixed URL**. An **App Profile** keeps one app's Scenarios and mocks in the user's roxy settings, outside every repo.
+Words: a **Target Device** is the device running the app: a Roku, either a Physical Device (on the LAN) or a Cloud Device (Roku Cloud Emulator, billed per Run: the `rce` skill), or a **Mobile Device** (an iPhone, iPad, Android device, iOS Simulator or Android Emulator running the app's mobile debug build). An **Origin** is the real server a request is for. The **Proxy Base** is the lab address the app puts in front of each Origin URL, making a **Prefixed URL**. An **App Profile** keeps one app's Scenarios and mocks in the user's roxy settings, outside every repo.
 
 ## Workflow
 
@@ -19,7 +19,7 @@ Words: a **Target Device** is the Roku running the app, a Physical Device (on th
    - `roxy start` refusing over a missing setting (`secrets.env`, `devices.json`, `lan_subnets`) names the file; those are the user's to fill in, in the settings root (`~/.config/roxy/`, or `$ROXY_CONFIG_DIR`).
 
    Done when `roxy status` prints `lab: up` and `App Profile: <this app's profile>`.
-2. **App routed.** Only requests sent to a Prefixed URL reach the lab. Find how this app does it: a Charles hook (a debug proxy setting in a sideloaded build, on port 8888; the user types the `Proxy IP` from `roxy status` into the app), the kit (`RoxyUrl` or `prefixedUrl` in the source, built with `bs_const=roxy_kit=true` or `ROXY_KIT=1`), or neither, and then the Prefix Routing guide wires one in. roxy never builds or sideloads an app: build and sideload it with the app's own tooling, as its repo does, then launch it with roxy.
+2. **App routed.** A Roku app's requests reach the lab only as Prefixed URLs (a Mobile Device: Mobile Devices, below). Find how this app does it: a Charles hook (a debug proxy setting in a sideloaded build, on port 8888; the user types the `Proxy IP` from `roxy status` into the app), the kit (`RoxyUrl` or `prefixedUrl` in the source, built with `bs_const=roxy_kit=true` or `ROXY_KIT=1`), or neither, and then the Prefix Routing guide wires one in. roxy never builds or sideloads an app: build and sideload it with the app's own tooling, as its repo does, then launch it with roxy.
 3. **Launch.** `roxy launch [--scenario NAME]... "<device>" [key=value...]`, with a device name from `devices.json` in the settings root. It relaunches the sideloaded dev channel with the `proxyBase` launch param (the kit reads it; a Charles hook ignores it) and prints `run=<id>`: keep the id, for either kind of app.
 4. **Read the flows.** `roxy flows --json --since <run id>`. Done when every request you expected is in the output, or its absence is explained (Reading flows).
 
@@ -50,6 +50,16 @@ status = 503
 - `scenario_rules`: the active Scenarios' rules that acted on it, each named `<scenario>/<rule>`.
 - A request missing from the output went straight to its Origin: it was built outside the Charles hook or the kit (Prefix Routing guide, What the lab never sees).
 - Lab down: it says so and exits non-zero.
+
+## Mobile Devices: the app's iOS or Android debug build
+
+A Mobile Device reaches the lab by **Proxy Routing**: it sets the lab as its HTTP proxy (the `Proxy Routing:` address in `roxy status`) and trusts the lab's CA from `http://mitm.it`. That setup is the user's, on the device: [Mobile Devices](docs/mobile-devices.md).
+
+- Its flows keep their Origin URLs, never rewritten. `device` in `roxy flows --json` is its name in `devices.json` (registered with `"kind": "mobile"`), or `This Mac` for an iOS Simulator or Android Emulator on the Mac; `null` for an unregistered Mobile Device.
+- Read one device's flows: `roxy flows --json --filter '~comment "<name>"' --since <ISO time>`. There is no run id: roxy never launches a mobile app, so note the time before the user opens it.
+- Target it in a Scenario with `~comment "<name>"` in the filter (`~comment "Phone" & ~d api.example.com`); a filter on the Origin alone (`~d api.example.com`) acts on the Roku's and the Mobile Device's requests alike. Rules with `{proxy_base}` placeholders leave its flows alone.
+- `scripts/deploy`, `roxy launch` and `roxy console` are Roku-only: they refuse a Mobile Device with "not a Roku". The user runs the app with its own tooling.
+- No HTTPS flows, or TLS errors: the device does not trust the CA, an Android build ignores user CAs, or the app pins its certificates (out of scope). A `throttle` leaves its HTTP/2 flows unpaced. Fixes: [Troubleshooting](docs/troubleshooting.md).
 
 ## Checking the lab itself: the grid
 
