@@ -1,6 +1,6 @@
 # How it works
 
-How a request reaches the lab and what the lab does to it. Vocabulary: [GLOSSARY.md](../GLOSSARY.md). The decisions behind it are in the [ADRs](adr/), and the trust rules the code follows in [CODING_STANDARDS.md](../CODING_STANDARDS.md#trust).
+How a request reaches the lab and what the lab does to it. Vocabulary: [GLOSSARY.md](../GLOSSARY.md). The trust rules the code follows: [CODING_STANDARDS.md](../CODING_STANDARDS.md#trust).
 
 ## Routing
 

@@ -26,4 +26,3 @@ New to roxy? Start with the [Quickstart](../README.md#quickstart). Vocabulary: [
 ## Explanation
 
 - [How it works](how-it-works.md): routing modes and what the lab does to a request.
-- Decisions: [ADR-0001](adr/0001-prefix-routing-universal-ca-routing-optional.md) Prefix Routing universal, CA Routing optional; [ADR-0002](adr/0002-product-apps-charles-compatible-cli-first.md) Product Apps opt in the Charles way, App Profiles outside every repo, CLI first; [ADR-0003](adr/0003-client-agnostic-fresh-history.md) nothing client-specific or personal in git; [ADR-0004](adr/0004-body-format-choice-stays-in-the-rewriter.md) the body format choice stays in the rewriter.
