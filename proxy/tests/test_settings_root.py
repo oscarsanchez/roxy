@@ -285,6 +285,22 @@ def test_add_into_a_settings_root_without_its_files_creates_them(tmp_path, ports
     assert [d.name for d in root.devices()] == ["Den"]
 
 
+def private(file):
+    return file.stat().st_mode & 0o777 == 0o600
+
+
+def test_every_settings_file_a_change_writes_is_private_to_the_user(tmp_path, ports):
+    empty = tmp_path / "empty-root"
+    root = SettingsRoot(empty, **ports)
+
+    root.add_device("Den", "198.51.100.7")
+    assert private(empty / "devices.json") and private(empty / "settings.json")
+    root.remove_device("Den")
+    assert private(empty / "devices.json") and private(empty / "settings.json")
+    root.setup()
+    assert all(private(empty / name) for name in ("devices.json", "settings.json", "secrets.env"))
+
+
 def test_a_settings_file_that_is_not_json_is_refused_naming_it(root, settings):
     (settings / "devices.json").write_text('{"Den": ')
 

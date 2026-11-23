@@ -8,7 +8,7 @@ the secrets, as `roxy device` and `roxy setup` change them, and the Rokus on the
     <settings root>/secrets.env    NAME=value lines, which the lab's scripts source
 
 Writes keep every key and entry they don't own (grid_devices, unknown keys); secrets.env
-keeps its other lines and comments, and stays private to the user. A secret is never in
+keeps its other lines and comments. Every file stays private to the user (0600). A secret is never in
 what a change says. The outside world comes in through ports passed to SettingsRoot: a
 Roku's ECP device-info answer, `rce device resolve`, this Mac's address, the random
 source, the SSDP search for Rokus, the tools on the PATH and `rce token status`;
@@ -45,6 +45,7 @@ NO_ROKU_FOUND = (
     " Settings → Network → About; then roxy device add NAME --ip IP"
 )
 RCE_CLI ="https://github.com/oscarsanchez/rce-cli"  # the rce CLI, which the lab runs Cloud Devices through
+PRIVATE = 0o600  # every settings file's permissions: personal settings and secrets, the user's eyes only
 
 
 class SettingsRootError(Exception):
@@ -483,12 +484,19 @@ def _json(value):
 
 
 def _write(file, doc):
-    """Write DOC to FILE, one top-level entry per line, as the examples are laid out: whole
-    or not at all (through a temp file beside it)."""
+    """Write DOC to FILE, one top-level entry per line, as the examples are laid out."""
     lines = [f"  {_json(key)}: {_json(value)}" for key, value in doc.items()]
+    _replace(file, "{\n" + ",\n".join(lines) + "\n}\n" if lines else "{}\n", PRIVATE)
+
+
+def _replace(file, text, mode):
+    """Make TEXT the content of FILE, with the permissions MODE: whole or not at all (through
+    a temp file beside it, created with MODE)."""
     file.parent.mkdir(parents=True, exist_ok=True)
     draft = file.with_name(f".{file.name}.tmp")
-    draft.write_text("{\n" + ",\n".join(lines) + "\n}\n" if lines else "{}\n")
+    draft.unlink(missing_ok=True)
+    with os.fdopen(os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, mode), "w") as out:
+        out.write(text)
     draft.replace(file)
 
 
@@ -520,8 +528,7 @@ def _read_env(file):
 
 def _write_env(file, changes):
     """Write each of CHANGES' values into the env FILE, over its NAME=value line, else
-    appended; every other line and comment kept. Private to the user (0600), and whole or
-    not at all (through a temp file beside it)."""
+    appended; every other line and comment kept."""
     try:
         lines = file.read_text().splitlines()
     except FileNotFoundError:
@@ -532,9 +539,4 @@ def _write_env(file, changes):
         if match and match[1] in todo:
             lines[i] = f"{match[1]}={shlex.quote(todo.pop(match[1]))}"
     lines += [f"{name}={shlex.quote(value)}" for name, value in todo.items()]
-    file.parent.mkdir(parents=True, exist_ok=True)
-    draft = file.with_name(f".{file.name}.tmp")
-    draft.unlink(missing_ok=True)
-    with os.fdopen(os.open(draft, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600), "w") as out:
-        out.write("".join(f"{line}\n" for line in lines))
-    draft.replace(file)
+    _replace(file, "".join(f"{line}\n" for line in lines), PRIVATE)
