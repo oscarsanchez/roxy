@@ -20,6 +20,8 @@ Issues and specs for this repo live as markdown files in `.scratch/`.
 
 Create a new file under `.scratch/<feature-slug>/` (creating the directory if needed).
 
+Then run `scripts/check-glossary <file>` on it and reword every hit: the implementer copies a spec's words into code and docs, where the full check refuses them.
+
 ## When a skill says "fetch the relevant ticket"
 
 Read the file at the referenced path. The user will normally pass the path or the issue number directly.
