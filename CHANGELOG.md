@@ -4,6 +4,10 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 
 ## [Unreleased]
 
+## [0.3.0] - 2026-11-24
+
+`roxy setup` and `roxy device` fill the settings root from the terminal; a registered Target Device may use the lab; Nested Prefixed URLs are served; and Mobile Devices become Proxied Devices. <!-- glossary-ok: names the old term -->
+
 ### Added
 
 - `roxy setup` fills the settings root for this Mac and can run again any time, keeping what is there: it generates the mitmweb password (and with `--cloud` the lab secret, checking `rce`, its token and `cloudflared`), never printing a secret; allows this Mac in `lan_subnets` (`--trusted-network`: its whole subnet); takes the Roku developer login, the password from a hidden prompt or, with `--roku-password-stdin`, stdin, never a flag; and, in a terminal, offers the Rokus it finds to register. Without a terminal it never prompts and never reads stdin unasked, so an agent can run it. Values the examples seeded are replaced: devices on the documentation ranges are removed (a Cloud Device never is: one equal to the examples' may be real), and each `lan_subnets` entry inside a documentation range is dropped; with nothing left, it allows this Mac. `--trusted-network` and `--this-mac-only` make `lan_subnets` exactly that one entry. It ends with the restart hint only when it changed something.
@@ -18,7 +22,6 @@ Notable changes to roxy, newest first. Format: [Keep a Changelog](https://keepac
 - `roxy start` names each missing setting with the command that fills it in. An empty device list only warns: the lab still serves This Mac's own clients (iOS Simulator, Android Emulator, `curl`).
 - A second `roxy start` names the running lab's lock holder, not the ports that lab holds. The README quickstart's settings step is `roxy setup`, then `roxy device add` or `discover`.
 - `roxy start` stops before mitmweb starts when a port it listens on is in use, naming each busy port, its role and the process holding it (Troubleshooting).
-
 - Mobile Devices are now Proxied Devices: any device that is not a Roku (phone, tablet, Android TV, Google TV, Fire TV, Apple TV, console, computer) goes through Proxy Routing. `devices.json` registers one with `"kind": "proxied"`; `"kind": "mobile"` from 0.2.0 still counts. The how-to moved to `docs/proxied-devices.md`, with a section for TV boxes (Apple TV unverified), and the glossary lint now flags the old name. <!-- glossary-ok: names the old term -->
 
 ### Fixed
@@ -65,6 +68,7 @@ The first release: a mitmproxy/mitmweb lab on the Mac for the Outbound Traffic o
 - Two Lab Apps (classic BrightScript/SceneGraph and RSG 2.0) and the grid runner, single cells or batches, on Physical and Cloud Devices.
 - The kit for wiring your own apps, Docker Compose, per-user locks, and the `roxy` skill as a Claude Code plugin.
 
-[Unreleased]: https://github.com/oscarsanchez/roxy/compare/v0.2.0...HEAD
+[Unreleased]: https://github.com/oscarsanchez/roxy/compare/v0.3.0...HEAD
+[0.3.0]: https://github.com/oscarsanchez/roxy/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/oscarsanchez/roxy/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/oscarsanchez/roxy/releases/tag/v0.1.0
