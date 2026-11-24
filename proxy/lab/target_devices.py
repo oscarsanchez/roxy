@@ -24,10 +24,10 @@ Scenario rules that acted on the flow (annotate); `roxy flows` reads target_devi
 from typing import NamedTuple
 
 from lab.clients import from_rce_egress_ip, from_this_mac, ip_address, through_tunnel, tunnel_client_ip
-from lab.config import load_settings
+from lab.config import settings_root
 from lab.prefixed_url import client_proxy_base, device_slug, double_prefixed
+from lab.settings_root import CLOUD_DEVICE, SettingsRoot
 
-CLOUD_DEVICE = "Cloud Device"  # the name of an RCE egress IP's device without a known slug
 THIS_MAC = "This Mac"  # the name of an iOS Simulator or Android Emulator on this Mac, through Proxy Routing
 
 
@@ -66,9 +66,9 @@ class TargetDevices:
         self.cloud_devices = {}  # slug -> name
 
     def load(self, loader):
-        devices = load_settings("devices")
-        self.physical_devices = {ip_address(d["ip"]): name for name, d in devices.items() if "ip" in d}
-        self.cloud_devices = {d["slug"]: name for name, d in devices.items() if d.get("slug")}
+        devices = SettingsRoot(settings_root()).devices()
+        self.physical_devices = {ip_address(d.ip): d.name for d in devices if d.ip}
+        self.cloud_devices = {d.slug: d.name for d in devices if d.slug}
 
     def http_connect(self, flow):
         """A CONNECT on the Proxy Routing listener: the guards judge its client by it too."""
@@ -82,7 +82,7 @@ class TargetDevices:
             ip = ip_address(flow.client_conn.peername[0])
             return TargetDevice(f"ip {ip}", THIS_MAC if from_this_mac(flow) else self.physical_devices.get(ip))
         client = client_proxy_base(flow)
-        unnamed = CLOUD_DEVICE if from_rce_egress_ip(flow) else None
+        unnamed = CLOUD_DEVICE if from_rce_egress_ip(flow) else None  # shown under its kind's name
         if slug := client and device_slug(client.proxy_base):
             return TargetDevice(f"slug {slug}", self.cloud_devices.get(slug, unnamed))
         return TargetDevice(f"tunnel client {tunnel_client_ip(flow)}", unnamed)

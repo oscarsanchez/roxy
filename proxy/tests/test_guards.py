@@ -3,6 +3,8 @@ import json
 
 import pytest
 
+from lab.settings_root import SettingsRootError
+
 from chain import SECRET, TUNNEL_OPTIONS, Lab, assert_refused, lab_flow, origin_json, run_chain, tunnel_flow
 
 
@@ -53,6 +55,23 @@ def test_the_lan_subnets_come_from_the_settings_root(settings):
 
     assert run_chain(inside, origin_json()) is not None
     assert_refused(old_lan, run_chain(old_lan, origin_json()), "client-ip")
+
+
+def test_without_settings_json_only_registered_devices_are_allowed(settings):
+    (settings / "settings.json").unlink()
+    registered = lab_flow("/https://httpbin.org/json")  # Living Room
+    unregistered = lab_flow("/https://httpbin.org/json", peer=UNREGISTERED_LAN_CLIENT)
+
+    with Lab() as lab:
+        assert lab.run(registered, origin_json()) is not None
+        assert_refused(unregistered, lab.run(unregistered, origin_json()), "client-ip")
+
+
+def test_a_lan_subnets_entry_that_is_no_subnet_stops_the_lab_naming_settings_json(settings):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["my LAN"]}))
+
+    with pytest.raises(SettingsRootError, match="settings.json"):
+        Lab()
 
 
 def test_the_lan_subnet_is_set_in_config():

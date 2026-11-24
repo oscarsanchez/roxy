@@ -299,6 +299,31 @@ def test_a_settings_file_that_is_not_json_is_refused_naming_it(root, settings):
     assert (settings / "devices.json").read_text() == '{"Den": '
 
 
+def test_the_settings_root_reads_without_ports_given(settings):
+    """The lab and the CLI pass none: the real ones are the defaults. Reading uses none of them."""
+    root = SettingsRoot(settings)
+
+    assert root.lan_subnets() == ["192.0.2.0/24"]
+    assert [d.name for d in root.devices()] == ["Living Room", "Bedroom", "Travel Stick", "Cloud Device", "Phone"]
+
+
+def test_lan_subnets_are_the_cidr_strings_of_settings_json(root, settings):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["10.2.0.0/24", "10.1.0.9/32"]}))
+
+    assert root.lan_subnets() == ["10.2.0.0/24", "10.1.0.9/32"]
+
+
+def test_lan_subnets_without_settings_json_are_empty(tmp_path, ports):
+    assert SettingsRoot(tmp_path / "empty-root", **ports).lan_subnets() == []
+
+
+def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_naming_settings_json(root, settings):
+    (settings / "settings.json").write_text('{"lan_subnets": ["my LAN"]}')
+
+    with pytest.raises(SettingsRootError, match="settings.json"):
+        root.lan_subnets()
+
+
 def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_by_setup_changing_nothing(root, settings):
     (settings / "settings.json").write_text('{"lan_subnets": ["my LAN"]}')
     before = devices_file(settings)

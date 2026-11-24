@@ -8,6 +8,8 @@ import pytest
 from mitmproxy import http
 from mitmproxy.test import tutils
 
+from lab.settings_root import SettingsRootError
+
 from chain import (
     PROXY_ROUTING_OPTIONS,
     RCE_EGRESS_IP,
@@ -81,6 +83,23 @@ def test_a_proxied_device_is_named_by_its_ip_whichever_kind_registered_it(settin
 
     assert flow.comment == "Tablet"
     assert [summary["device"] for summary in flows_summary(flow)] == ["Tablet"]
+
+
+def test_without_a_devices_registry_no_flow_is_named(settings):
+    (settings / "devices.json").unlink()
+    flow = physical()
+
+    run_chain(flow, origin_segment())
+
+    assert flow.comment == ""
+    assert [summary["device"] for summary in flows_summary(flow)] == [None]
+
+
+def test_a_devices_registry_that_is_not_json_stops_the_lab_naming_it(settings):
+    (settings / "devices.json").write_text('{"Den": ')
+
+    with pytest.raises(SettingsRootError, match="devices.json"):
+        Lab()
 
 
 ONE_DEVICE = {

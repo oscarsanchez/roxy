@@ -1,6 +1,7 @@
 """The Settings Root: the user's Target Devices, the LAN subnets allowed to use the lab beside
 them, and the secrets, as `roxy device` and `roxy setup` change them, and the Rokus on the LAN
-`roxy device discover` could add. The one place that writes them:
+`roxy device discover` could add. The one place that reads and writes them, for the CLI and
+the lab alike (its addons read the devices and lan_subnets through it):
 
     <settings root>/devices.json   {"<name>": {"ip": ...} | {"ip": ..., "kind": "proxied"}
                                               | {"rce_device_name": ..., "slug": ...}, ...}
@@ -13,7 +14,7 @@ what a change says. The outside world comes in through ports passed to SettingsR
 Roku's ECP device-info answer, `rce device resolve`, this Mac's address, the random
 source, the SSDP search for Rokus, the tools on the PATH and `rce token status`;
 ecp_device_info, rce_knows, this_mac, new_secret, ssdp_rokus, has_tool and rce_token_works,
-below, are the real ones.
+below, are the real ones, and SettingsRoot's defaults.
 """
 
 import json
@@ -117,17 +118,108 @@ class FoundRoku(NamedTuple):
         return f"roxy device add {_double_quoted(self.name) if self.name else 'NAME'} --ip {self.ip}"
 
 
+def ecp_device_info(ip):
+    """The ECP device-info fields of the Roku at IP (developer-enabled, model-name, ...), or
+    None if it does not answer. Through curl, as every lab script reaches ECP, and never
+    through a proxy: the Mac's own may be the lab."""
+    url = f"http://{ip}:8060/query/device-info"
+    answer = subprocess.run(["curl", "-fsS", "--noproxy", "*", "--max-time", "3", url], capture_output=True, text=True)
+    if answer.returncode:
+        return None
+    try:
+        return {field.tag: field.text for field in ElementTree.fromstring(answer.stdout)}
+    except ElementTree.ParseError:
+        return None
+
+
+def rce_knows(rce_device_name):
+    """Whether `rce device resolve` knows RCE_DEVICE_NAME (False without rce on the PATH)."""
+    try:
+        return not subprocess.run(["rce", "device", "resolve", rce_device_name], capture_output=True).returncode
+    except FileNotFoundError:
+        return False
+
+
+def has_tool(command):
+    """Whether COMMAND is on the PATH."""
+    return shutil.which(command) is not None
+
+
+def rce_token_works():
+    """Whether `rce token status` works: rce has a token RCE takes."""
+    try:
+        return not subprocess.run(["rce", "token", "status"], capture_output=True).returncode
+    except FileNotFoundError:
+        return False
+
+
+def this_mac():
+    """This Mac's address on its LAN interface, past any VPN, as an IPv4Interface from what
+    `ipconfig` gives; the interface is the one scripts/lan-interface finds (as lan_ip in
+    scripts/lib.sh does). None when it is on no network."""
+
+    def run(*command):
+        answer = subprocess.run(command, capture_output=True, text=True)
+        return answer.stdout.strip() if not answer.returncode else ""
+
+    interface = run(str(LAN_INTERFACE))
+    address = interface and run("ipconfig", "getifaddr", interface)
+    netmask = address and run("ipconfig", "getoption", interface, "subnet_mask")
+    return ip_interface(f"{address}/{netmask}") if netmask else None
+
+
+def new_secret():
+    """A new random secret, safe unquoted in a URL path and a shell."""
+    return secrets.token_urlsafe(24)
+
+
+def ssdp_rokus(via):
+    """The IPs answering an SSDP search for roku:ecp, sent to the SSDP group (or
+    ROXY_SSDP_ADDRESS, host:port) from the address VIA (None: the system's choice) and
+    SSDP_SEARCHES times over SSDP_SECONDS, each IP once, in the order they first answered.
+    Each Roku on the LAN answers, unless the network drops multicast."""
+    host, port = os.environ.get("ROXY_SSDP_ADDRESS", SSDP_GROUP).rsplit(":", 1)
+    search = f'M-SEARCH * HTTP/1.1\r\nHost: {SSDP_GROUP}\r\nMan: "ssdp:discover"\r\nST: roku:ecp\r\n\r\n'
+    found = []
+    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as search_socket:
+        if via:
+            search_socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(via))
+        start = time.monotonic()
+        for n in range(1, SSDP_SEARCHES + 1):
+            search_socket.sendto(search.encode(), (host, int(port)))
+            until = start + SSDP_SECONDS * n / SSDP_SEARCHES
+            while (left := until - time.monotonic()) > 0:
+                search_socket.settimeout(left)
+                try:
+                    answer, (ip, _) = search_socket.recvfrom(4096)
+                except TimeoutError:
+                    break
+                if b"roku:ecp" in answer.lower() and ip not in found:
+                    found.append(ip)
+    return found
+
+
 class SettingsRoot:
     def __init__(
-        self, root, *, ecp_device_info, rce_knows, this_mac, new_secret, ssdp_rokus, has_tool, rce_token_works
+        self,
+        root,
+        *,
+        ecp_device_info=ecp_device_info,
+        rce_knows=rce_knows,
+        this_mac=this_mac,
+        new_secret=new_secret,
+        ssdp_rokus=ssdp_rokus,
+        has_tool=has_tool,
+        rce_token_works=rce_token_works,
     ):
-        """ROOT is the settings root. The ports: ECP_DEVICE_INFO(ip), the Roku's device-info
-        fields (None: it did not answer); RCE_KNOWS(rce_device_name), whether
-        `rce device resolve` knows it; THIS_MAC(), this Mac's address on its network, an
-        IPv4Interface (None: it is on no network); NEW_SECRET(), a new random secret;
-        SSDP_ROKUS(via), the IPs answering an SSDP search for roku:ecp on the LAN, sent from
-        the address VIA (None: the system's choice); HAS_TOOL(command), whether COMMAND is on
-        the PATH; RCE_TOKEN_WORKS(), whether `rce token status` works."""
+        """ROOT is the settings root. The ports, each the real one unless given:
+        ECP_DEVICE_INFO(ip), the Roku's device-info fields (None: it did not answer);
+        RCE_KNOWS(rce_device_name), whether `rce device resolve` knows it; THIS_MAC(), this
+        Mac's address on its network, an IPv4Interface (None: it is on no network);
+        NEW_SECRET(), a new random secret; SSDP_ROKUS(via), the IPs answering an SSDP search
+        for roku:ecp on the LAN, sent from the address VIA (None: the system's choice);
+        HAS_TOOL(command), whether COMMAND is on the PATH; RCE_TOKEN_WORKS(), whether
+        `rce token status` works. Tests pass a fake for every one."""
         self.devices_file = Path(root) / "devices.json"
         self.settings_file = Path(root) / "settings.json"
         self.secrets_file = Path(root) / "secrets.env"
@@ -266,6 +358,12 @@ class SettingsRoot:
             bool(env.get("ROKU_DEV_PASSWORD")),
         )
 
+    def lan_subnets(self):
+        """settings.json's lan_subnets, the CIDR strings ([] when there are none). Raises
+        SettingsRootError, naming settings.json, for an entry that is no subnet."""
+        settings, _ = self._lan_subnets()
+        return settings.get("lan_subnets", [])
+
     def _drop_example_devices(self):
         """Unregister the example devices (_example), with a note for each."""
         registry = self._read(self.devices_file)
@@ -378,87 +476,6 @@ class SettingsRoot:
         if not isinstance(doc, dict):
             raise SettingsRootError(f"{file} must hold a JSON object")
         return doc
-
-
-def ecp_device_info(ip):
-    """The ECP device-info fields of the Roku at IP (developer-enabled, model-name, ...), or
-    None if it does not answer. Through curl, as every lab script reaches ECP, and never
-    through a proxy: the Mac's own may be the lab."""
-    url = f"http://{ip}:8060/query/device-info"
-    answer = subprocess.run(["curl", "-fsS", "--noproxy", "*", "--max-time", "3", url], capture_output=True, text=True)
-    if answer.returncode:
-        return None
-    try:
-        return {field.tag: field.text for field in ElementTree.fromstring(answer.stdout)}
-    except ElementTree.ParseError:
-        return None
-
-
-def rce_knows(rce_device_name):
-    """Whether `rce device resolve` knows RCE_DEVICE_NAME (False without rce on the PATH)."""
-    try:
-        return not subprocess.run(["rce", "device", "resolve", rce_device_name], capture_output=True).returncode
-    except FileNotFoundError:
-        return False
-
-
-def has_tool(command):
-    """Whether COMMAND is on the PATH."""
-    return shutil.which(command) is not None
-
-
-def rce_token_works():
-    """Whether `rce token status` works: rce has a token RCE takes."""
-    try:
-        return not subprocess.run(["rce", "token", "status"], capture_output=True).returncode
-    except FileNotFoundError:
-        return False
-
-
-def this_mac():
-    """This Mac's address on its LAN interface, past any VPN, as an IPv4Interface from what
-    `ipconfig` gives; the interface is the one scripts/lan-interface finds (as lan_ip in
-    scripts/lib.sh does). None when it is on no network."""
-
-    def run(*command):
-        answer = subprocess.run(command, capture_output=True, text=True)
-        return answer.stdout.strip() if not answer.returncode else ""
-
-    interface = run(str(LAN_INTERFACE))
-    address = interface and run("ipconfig", "getifaddr", interface)
-    netmask = address and run("ipconfig", "getoption", interface, "subnet_mask")
-    return ip_interface(f"{address}/{netmask}") if netmask else None
-
-
-def new_secret():
-    """A new random secret, safe unquoted in a URL path and a shell."""
-    return secrets.token_urlsafe(24)
-
-
-def ssdp_rokus(via):
-    """The IPs answering an SSDP search for roku:ecp, sent to the SSDP group (or
-    ROXY_SSDP_ADDRESS, host:port) from the address VIA (None: the system's choice) and
-    SSDP_SEARCHES times over SSDP_SECONDS, each IP once, in the order they first answered.
-    Each Roku on the LAN answers, unless the network drops multicast."""
-    host, port = os.environ.get("ROXY_SSDP_ADDRESS", SSDP_GROUP).rsplit(":", 1)
-    search = f'M-SEARCH * HTTP/1.1\r\nHost: {SSDP_GROUP}\r\nMan: "ssdp:discover"\r\nST: roku:ecp\r\n\r\n'
-    found = []
-    with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as search_socket:
-        if via:
-            search_socket.setsockopt(socket.IPPROTO_IP, socket.IP_MULTICAST_IF, socket.inet_aton(via))
-        start = time.monotonic()
-        for n in range(1, SSDP_SEARCHES + 1):
-            search_socket.sendto(search.encode(), (host, int(port)))
-            until = start + SSDP_SECONDS * n / SSDP_SEARCHES
-            while (left := until - time.monotonic()) > 0:
-                search_socket.settimeout(left)
-                try:
-                    answer, (ip, _) = search_socket.recvfrom(4096)
-                except TimeoutError:
-                    break
-                if b"roku:ecp" in answer.lower() and ip not in found:
-                    found.append(ip)
-    return found
 
 
 def _found(ip, info, registered_as):

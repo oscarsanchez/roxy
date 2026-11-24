@@ -18,9 +18,10 @@ from mitmproxy import ctx
 from mitmproxy.exceptions import OptionsError
 
 from lab.clients import from_rce_egress_ip, ip_address, rce_egress_ips, through_tunnel
-from lab.config import load_config, load_settings
+from lab.config import load_config, settings_root
 from lab.prefixed_url import client_proxy_base, secret_segment
 from lab.refusal import refuse
+from lab.settings_root import SettingsRoot
 from lab.target_devices import target_device
 
 CONFIG = load_config("guards")
@@ -57,7 +58,7 @@ class Guards:
 
     def load(self, loader):
         loader.add_option(
-            "lab_lan_subnets", Sequence[str], load_settings("settings")["lan_subnets"],
+            "lab_lan_subnets", Sequence[str], SettingsRoot(settings_root()).lan_subnets(),
             "Client subnets (CIDR) allowed to use the LAN listeners, beside the registered Target Devices.",
         )
         loader.add_option(

@@ -1,9 +1,9 @@
 """Where the lab's settings come from.
 
 - The lab's own defaults, the same for every user: proxy/config/<name>.json.
-- The user's own settings (devices, LAN subnets): <settings root>/<name>.json, and App
-  Profiles in <settings root>/apps/. The settings root is ROXY_CONFIG_DIR, which
-  scripts/lib.sh resolves and exports; it is never in the repo.
+- The user's own settings: the settings root, ROXY_CONFIG_DIR, which scripts/lib.sh
+  resolves and exports; it is never in the repo. lab.settings_root reads and writes its
+  devices, LAN subnets and secrets; lab.app_profiles its App Profiles (<settings root>/apps/).
 """
 
 import json
@@ -24,9 +24,3 @@ def settings_root():
         raise RuntimeError(f"{SETTINGS_ROOT_VAR} is not set: start the lab with scripts/start-lab")
     return Path(root)
 
-
-def load_settings(name):
-    path = settings_root() / f"{name}.json"
-    if not path.is_file():
-        raise RuntimeError(f"missing setting file {path} (example: settings.example/{name}.json)")
-    return json.loads(path.read_text())

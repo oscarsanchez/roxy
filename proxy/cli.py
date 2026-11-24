@@ -55,7 +55,6 @@ from lab.config import settings_root
 from lab.lab_session import HttpTransport, LabDown, LabSession, LabSessionError, new_run_id, parse_since
 from lab.scenarios import DEFAULT_SCENARIOS_DIR, scenario_value
 from lab.settings_root import CLOUD_DEVICE, NO_ROKU_FOUND, SSDP_SECONDS, SettingsRoot, SettingsRootError
-from lab.settings_root import ecp_device_info, has_tool, new_secret, rce_knows, rce_token_works, ssdp_rokus, this_mac
 
 REFUSED = "refused: in both (rename the profile's)"
 REDACTED_SECRET = "<secret>"
@@ -91,16 +90,7 @@ def app_list(args):
 
 
 def settings():
-    return SettingsRoot(
-        settings_root(),
-        ecp_device_info=ecp_device_info,
-        rce_knows=rce_knows,
-        this_mac=this_mac,
-        new_secret=new_secret,
-        ssdp_rokus=ssdp_rokus,
-        has_tool=has_tool,
-        rce_token_works=rce_token_works,
-    )
+    return SettingsRoot(settings_root())
 
 
 def device_add(args):
