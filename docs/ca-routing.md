@@ -11,7 +11,7 @@ The addresses in this guide are documentation examples: router `192.0.2.1`, Mac 
 
 ## Quick start
 
-1. Put the Mac and the Roku on one router whose DNS server can answer per client (AdGuard Home does; several travel routers ship it). Reserve both addresses in the router's DHCP settings, and register the Roku with `roxy device add "<device>" --ip <roku-ip>`, which allows it in `lan_subnets` (or `roxy setup --trusted-network` allows the router's whole subnet).
+1. Put the Mac and the Roku on one router whose DNS server can answer per client (AdGuard Home does; several travel routers ship it). Reserve both addresses in the router's DHCP settings, and register the Roku with `roxy device add "<device>" --ip <roku-ip>`: a registered device may use the lab (or `roxy setup --trusted-network` allows the router's whole subnet).
 2. In that DNS server, rewrite each Origin host you want to see to the Mac, for the Roku only:
    ```
    ||api.example^$dnsrewrite=NOERROR;A;192.0.2.10,client=192.0.2.20
@@ -27,7 +27,7 @@ The addresses in this guide are documentation examples: router `192.0.2.1`, Mac 
 
 - **One router for both.** The Mac must reach the Roku (deploy, ECP, the debug console), and the Roku's DNS must be the router you control. If the router sits behind another one (a repeater or travel router on your home Wi-Fi), put both the Mac and the Roku on its side: from the other side the Roku is hidden behind its NAT.
 - **Fixed addresses.** Reserve the Mac's and the Roku's addresses in the router, since the DNS rules name them.
-- **The lab's client guard.** The lab serves only clients in `lan_subnets` (`settings.json` in your settings root). `roxy device add "<device>" --ip <roku-ip>` allows the Roku's address; on the Mac, joined to that router, `roxy setup --trusted-network` allows the router's whole subnet instead. Restart the lab after either ([Settings](settings.md#setup)).
+- **The lab's client guard.** The lab serves only registered devices (`devices.json` in your settings root) and clients in `lan_subnets` (`settings.json`). `roxy device add "<device>" --ip <roku-ip>` registers the Roku, so it may use the lab; on the Mac, joined to that router, `roxy setup --trusted-network` allows the router's whole subnet instead. Restart the lab after either ([Settings](settings.md#setup)).
 - **The Mac's own DNS must not be rewritten.** The lab looks up each Origin from the Mac. If that lookup also returns the Mac, the request would loop, and the address guard refuses it with `X-Lab-Blocked: origin-address`. So scope every rewrite to the Roku (step 2). An `origin-address` refusal for a host you rewrote means the Mac is being rewritten too.
 
 ## 2. DNS rewrites: only the Origins you want, only for the Roku

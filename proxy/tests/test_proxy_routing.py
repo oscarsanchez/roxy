@@ -1,6 +1,8 @@
 """Proxy Routing: a Proxied Device sets the lab's Proxy Routing listener as its HTTP
 proxy, so its requests arrive as the Origin URLs they are. No Proxy Base, no Prefixed URLs."""
 
+import json
+
 import pytest
 from mitmproxy import http
 from mitmproxy.test import tutils
@@ -94,6 +96,14 @@ def test_a_client_outside_the_lan_subnets_gets_no_tunnel():
     assert not opened
     assert flow.response.status_code == 403
     assert flow.response.headers["X-Lab-Blocked"] == "client-ip"
+
+
+def test_a_registered_proxied_device_no_lan_subnet_covers_gets_its_tunnel(settings):
+    (settings / "devices.json").write_text(json.dumps({"Tablet": {"ip": "10.1.0.8", "kind": "proxied"}}))
+    flow = proxy_routing_connect("httpbin.org:443", peer=("10.1.0.8", 51000))
+
+    with Lab(**PROXY_ROUTING_OPTIONS) as lab:
+        assert lab.http_connect(flow)
 
 
 def test_a_lan_client_gets_its_tunnel():

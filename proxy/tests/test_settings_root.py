@@ -99,20 +99,20 @@ def settings_file(settings):
     return json.loads((settings / "settings.json").read_text())
 
 
-def test_add_allows_an_uncovered_ip_in_lan_subnets_as_a_32_and_says_so(root, settings):
-    change = root.add_device("Den", "198.51.100.7")
-
-    assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24", "198.51.100.7/32"]
-    assert "allowed 198.51.100.7/32 in lan_subnets" in change.notes
-
-
-def test_add_leaves_lan_subnets_alone_for_an_ip_they_cover(root, settings):
+def test_add_and_remove_leave_settings_json_as_it_was(root, settings):
+    """A registered device may use the lab (the guards ask the Target Device): lan_subnets
+    hold only the user's choice of network."""
     before = (settings / "settings.json").read_text()
 
-    change = root.add_device("Den", "192.0.2.70")
+    changes = [
+        root.add_device("Den", "198.51.100.7"),
+        root.add_device("Tablet", "10.1.0.8", proxied=True),
+        root.remove_device("Den"),
+        root.remove_device("Living Room"),
+    ]
 
     assert (settings / "settings.json").read_text() == before
-    assert not [line for line in change.notes if "lan_subnets" in line]
+    assert [change.notes for change in changes] == [[], [], [], []]
 
 
 def test_a_roku_that_does_not_answer_ecp_is_registered_with_a_warning(root, settings):
@@ -137,20 +137,12 @@ def test_a_roku_in_developer_mode_is_registered_without_a_warning(root, ecp):
     assert root.add_device("Den", "192.0.2.70").warnings == []
 
 
-def test_add_keeps_the_other_devices_and_the_settings_it_does_not_own(root, settings):
-    (settings / "settings.json").write_text(
-        '{"lan_subnets": ["192.0.2.0/24"], "grid_devices": {"physical": "Living Room"}, "later": 1}'
-    )
+def test_add_keeps_the_other_devices(root, settings):
     before = devices_file(settings)
 
     root.add_device("Den", "198.51.100.7")
 
     assert devices_file(settings) == {**before, "Den": {"ip": "198.51.100.7"}}
-    assert settings_file(settings) == {
-        "lan_subnets": ["192.0.2.0/24", "198.51.100.7/32"],
-        "grid_devices": {"physical": "Living Room"},
-        "later": 1,
-    }
 
 
 @pytest.mark.parametrize("name, refusal", [("Living Room", DeviceExists), ("", BadDevice), ("  ", BadDevice)])
@@ -190,7 +182,7 @@ def test_a_proxied_device_is_registered_as_kind_proxied_without_asking_ecp(root,
     change = root.add_device("Tablet", "198.51.100.8", proxied=True)
 
     assert devices_file(settings)["Tablet"] == {"ip": "198.51.100.8", "kind": "proxied"}
-    assert change == (["allowed 198.51.100.8/32 in lan_subnets"], [], True)
+    assert change == ([], [], True)
     assert ("Tablet", "Proxied Device", "198.51.100.8") in [(d.name, d.kind, d.ip) for d in root.devices()]
 
 
@@ -247,42 +239,20 @@ def test_a_cloud_device_needs_a_new_name_and_a_free_valid_slug(root, settings, n
     assert devices_file(settings) == before
 
 
-def test_remove_drops_the_device_and_the_32_that_allowed_it(root, settings):
+def test_remove_drops_the_device(root, settings):
     root.add_device("Den", "198.51.100.7")
     before = devices_file(settings)
 
     change = root.remove_device("Den")
 
     assert devices_file(settings) == {name: entry for name, entry in before.items() if name != "Den"}
-    assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24"]
-    assert change == (["dropped 198.51.100.7/32 from lan_subnets"], [], True)
-
-
-def test_remove_keeps_a_32_another_device_still_has(root, settings):
-    root.add_device("Den", "198.51.100.7")
-    root.add_device("Den Phone", "198.51.100.7", proxied=True)
-
-    change = root.remove_device("Den")
-
-    assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24", "198.51.100.7/32"]
     assert change == ([], [], True)
 
 
-def test_remove_never_touches_a_broader_entry(root, settings):
-    (settings / "settings.json").write_text('{"lan_subnets": ["192.0.2.54/31", "192.0.2.0/24"], "grid_devices": {}}')
-
-    root.remove_device("Living Room")
-
-    assert settings_file(settings) == {"lan_subnets": ["192.0.2.54/31", "192.0.2.0/24"], "grid_devices": {}}
-
-
-def test_remove_of_a_cloud_device_leaves_lan_subnets_alone(root, settings):
-    before = settings_file(settings)
-
+def test_remove_drops_a_cloud_device(root, settings):
     assert root.remove_device("Cloud Device") == ([], [], True)
 
     assert "Cloud Device" not in devices_file(settings)
-    assert settings_file(settings) == before
 
 
 def test_remove_refuses_an_unknown_name(root, settings):
@@ -294,14 +264,13 @@ def test_remove_refuses_an_unknown_name(root, settings):
     assert devices_file(settings) == before
 
 
-def test_add_into_a_settings_root_without_its_files_creates_them(tmp_path, ports):
+def test_add_into_a_settings_root_without_its_files_creates_devices_json(tmp_path, ports):
     empty = tmp_path / "empty-root"
     root = SettingsRoot(empty, **ports)
 
     root.add_device("Den", "198.51.100.7")
 
     assert devices_file(empty) == {"Den": {"ip": "198.51.100.7"}}
-    assert settings_file(empty) == {"lan_subnets": ["198.51.100.7/32"]}
     assert [d.name for d in root.devices()] == ["Den"]
 
 
@@ -314,9 +283,9 @@ def test_every_settings_file_a_change_writes_is_private_to_the_user(tmp_path, po
     root = SettingsRoot(empty, **ports)
 
     root.add_device("Den", "198.51.100.7")
-    assert private(empty / "devices.json") and private(empty / "settings.json")
+    assert private(empty / "devices.json")
     root.remove_device("Den")
-    assert private(empty / "devices.json") and private(empty / "settings.json")
+    assert private(empty / "devices.json")
     root.setup()
     assert all(private(empty / name) for name in ("devices.json", "settings.json", "secrets.env"))
 
@@ -330,12 +299,12 @@ def test_a_settings_file_that_is_not_json_is_refused_naming_it(root, settings):
     assert (settings / "devices.json").read_text() == '{"Den": '
 
 
-def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_changing_nothing(root, settings):
+def test_a_lan_subnets_entry_that_is_no_subnet_is_refused_by_setup_changing_nothing(root, settings):
     (settings / "settings.json").write_text('{"lan_subnets": ["my LAN"]}')
     before = devices_file(settings)
 
     with pytest.raises(SettingsRootError, match="lan_subnets"):
-        root.add_device("Den", "198.51.100.7")
+        root.setup()
 
     assert devices_file(settings) == before
     assert settings_file(settings) == {"lan_subnets": ["my LAN"]}
@@ -422,65 +391,25 @@ def test_a_rerun_keeps_the_lan_subnets_there_are(root, settings, mac):
     assert "kept lan_subnets: 10.0.0.0/24" in change.notes
 
 
-def test_setup_replaces_the_examples_subnet_keeping_each_devices_32_beside_it(root, settings):
-    root.add_device("Den", "10.1.0.9")
-
-    change = root.setup()
-
-    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
-    assert "removed the example 192.0.2.0/24 from lan_subnets" in change.notes
-
-
-def test_a_network_choice_replaces_lan_subnets_keeping_each_devices_32(root, settings):
-    root.setup(trusted_network=True)
-    root.add_device("Den", "10.1.0.9")
-
-    root.setup(trusted_network=False)
-
-    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
-
-
-def test_narrowing_to_this_mac_keeps_a_device_the_trusted_subnet_covered(root, settings):
+def test_choosing_this_mac_only_with_a_device_registered_allows_only_this_mac(root, settings):
     root.setup(trusted_network=True)
     root.add_device("Den", "10.0.0.9")
 
     change = root.setup(trusted_network=False)
 
-    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.0.0.9/32"]
-    assert "kept each registered device's IP in lan_subnets: 10.0.0.9/32" in change.notes
-
-
-@pytest.mark.parametrize(
-    "ip, lan_subnets",
-    [("10.0.0.9", ["10.0.0.0/24"]), ("10.1.0.9", ["10.0.0.0/24", "10.1.0.9/32"])],
-)
-def test_trusting_the_network_drops_a_devices_32_only_when_the_subnet_covers_it(root, settings, ip, lan_subnets):
-    root.setup(trusted_network=False)
-    root.add_device("Den", ip)
-
-    root.setup(trusted_network=True)
-
-    assert settings_file(settings)["lan_subnets"] == lan_subnets
-
-
-def test_setup_adds_this_mac_beside_the_32s_device_add_wrote_before_it(root, settings):
-    (settings / "settings.json").write_text(json.dumps({"lan_subnets": []}))
-    root.add_device("Den", "10.1.0.9")
-
-    change = root.setup()
-
-    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32"]
     assert "lan_subnets: 10.0.0.23/32 (this Mac only)" in change.notes
 
 
-def test_setup_keeps_a_subnet_of_the_users_own_beside_a_devices_32(root, settings):
-    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["10.2.0.0/24"]}))
+@pytest.mark.parametrize("own", ["10.2.0.0/24", "10.1.0.9/32"], ids=["a home subnet", "a registered device's /32"])
+def test_setup_keeps_the_users_own_lan_subnets_as_they_are(root, settings, own):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": [own]}))
     root.add_device("Den", "10.1.0.9")
 
     change = root.setup()
 
-    assert settings_file(settings)["lan_subnets"] == ["10.2.0.0/24", "10.1.0.9/32"]
-    assert "kept lan_subnets: 10.2.0.0/24, 10.1.0.9/32" in change.notes
+    assert settings_file(settings)["lan_subnets"] == [own]
+    assert f"kept lan_subnets: {own}" in change.notes
 
 
 def test_setup_removes_the_examples_devices_and_says_so(root, settings):
@@ -731,8 +660,7 @@ def test_setup_offers_each_unregistered_roku_found_and_registers_it_as_device_ad
     assert offered == [("198.51.100.7", "Den"), ("198.51.100.8", None)]
     assert devices_file(settings)["Den"] == {"ip": "198.51.100.7"}
     assert "198.51.100.8" not in [d.ip for d in root.devices()]
-    assert settings_file(settings)["lan_subnets"] == ["192.0.2.0/24", "198.51.100.7/32"]
-    assert change == (["registered 'Den' (198.51.100.7)", "allowed 198.51.100.7/32 in lan_subnets"], [], True)
+    assert change == (["registered 'Den' (198.51.100.7)"], [], True)
 
 
 def test_a_roku_found_is_registered_under_the_name_given_with_device_adds_warnings(root, settings, ssdp, ecp):

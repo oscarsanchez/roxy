@@ -14,11 +14,11 @@ For an iOS Simulator or Android Emulator on the Mac that runs the lab, see [iOS 
 
 ## Before you start
 
-- The Proxied Device and the Mac are on the same LAN, and the Proxied Device's IP is in `lan_subnets` in your `settings.json` ([Settings](settings.md)). A client outside it is refused `client-ip`. Registering it does that for you, and names its flows (step 3):
+- The Proxied Device and the Mac are on the same LAN, and the Proxied Device is registered, or its IP is in `lan_subnets` in your `settings.json` ([Settings](settings.md)). Any other client is refused `client-ip`. Registering it lets it use the lab, and names its flows (step 3):
   ```sh
   roxy device add Phone --ip 192.0.2.60 --proxied   # registered 'Phone' (192.0.2.60) as a Proxied Device
   ```
-  It also says `allowed 192.0.2.60/32 in lan_subnets` unless they cover that IP already, as they do after `roxy setup --trusted-network`. Restart a running lab to use it.
+  A registered device may use the lab, whatever `lan_subnets` hold. Restart a running lab to use it.
 - The app is a debug build of your Product App. Store builds are out of scope, and so is an app that pins its certificates: it refuses the lab's.
 - The lab is running. `roxy start` (or `roxy status`, from another terminal) prints the address to use:
   ```
@@ -73,7 +73,7 @@ The lab signs a certificate for every HTTPS Origin with its own CA, the same one
 
 Open the app. Its requests show in mitmweb (`http://127.0.0.1:8081`) and in `roxy flows --json` under their Origin URLs, HTTP and HTTPS alike, with every follow-up request (images, segments, beacons) as the app sends it.
 
-To tell them from your Roku's, register the Proxied Device by its IP, as in [Before you start](#before-you-start): `roxy device add Phone --ip 192.0.2.60 --proxied`. By hand, that is this entry in your `devices.json` ([Settings](settings.md)), with `"kind": "proxied"` (an entry with `"kind": "mobile"`, as roxy 0.2.0 had it, still counts), and its IP in `lan_subnets`:
+To tell them from your Roku's, register the Proxied Device by its IP, as in [Before you start](#before-you-start): `roxy device add Phone --ip 192.0.2.60 --proxied`. By hand, that is this entry in your `devices.json` ([Settings](settings.md)), with `"kind": "proxied"` (an entry with `"kind": "mobile"`, as roxy 0.2.0 had it, still counts):
 
 ```json
 "Phone": {"ip": "192.0.2.60", "kind": "proxied"}
@@ -84,7 +84,7 @@ Restart the lab: its flows are then named `Phone` in mitmweb's comment column (f
 - **Scenarios** act on them as on any flow: filter on the Origin (`~d api.example.com`) to reach both your Roku's and the Proxied Device's requests. A rule with `{proxy_base}` placeholders leaves them alone, as they have no Proxy Base ([Scenarios](scenarios.md)).
 - **No rewriting**: the lab never rewrites URLs in their headers or bodies; the app sees each response as the Origin sent it.
 - **Throttle**: a Proxied Device's HTTPS flows are usually HTTP/2, which a `throttle` rule leaves unpaced (the mitmweb event log says so); plain HTTP flows are paced. A `latency` rule slows both ([Scenarios](scenarios.md)).
-- **Guards**: the LAN's. The client must be on `lan_subnets`, a private Origin is refused `origin-address`, and any public Origin is allowed: the Origin allowlist is the Public Endpoint's only ([Guards](guards.md)).
+- **Guards**: the LAN's. The client must be registered or on `lan_subnets`, a private Origin is refused `origin-address`, and any public Origin is allowed: the Origin allowlist is the Public Endpoint's only ([Guards](guards.md)).
 - **Native only**: the listener is never reachable through the Public Endpoint, and Docker Compose does not publish it ([Docker Compose](compose.md)).
 
 ## TV boxes and other devices

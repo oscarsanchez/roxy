@@ -43,10 +43,13 @@ def test_under_compose_the_lan_subnets_add_docker_desktops_host_address():
     assert forwarded.url == "https://httpbin.org/json"
 
 
+UNREGISTERED_LAN_CLIENT = ("192.0.2.10", 4000)  # in no devices.json entry
+
+
 def test_the_lan_subnets_come_from_the_settings_root(settings):
     (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["198.51.100.0/24"]}))
     inside = lab_flow("/https://httpbin.org/json", peer=("198.51.100.7", 4000))
-    old_lan = lab_flow("/https://httpbin.org/json")
+    old_lan = lab_flow("/https://httpbin.org/json", peer=UNREGISTERED_LAN_CLIENT)
 
     assert run_chain(inside, origin_json()) is not None
     assert_refused(old_lan, run_chain(old_lan, origin_json()), "client-ip")
@@ -54,10 +57,19 @@ def test_the_lan_subnets_come_from_the_settings_root(settings):
 
 def test_the_lan_subnet_is_set_in_config():
     inside = lab_flow("/https://httpbin.org/json", peer=("10.1.2.3", 4000))
-    old_lan = lab_flow("/https://httpbin.org/json")
+    old_lan = lab_flow("/https://httpbin.org/json", peer=UNREGISTERED_LAN_CLIENT)
 
     assert run_chain(inside, origin_json(), lab_lan_subnets=["10.0.0.0/8"]) is not None
     assert_refused(old_lan, run_chain(old_lan, origin_json(), lab_lan_subnets=["10.0.0.0/8"]), "client-ip")
+
+
+def test_a_registered_device_no_lan_subnet_covers_is_allowed(settings):
+    (settings / "devices.json").write_text(json.dumps({"Den": {"ip": "10.1.0.9"}}))
+    flow = lab_flow("/https://httpbin.org/json", peer=("10.1.0.9", 4000))
+
+    forwarded = run_chain(flow, origin_json())
+
+    assert forwarded.url == "https://httpbin.org/json"
 
 
 def test_a_lan_request_reaches_a_public_origin_not_on_the_allowlist():

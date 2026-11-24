@@ -66,7 +66,7 @@ roxy setup
 
 It asks, keeping each value on Enter: which LAN clients may use the lab (Enter: this Mac only; `t` trusts this network, home for instance, and allows its whole subnet), your Roku's developer user (`rokudev` unless you changed it) and password, hidden as you type. Then it looks for Rokus on this network and offers each one to register: type `Living Room`, the name this guide uses, or keep the Roku's own name and use that below.
 
-You should see what it set: `lan_subnets: <mac-ip>/32 (this Mac only)`, `generated MITMWEB_PASSWORD (in .../roxy/secrets.env; the mitmweb UI asks for it)`, `kept ROKU_DEV_USER: rokudev`, `set ROKU_DEV_PASSWORD`, `registered 'Living Room' (<roku-ip>)` and `allowed <roku-ip>/32 in lan_subnets`. Run it again any time: it keeps what is there.
+You should see what it set: `lan_subnets: <mac-ip>/32 (this Mac only)`, `generated MITMWEB_PASSWORD (in .../roxy/secrets.env; the mitmweb UI asks for it)`, `kept ROKU_DEV_USER: rokudev`, `set ROKU_DEV_PASSWORD` and `registered 'Living Room' (<roku-ip>)`: a registered device may use the lab. Run it again any time: it keeps what is there.
 
 If it found no Roku (it may be off or on another network, a VPN may keep the search from it, and many work and guest networks block discovery), register yours by its IP, which the Roku shows in Settings → Network → About:
 

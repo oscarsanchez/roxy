@@ -57,8 +57,9 @@ def annotate(flow, applied):
 
 
 class TargetDevices:
-    """Decides each flow's Target Device. Runs after the Origin decoder (the slug is in the
-    Proxy Base) and before the guards and Scenarios, which leave the client alone."""
+    """Decides each flow's Target Device, at a CONNECT and at request headers. Runs after the
+    Origin decoder (the slug is in the Proxy Base) and before the guards, which allow a LAN
+    client it names, and the Scenarios, which leave the client alone."""
 
     def __init__(self):
         self.physical_devices = {}  # IP -> name, Proxied Devices included
@@ -68,6 +69,10 @@ class TargetDevices:
         devices = load_settings("devices")
         self.physical_devices = {ip_address(d["ip"]): name for name, d in devices.items() if "ip" in d}
         self.cloud_devices = {d["slug"]: name for name, d in devices.items() if d.get("slug")}
+
+    def http_connect(self, flow):
+        """A CONNECT on the Proxy Routing listener: the guards judge its client by it too."""
+        self.requestheaders(flow)
 
     def requestheaders(self, flow):
         flow.metadata["lab_target_device"] = self.identify(flow)._asdict()

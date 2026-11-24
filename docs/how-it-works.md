@@ -26,4 +26,4 @@ mitmweb's listeners run in mitmproxy's `reverse` mode, except the Proxy Routing 
 5. **Response header and body rewriting**: URLs in headers and in HLS, DASH, VAST/XML and JSON bodies become Prefixed URLs with the client's Proxy Base, so follow-up requests come back through the lab. A flow with no Proxy Base (CA Routing, Proxy Routing) is left as the Origin sent it.
 6. **Scenarios**: the active Scenarios' Manipulation rules, last, so they see the response as the client gets it. The one exception, `map_remote`, swaps the Origin right after Origin decoding, before the guards.
 
-While the lab runs, any device on your LAN subnets can relay through it to any public host, the same as with Charles.
+While the lab runs, any registered device and any device on your LAN subnets can relay through it to any public host, the same as with Charles.

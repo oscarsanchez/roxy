@@ -3,7 +3,8 @@
 A request is forwarded only if every guard passes; otherwise the lab answers
 it with a 403 and the failing guard's reason. Defaults come from
 config/guards.json and the user's settings (LAN subnets), and can be changed
-live as mitmproxy options. The loaded App Profile's allowlist (lab.app_profile,
+live as mitmproxy options. A LAN client is allowed when it is in the LAN subnets
+or its Target Device has a name (lab.target_devices). The loaded App Profile's allowlist (lab.app_profile,
 empty with none) joins the lab's own on the Public Endpoint.
 """
 
@@ -16,10 +17,11 @@ from collections.abc import Sequence  # what mitmproxy's --set parser matches li
 from mitmproxy import ctx
 from mitmproxy.exceptions import OptionsError
 
-from lab.clients import from_rce_egress_ip, from_this_mac, ip_address, rce_egress_ips, through_tunnel
+from lab.clients import from_rce_egress_ip, ip_address, rce_egress_ips, through_tunnel
 from lab.config import load_config, load_settings
 from lab.prefixed_url import client_proxy_base, secret_segment
 from lab.refusal import refuse
+from lab.target_devices import target_device
 
 CONFIG = load_config("guards")
 
@@ -56,7 +58,7 @@ class Guards:
     def load(self, loader):
         loader.add_option(
             "lab_lan_subnets", Sequence[str], load_settings("settings")["lan_subnets"],
-            "Client subnets (CIDR) allowed to use the LAN listener.",
+            "Client subnets (CIDR) allowed to use the LAN listeners, beside the registered Target Devices.",
         )
         loader.add_option(
             "lab_origin_allowlist", Sequence[str], CONFIG["origin_allowlist"],
@@ -88,9 +90,11 @@ class Guards:
                 raise OptionsError(f"lab_rce_egress_ips: {e}") from e
 
     def _client_allowed(self, flow):
+        """Through the tunnel: from an RCE egress IP. Else: its Target Device has a name, or it
+        is in lan_subnets."""
         if through_tunnel(flow):
             return from_rce_egress_ip(flow)
-        if from_this_mac(flow):
+        if (device := target_device(flow)) and device.name:
             return True
         client = ip_address(flow.client_conn.peername[0])
         return any(client in subnet for subnet in self.lan_subnets)

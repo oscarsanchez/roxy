@@ -1,5 +1,5 @@
-"""The Settings Root: the user's Target Devices, the LAN subnets allowed to use the lab and
-the secrets, as `roxy device` and `roxy setup` change them, and the Rokus on the LAN
+"""The Settings Root: the user's Target Devices, the LAN subnets allowed to use the lab beside
+them, and the secrets, as `roxy device` and `roxy setup` change them, and the Rokus on the LAN
 `roxy device discover` could add. The one place that writes them:
 
     <settings root>/devices.json   {"<name>": {"ip": ...} | {"ip": ..., "kind": "proxied"}
@@ -147,19 +147,17 @@ class SettingsRoot:
         ]
 
     def add_device(self, name, ip, *, proxied=False):
-        """Register the Roku NAME at IP (with PROXIED, the Proxied Device), allowing IP in
-        lan_subnets if they don't cover it. A Roku that does not answer ECP, or is not in
-        developer mode, is registered with a warning: it may merely be off today. Returns
-        the Change."""
+        """Register the Roku NAME at IP (with PROXIED, the Proxied Device): a registered
+        device may use the lab. A Roku that does not answer ECP, or is not in developer mode,
+        is registered with a warning: it may merely be off today. Returns the Change."""
         try:
             ip = str(ip_address(ip))
         except ValueError:
             raise BadDevice(f"not an IP address: {ip!r}") from None
         registry = self._new_name(name, ip)
-        settings, notes = self._allowing(ip)
         registry[name] = {"ip": ip, "kind": "proxied"} if proxied else {"ip": ip}
-        self._save(registry, settings)
-        return Change(notes, [] if proxied else self._roku_warnings(name, ip), True)
+        _write(self.devices_file, registry)
+        return Change([], [] if proxied else self._roku_warnings(name, ip), True)
 
     def add_cloud_device(self, name, rce_device_name, *, slug=None):
         """Register the Cloud Device NAME, rce's RCE_DEVICE_NAME, with SLUG in its Proxy Base
@@ -173,7 +171,7 @@ class SettingsRoot:
         if taken:
             raise BadDevice(f"the slug {slug!r} is taken, by {taken[0]!r}")
         registry[name] = {"rce_device_name": rce_device_name, "slug": slug}
-        self._save(registry, None)
+        _write(self.devices_file, registry)
         if self.rce_knows(rce_device_name):
             return Change([], [], True)
         return Change([], [
@@ -181,28 +179,25 @@ class SettingsRoot:
         ], True)
 
     def remove_device(self, name):
-        """Unregister the device NAME, dropping the /32 equal to its IP from lan_subnets when
-        no other device has that IP; a broader entry is never touched. Returns the Change."""
+        """Unregister the device NAME. Returns the Change."""
         registry = self._read(self.devices_file)
         if name not in registry:
             raise UnknownDevice(f"unknown device {name!r} (roxy device list shows them)")
-        ip = registry.pop(name).get("ip")
-        shared = ip in (entry.get("ip") for entry in registry.values())
-        settings, notes = self._disallowing(ip) if ip and not shared else (None, [])
-        self._save(registry, settings)
-        return Change(notes, [], True)
+        del registry[name]
+        _write(self.devices_file, registry)
+        return Change([], [], True)
 
     def setup(self, *, trusted_network=None, roku_user=None, roku_password=None, cloud=False):
         """Fill the settings this Mac needs, keeping what is there: a new MITMWEB_PASSWORD
         when there is none; lan_subnets for the network this Mac is on, when none is the
-        user's own (only the examples' and the registered devices' /32s are there) or
-        TRUSTED_NETWORK (True: the Mac's whole subnet; False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default:
-        ROKU_DEV_USER) and ROKU_PASSWORD, each when given. The example devices go. A Roku password there is none of is
-        a warning: only the user can give it. With CLOUD, for Cloud Devices too: a new
-        LAB_SECRET when there is none. Returns the Change."""
+        user's own (only the examples' are there) or TRUSTED_NETWORK (True: the Mac's whole
+        subnet; False: the Mac's /32) chooses; the Roku developer login, ROKU_USER (default:
+        ROKU_DEV_USER) and ROKU_PASSWORD, each when given. The example devices go. A Roku
+        password there is none of is a warning: only the user can give it. With CLOUD, for
+        Cloud Devices too: a new LAB_SECRET when there is none. Returns the Change."""
+        settings, lan_notes, warnings = self._lan_setup(trusted_network)  # first: a bad lan_subnets entry raises before anything is written
         notes = self._drop_example_devices()
         changed = bool(notes)
-        settings, lan_notes, warnings = self._lan_setup(trusted_network)
         notes += lan_notes
         if settings is not None:
             _write(self.settings_file, settings)
@@ -261,11 +256,10 @@ class SettingsRoot:
         lan_subnets (None: none is), this Mac's /32 and its whole subnet (None: on no network),
         ROKU_DEV_USER (default: ROKU_DEV_USER) and whether there is a ROKU_DEV_PASSWORD.
         Never a secret."""
-        settings, networks = self._lan_subnets()
         mac = self.this_mac()
         env = _read_env(self.secrets_file)
         return SetupValues(
-            self._users_lan_subnets(settings, networks),
+            self._users_lan_subnets(*self._lan_subnets()),
             mac and str(ip_network(mac.ip)),
             mac and str(mac.network),
             env.get("ROKU_DEV_USER") or ROKU_DEV_USER,
@@ -283,8 +277,7 @@ class SettingsRoot:
     def _lan_setup(self, trusted_network):
         """settings.json with lan_subnets for this Mac (None: kept as they are), and the
         note and warnings saying so. Without TRUSTED_NETWORK, the user's own are kept, less
-        the examples'; else the Mac's entry replaces them, with a /32 for each registered
-        device's IP it does not cover."""
+        the examples'; else the Mac's entry replaces them."""
         settings, networks = self._lan_subnets()
         own = self._users_lan_subnets(settings, networks)
         if trusted_network is None and own is not None:
@@ -294,12 +287,9 @@ class SettingsRoot:
             if mac is None:
                 return None, [], ["could not find this Mac's address: lan_subnets left as they are"]
             entry = mac.network if trusted_network else ip_network(mac.ip)
-            device_32s = list(dict.fromkeys(str(ip_network(ip)) for ip in self._device_ips() if ip not in entry))
-            lan_subnets = [str(entry), *device_32s]
+            lan_subnets = [str(entry)]
             scope = "this Mac's network, trusted" if trusted_network else "this Mac only"
             notes = [f"lan_subnets: {entry} ({scope})"]
-            if device_32s:
-                notes.append(f"kept each registered device's IP in lan_subnets: {', '.join(device_32s)}")
         if lan_subnets == settings.get("lan_subnets"):
             return None, [f"kept lan_subnets: {', '.join(lan_subnets)}"], []
         examples = [subnet for subnet, network in zip(settings.get("lan_subnets", []), networks) if _documentation(network)]
@@ -336,12 +326,6 @@ class SettingsRoot:
             change = change.merged(Change([f"registered {name!r} ({roku.ip})"], [], True)).merged(added)
         return change
 
-    def _save(self, registry, settings):
-        """Write devices.json, then settings.json unless SETTINGS is None."""
-        _write(self.devices_file, registry)
-        if settings is not None:
-            _write(self.settings_file, settings)
-
     def _roku_warnings(self, name, ip):
         info = self.ecp_device_info(ip)
         if info is None:
@@ -366,44 +350,13 @@ class SettingsRoot:
             raise DeviceExists(f"the device {name!r} already exists (roxy device list shows them)")
         return registry
 
-    def _allowing(self, ip):
-        """settings.json with IP's /32 appended to lan_subnets, and the note saying so; (None,
-        []) when an entry covers IP already."""
-        settings, networks = self._lan_subnets()
-        if any(ip_address(ip) in network for network in networks):
-            return None, []
-        network = str(ip_network(ip))
-        settings["lan_subnets"] = [*settings.get("lan_subnets", []), network]
-        return settings, [f"allowed {network} in lan_subnets"]
-
-    def _disallowing(self, ip):
-        """settings.json with the lan_subnets entry equal to IP's /32 dropped, and the note
-        saying so; (None, []) when there is none."""
-        settings, networks = self._lan_subnets()
-        network = ip_network(ip)
-        if network not in networks:
-            return None, []
-        settings["lan_subnets"] = [s for s, n in zip(settings["lan_subnets"], networks) if n != network]
-        return settings, [f"dropped {network} from lan_subnets"]
-
-    def _users_lan_subnets(self, settings, networks):
+    @staticmethod
+    def _users_lan_subnets(settings, networks):
         """The settings.json lan_subnets that are the user's own choice of network, for setup
-        to keep without one: the entries off the documentation ranges (the examples'), when
-        any is more than a registered device's /32 (device add's bookkeeping); None when none
-        is. NETWORKS are the lan_subnets as networks."""
-        device_ips = set(self._device_ips())
-        own = [
-            (subnet, network)
-            for subnet, network in zip(settings.get("lan_subnets", []), networks)
-            if not _documentation(network)
-        ]
-        if all(network.prefixlen == network.max_prefixlen and network[0] in device_ips for _, network in own):
-            return None
-        return [subnet for subnet, _ in own]
-
-    def _device_ips(self):
-        """The registered devices' IPs, in file order (a Cloud Device has none)."""
-        return [ip_address(device.ip) for device in self.devices() if device.ip]
+        to keep without one: the entries off the documentation ranges (the examples'); None
+        when there are none. NETWORKS are the lan_subnets as networks."""
+        own = [subnet for subnet, network in zip(settings.get("lan_subnets", []), networks) if not _documentation(network)]
+        return own or None
 
     def _lan_subnets(self):
         """settings.json, and its lan_subnets as networks."""

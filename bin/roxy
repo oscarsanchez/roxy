@@ -125,13 +125,12 @@ EOF
     device) cat <<'EOF'
 usage: roxy device add NAME (--ip IP [--proxied] | --rce DEVICE_NAME [--slug SLUG])
        roxy device list | remove NAME | discover
-The Target Devices in your roxy settings (devices.json), which name each flow, and the
-LAN subnets allowed to use the lab (lan_subnets in settings.json), kept in step. Restart
-a running lab to use a change.
+The Target Devices in your roxy settings (devices.json), which name each flow. A
+registered device may use the lab, whatever lan_subnets hold. Restart a running lab to
+use a change.
   add NAME --ip IP     register the Roku at IP (a Physical Device); warns, and still
                        registers it, when it does not answer ECP or is not in
-                       developer mode. An IP lan_subnets does not cover is added to
-                       them as IP/32. A NAME registered at another IP is refused,
+                       developer mode. A NAME registered at another IP is refused,
                        naming that IP: roxy device remove NAME first
     --proxied          a Proxied Device instead: a phone, tablet or other non-Roku
                        device using the lab through Proxy Routing
@@ -142,8 +141,8 @@ a running lab to use a change.
     --slug SLUG        its slug in the public Proxy Base (default: NAME in lowercase,
                        with dashes)
   list                 each device with its IP or rce Device Name, and its kind
-  remove NAME          unregister NAME; drops its IP/32 from lan_subnets unless
-                       another device has that IP (a wider subnet is never touched)
+  remove NAME          unregister NAME: it may no longer use the lab, unless
+                       lan_subnets hold its IP
   discover             the Rokus on this network (SSDP, about 3 s), each with its IP,
                        own name, model, developer mode and registered name, and the
                        roxy device add line for each one not registered; adds nothing
@@ -166,8 +165,8 @@ when there is one).
                      network you trust, such as home, can use the lab
   --this-mac-only    allow only this Mac's address in lan_subnets (the default, when
                      none is yours yet): on a shared network, such as work, no one
-                     else can relay through your lab. Either flag replaces lan_subnets,
-                     keeping each registered device's IP/32
+                     else can relay through your lab. Either flag replaces lan_subnets;
+                     a registered device may use the lab either way
   --cloud            for Cloud Devices too: generates the lab secret (LAB_SECRET in
                      secrets.env, the Public Endpoint's secret path segment) and checks
                      that rce and cloudflared are installed and rce token status works,
