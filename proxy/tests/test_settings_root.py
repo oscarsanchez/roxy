@@ -442,15 +442,14 @@ def test_setup_removes_the_examples_devices_and_says_so(root, settings):
 
     change = root.setup()
 
-    assert devices_file(settings) == {"Den": {"ip": "10.1.0.9"}}
-    assert {
-        "removed the example device 'Living Room'",
-        "removed the example device 'Cloud Device'",
-        "removed the example device 'Phone'",
-    } <= set(change.notes)
+    assert list(devices_file(settings)) == ["Cloud Device", "Den"]
+    assert {"removed the example device 'Living Room'", "removed the example device 'Phone'"} <= set(change.notes)
+    assert "removed the example device 'Cloud Device'" not in change.notes
 
 
-def test_a_device_on_a_documentation_range_or_the_examples_cloud_device_is_an_example(root, settings):
+def test_a_device_on_a_documentation_range_is_an_example_and_a_cloud_device_never_is(root, settings):
+    """A Cloud Device cannot be told from a real one, even one equal to the examples': the
+    owner's own was that one."""
     (settings / "devices.json").write_text(
         json.dumps({
             "Den": {"ip": "203.0.113.9"},
@@ -463,7 +462,7 @@ def test_a_device_on_a_documentation_range_or_the_examples_cloud_device_is_an_ex
 
     root.setup()
 
-    assert list(devices_file(settings)) == ["Office", "Stick"]
+    assert list(devices_file(settings)) == ["Player", "Office", "Stick"]
 
 
 def test_a_rerun_with_nothing_left_of_the_examples_keeps_the_devices(root, settings):

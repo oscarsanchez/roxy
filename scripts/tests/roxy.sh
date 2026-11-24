@@ -659,7 +659,7 @@ mkdir -p "$TMP/setup-settings"
 cp -R "$REPO/settings.example/." "$TMP/setup-settings"
 secret() { bash -c '. "$1"; printf %s "${!2}"' - "$TMP/setup-settings/secrets.env" "$1"; }
 # Flags only: the mitmweb password generated, never printed, the file private; the example
-# devices gone; this Mac alone in lan_subnets; stdin never read without
+# devices on documentation ranges gone (the Cloud Device stays: it may be real); this Mac alone in lan_subnets; stdin never read without
 # --roku-password-stdin, so the Roku password is handed to the user, on stderr.
 out="$(echo unread | setup --this-mac-only --roku-user dev 2>"$TMP/setup.err")" || fail "setup: $out $(cat "$TMP/setup.err")"
 [ -z "$(secret ROKU_DEV_PASSWORD)" ] || fail "setup without --roku-password-stdin read the Roku password from stdin"
@@ -673,7 +673,7 @@ for want in "generated MITMWEB_PASSWORD (in $TMP/setup-settings/secrets.env; the
   grep -qxF "$want" <<< "$out" || fail "setup did not say '$want':
 $out"
 done
-jq -e '. == {}' "$TMP/setup-settings/devices.json" >/dev/null || fail "setup left devices.json as: $(cat "$TMP/setup-settings/devices.json")"
+jq -e 'keys == ["Cloud Device"]' "$TMP/setup-settings/devices.json" >/dev/null || fail "setup left devices.json as: $(cat "$TMP/setup-settings/devices.json")"
 grep -q "^warning: no Roku developer password (ROKU_DEV_PASSWORD): .*roxy setup --roku-password-stdin" "$TMP/setup.err" \
   || fail "setup did not hand the Roku password to the user: $(cat "$TMP/setup.err")"
 jq -e '.lan_subnets == ["10.0.0.23/32"] and .grid_devices.physical == "Living Room"' \

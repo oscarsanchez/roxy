@@ -31,10 +31,9 @@ from pathlib import Path
 from typing import NamedTuple
 from xml.etree import ElementTree
 
-# The examples roxy 0.2.0's install.sh seeded a settings root with: their values are no settings.
-EXAMPLES = Path(__file__).resolve().parents[2] / "settings.example"
-# The documentation ranges the examples' addresses are on: a device or lan_subnets entry on
-# one is an example value, never the user's own.
+# The documentation ranges the addresses of settings.example/ (which roxy 0.2.0's install.sh
+# seeded a settings root with) are on: a device or lan_subnets entry on one is an example
+# value, never the user's own.
 DOCUMENTATION_RANGES = [ip_network(r) for r in ("192.0.2.0/24", "198.51.100.0/24", "203.0.113.0/24")]
 ROKU_DEV_USER = "rokudev"  # the Roku developer web server's user: every Roku's own
 LAN_INTERFACE = Path(__file__).resolve().parents[2] / "scripts" / "lan-interface"  # the Mac's LAN interface
@@ -496,15 +495,12 @@ def _double_quoted(text):
 
 
 def _example(entry):
-    """Whether the devices.json ENTRY is an example value: on a documentation range, or the
-    examples' Cloud Device."""
-    if "ip" in entry:
-        try:
-            return _documentation(ip_network(entry["ip"]))
-        except ValueError:
-            return False
-    examples = SettingsRoot._read(EXAMPLES / "devices.json").values()
-    return entry in [example for example in examples if "rce_device_name" in example]
+    """Whether the devices.json ENTRY is an example value: an IP on a documentation range. A
+    Cloud Device never is: one equal to the examples' may be the user's own."""
+    try:
+        return "ip" in entry and _documentation(ip_network(entry["ip"]))
+    except ValueError:
+        return False
 
 
 def _documentation(network):
