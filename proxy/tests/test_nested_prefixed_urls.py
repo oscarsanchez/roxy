@@ -65,15 +65,14 @@ def test_a_nested_prefixed_url_through_the_public_endpoint_reaches_the_real_orig
 
 
 @pytest.mark.parametrize(
-    "nested_base, host",
+    "nested_base",
     [
-        ("http://192.0.2.10:8888", "192.0.2.10"),  # this Mac, another port
-        ("http://192.0.2.11:8080", "192.0.2.11"),  # another Mac
+        "http://192.0.2.10:8888",  # this Mac, another port
+        "http://192.0.2.11:8080",  # another Mac
     ],
 )
-def test_a_nested_prefixed_url_with_another_proxy_base_is_refused_as_its_origin(dns, nested_base, host):
+def test_a_nested_prefixed_url_with_another_proxy_base_is_refused_as_its_origin(nested_base):
     """The lab never fetches through another proxy: the nested Proxy Base is taken for the Origin."""
-    dns[host] = [host]  # an IP literal resolves to itself
     flow = lab_flow(f"/{nested_base}/https://httpbin.org/json")
 
     forwarded = run_chain(flow, origin_json())

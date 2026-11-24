@@ -1,3 +1,4 @@
+import ipaddress
 import json
 import shutil
 import socket
@@ -21,9 +22,9 @@ def settings(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def dns(monkeypatch):
-    """Stubbed DNS: every host resolves to a public IP unless a test sets
-    dns[host] = [ip, ...]; an empty list means the host does not resolve.
-    Covers loop.getaddrinfo too (it calls socket.getaddrinfo)."""
+    """Stubbed DNS: an IP address resolves to itself, as real DNS answers, and every
+    other host to a public IP unless a test sets dns[host] = [ip, ...]; an empty list
+    means the host does not resolve. Covers loop.getaddrinfo too (it calls socket.getaddrinfo)."""
     answers = {}
 
     def getaddrinfo(host, port, *args, **kwargs):
@@ -33,11 +34,19 @@ def dns(monkeypatch):
             (socket.AF_INET6, socket.SOCK_STREAM, 6, "", (ip, port, 0, 0))
             if ":" in ip
             else (socket.AF_INET, socket.SOCK_STREAM, 6, "", (ip, port))
-            for ip in answers.get(host, [PUBLIC_IP])
+            for ip in answers.get(host, [host] if is_ip_address(host) else [PUBLIC_IP])
         ]
 
     monkeypatch.setattr(socket, "getaddrinfo", getaddrinfo)
     return answers
+
+
+def is_ip_address(host) -> bool:
+    try:
+        ipaddress.ip_address(host)
+    except ValueError:
+        return False
+    return True
 
 
 @pytest.fixture
