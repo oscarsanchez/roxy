@@ -425,9 +425,10 @@ def test_a_rerun_keeps_the_lan_subnets_there_are(root, settings, mac):
 def test_setup_replaces_the_examples_subnet_keeping_each_devices_32_beside_it(root, settings):
     root.add_device("Den", "10.1.0.9")
 
-    root.setup()
+    change = root.setup()
 
     assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
+    assert "removed the example 192.0.2.0/24 from lan_subnets" in change.notes
 
 
 def test_a_network_choice_replaces_lan_subnets_keeping_each_devices_32(root, settings):
@@ -437,6 +438,49 @@ def test_a_network_choice_replaces_lan_subnets_keeping_each_devices_32(root, set
     root.setup(trusted_network=False)
 
     assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
+
+
+def test_narrowing_to_this_mac_keeps_a_device_the_trusted_subnet_covered(root, settings):
+    root.setup(trusted_network=True)
+    root.add_device("Den", "10.0.0.9")
+
+    change = root.setup(trusted_network=False)
+
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.0.0.9/32"]
+    assert "kept each registered device's IP in lan_subnets: 10.0.0.9/32" in change.notes
+
+
+@pytest.mark.parametrize(
+    "ip, lan_subnets",
+    [("10.0.0.9", ["10.0.0.0/24"]), ("10.1.0.9", ["10.0.0.0/24", "10.1.0.9/32"])],
+)
+def test_trusting_the_network_drops_a_devices_32_only_when_the_subnet_covers_it(root, settings, ip, lan_subnets):
+    root.setup(trusted_network=False)
+    root.add_device("Den", ip)
+
+    root.setup(trusted_network=True)
+
+    assert settings_file(settings)["lan_subnets"] == lan_subnets
+
+
+def test_setup_adds_this_mac_beside_the_32s_device_add_wrote_before_it(root, settings):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": []}))
+    root.add_device("Den", "10.1.0.9")
+
+    change = root.setup()
+
+    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32", "10.1.0.9/32"]
+    assert "lan_subnets: 10.0.0.23/32 (this Mac only)" in change.notes
+
+
+def test_setup_keeps_a_subnet_of_the_users_own_beside_a_devices_32(root, settings):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["10.2.0.0/24"]}))
+    root.add_device("Den", "10.1.0.9")
+
+    change = root.setup()
+
+    assert settings_file(settings)["lan_subnets"] == ["10.2.0.0/24", "10.1.0.9/32"]
+    assert "kept lan_subnets: 10.2.0.0/24, 10.1.0.9/32" in change.notes
 
 
 def test_setup_removes_the_examples_devices_and_says_so(root, settings):
@@ -480,12 +524,14 @@ def test_a_rerun_with_nothing_left_of_the_examples_keeps_the_devices(root, setti
 
 
 @pytest.mark.parametrize("subnet", ["203.0.113.0/25", "198.51.100.7/32", "192.0.2.0/24"])
-def test_a_lan_subnets_entry_inside_a_documentation_range_is_an_example(root, settings, subnet):
-    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["10.0.0.0/24", subnet]}))
+def test_setup_drops_a_lan_subnets_entry_inside_a_documentation_range_keeping_the_real_one(root, settings, subnet):
+    (settings / "settings.json").write_text(json.dumps({"lan_subnets": ["10.2.0.0/24", subnet]}))
 
-    root.setup()
+    change = root.setup()
 
-    assert settings_file(settings)["lan_subnets"] == ["10.0.0.23/32"]
+    assert settings_file(settings)["lan_subnets"] == ["10.2.0.0/24"]
+    assert f"removed the example {subnet} from lan_subnets" in change.notes
+    assert "kept lan_subnets: 10.2.0.0/24" in change.notes
 
 
 def test_setup_off_any_network_leaves_lan_subnets_and_warns(root, settings, mac):

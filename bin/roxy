@@ -165,7 +165,7 @@ when there is one).
   --trusted-network  allow this Mac's whole subnet in lan_subnets: every device on a
                      network you trust, such as home, can use the lab
   --this-mac-only    allow only this Mac's address in lan_subnets (the default, when
-                     there are none yet): on a shared network, such as work, no one
+                     none is yours yet): on a shared network, such as work, no one
                      else can relay through your lab. Either flag replaces lan_subnets,
                      keeping each registered device's IP/32
   --cloud            for Cloud Devices too: generates the lab secret (LAB_SECRET in
