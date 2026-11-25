@@ -6,7 +6,9 @@ Personal settings (secrets, devices, LAN subnets) live in the settings root, nev
 
 Writing or reviewing code: `CODING_STANDARDS.md`.
 
-Ask the user before anything that reaches a Target Device, starts a Cloud Device Run (billed until stopped), opens a tunnel or runs `roxy start` on their own settings root. `scripts/check` needs none of them.
+Ask the user before anything that reaches a Target Device, starts a Cloud Device Run (billed until stopped), opens a tunnel, or runs `roxy start`, `roxy setup` or `roxy device add|remove` on their own settings root (back it up first). `scripts/check` needs none of them.
+
+Releasing: `docs/agents/releasing.md`.
 
 ## Agent skills
 
